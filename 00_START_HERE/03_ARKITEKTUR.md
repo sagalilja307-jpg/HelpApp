@@ -1,1 +1,1 @@
-ARKITEKTUR.md
+../ARKITEKTUR.md

@@ -1,0 +1,7 @@
+[submodule "Helper"]
+	path = Helper
+	url = https://github.com/sagalilja307-jpg/Helper.git
+
+[submodule "HelpersHelp"]
+	path = HelpersHelp
+	url = https://github.com/sagalilja307-jpg/HelpersHelp.git
