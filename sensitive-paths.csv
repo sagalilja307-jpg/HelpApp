@@ -1,0 +1,13 @@
+# pattern,tag,weight
+backend/src/helpershelp/api/**,api,1.0
+backend/src/helpershelp/api/routes/auth.py,auth,1.0
+backend/src/helpershelp/api/routes/sync.py,auth,1.0
+backend/src/helpershelp/mail/oauth_*.py,auth,1.0
+backend/src/helpershelp/assistant/tokens.py,secrets,1.0
+backend/src/helpershelp/assistant/crypto.py,crypto,1.0
+backend/src/helpershelp/assistant/storage.py,data_store,1.0
+backend/src/helpershelp/assistant/sync.py,background_jobs,0.8
+backend/src/helpershelp/assistant/sources/**,external_api,0.8
+backend/src/helpershelp/llm/**,ml_runtime,0.7
+backend/src/helpershelp/config.py,config,0.7
+ios/Helper/Data/Services/MailManagerUpdated/**,client_security,0.5

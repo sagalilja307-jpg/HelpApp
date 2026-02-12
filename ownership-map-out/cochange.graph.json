@@ -1,0 +1,146 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "community_maintainers": [
+      {
+        "id": 1,
+        "size": 4,
+        "maintainers": [
+          {
+            "person_id": "sagalilja307@gmail.com",
+            "name": "sagalilja307-jpg",
+            "touches": 11,
+            "touch_share": 1.0,
+            "recency_share": 1.0,
+            "sensitive_share": 0.0,
+            "primary_tz_offset": "+01:00"
+          }
+        ],
+        "bus_factor": 1,
+        "owner_count": 1,
+        "totals": {
+          "touches": 11,
+          "recency_weight": 10.997904,
+          "sensitive_weight": 0
+        }
+      },
+      {
+        "id": 2,
+        "size": 2,
+        "maintainers": [
+          {
+            "person_id": "sagalilja307@gmail.com",
+            "name": "sagalilja307-jpg",
+            "touches": 6,
+            "touch_share": 1.0,
+            "recency_share": 1.0,
+            "sensitive_share": 0.0,
+            "primary_tz_offset": "+01:00"
+          }
+        ],
+        "bus_factor": 1,
+        "owner_count": 1,
+        "totals": {
+          "touches": 6,
+          "recency_weight": 5.997355,
+          "sensitive_weight": 0
+        }
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "community_id": 2,
+      "id": ".DS_Store"
+    },
+    {
+      "community_id": 1,
+      "id": "00_START_HERE/01_iOS_App_(Helper)"
+    },
+    {
+      "community_id": 1,
+      "id": "00_START_HERE/02_Backend_(HelpersHelp)"
+    },
+    {
+      "community_id": 1,
+      "id": "00_START_HERE/03_ARKITEKTUR.md"
+    },
+    {
+      "community_id": 1,
+      "id": "00_START_HERE/04_ROOT_README.md"
+    },
+    {
+      "community_id": 2,
+      "id": "README.md"
+    }
+  ],
+  "edges": [
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": ".DS_Store",
+      "target": "00_START_HERE/01_iOS_App_(Helper)"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": ".DS_Store",
+      "target": "00_START_HERE/02_Backend_(HelpersHelp)"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": ".DS_Store",
+      "target": "00_START_HERE/03_ARKITEKTUR.md"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": ".DS_Store",
+      "target": "00_START_HERE/04_ROOT_README.md"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": ".DS_Store",
+      "target": "README.md"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "00_START_HERE/01_iOS_App_(Helper)",
+      "target": "00_START_HERE/02_Backend_(HelpersHelp)"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "00_START_HERE/01_iOS_App_(Helper)",
+      "target": "00_START_HERE/03_ARKITEKTUR.md"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "00_START_HERE/01_iOS_App_(Helper)",
+      "target": "00_START_HERE/04_ROOT_README.md"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "00_START_HERE/02_Backend_(HelpersHelp)",
+      "target": "00_START_HERE/03_ARKITEKTUR.md"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "00_START_HERE/02_Backend_(HelpersHelp)",
+      "target": "00_START_HERE/04_ROOT_README.md"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "00_START_HERE/03_ARKITEKTUR.md",
+      "target": "00_START_HERE/04_ROOT_README.md"
+    }
+  ]
+}
