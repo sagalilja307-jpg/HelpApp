@@ -45,7 +45,7 @@ private extension QueryAnswerComposer {
                 """
                 [\(entry.source.rawValue)]
                 \(entry.title)
-                \(entry.body)
+                \(entry.body ?? "")
                 """
             }
             .joined(separator: "\n\n")

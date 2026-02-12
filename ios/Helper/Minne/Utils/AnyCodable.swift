@@ -1,7 +1,7 @@
 import Foundation
 
 public struct AnyCodable: Codable, Sendable, Equatable {
-    public let value: Any
+    public nonisolated(unsafe) let value: Any
 
     public nonisolated init(_ value: Any) {
         self.value = value
@@ -78,4 +78,3 @@ extension AnyCodable {
         }
     }
 }
-
