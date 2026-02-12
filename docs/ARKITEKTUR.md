@@ -22,6 +22,23 @@
 
 ---
 
+## Stabilitetslager (v1)
+
+Helper använder ett explicit stabilitetslager där backend är source-of-truth:
+- `assistant.support.level` (`0..3`) styr interventionsgrad.
+- `assistant.support.paused` pausar interventioner utan att ändra nivå.
+- `assistant.support.adaptation_enabled` tillåter adaptation inom vald nivå.
+- Daglig nudgetak per nivå: `0/2/3/5`.
+- Tidskritisk fallback visas med 24h-fönster även vid låg intensitet.
+
+I iOS finns en settings-sheet i `ChatView` (toolbar) som:
+- ändrar stödnivå,
+- pausar/återupptar adaptation,
+- visar lärda mönster och ändringsorsaker,
+- återställer enbart lärda vikter.
+
+---
+
 ## DEL 1️⃣: INNEHÅLLSANALYS (iOS)
 ### ContentAnalysis → Rest of system
 
@@ -247,12 +264,23 @@ Sparas lokalt + möjligtvis sync till backend
 | `/mail/recent` | GET | RetrievalCoordinator | Hämta senaste mejl |
 | `/mail/from-domain` | GET | RetrievalCoordinator | Sök mejl från domän |
 
-### 🔐 OAuth Endpoints
+### 🔐 Auth Endpoints
 
 | Endpoint | Method | Syfte |
 |----------|--------|-------|
-| `/oauth/validate` | POST | Validera token |
-| `/oauth/refresh` | POST | Uppdatera token |
+| `/auth/validate` | POST | Validera token |
+| `/auth/refresh` | POST | Uppdatera token |
+| `/auth/store` | POST | Spara token i backend-store |
+
+### 🛟 Support/learning Endpoints
+
+| Endpoint | Method | Syfte |
+|----------|--------|-------|
+| `/settings/support` | GET | Hämta stödnivå, caps och effektiv policy |
+| `/settings/support` | POST | Uppdatera `support_level`, `paused`, `adaptation_enabled` |
+| `/settings/learning` | GET | Visa lärda mönster + auditorsaker |
+| `/settings/learning/pause` | POST | Pausa/återuppta adaptation |
+| `/settings/learning/reset` | POST | Nollställ lärda vikter (inte stödnivå) |
 
 ---
 

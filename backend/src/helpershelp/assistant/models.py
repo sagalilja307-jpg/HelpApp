@@ -135,3 +135,45 @@ class SettingsResponse(BaseModel):
 
 class SettingsUpdateRequest(BaseModel):
     settings: Dict[str, Any]
+
+
+class SupportSettingsResponse(BaseModel):
+    support_level: int
+    paused: bool
+    adaptation_enabled: bool
+    daily_caps: Dict[str, int]
+    time_critical_window_hours: int
+    effective_policy: Dict[str, Any]
+
+
+class SupportSettingsUpdateRequest(BaseModel):
+    support_level: Optional[int] = None
+    paused: Optional[bool] = None
+    adaptation_enabled: Optional[bool] = None
+
+
+class LearningPattern(BaseModel):
+    key: str
+    value: Any
+
+
+class LearningEvent(BaseModel):
+    id: str
+    event_type: str
+    payload: Dict[str, Any]
+    created_at: datetime
+
+
+class LearningSettingsResponse(BaseModel):
+    adaptation_enabled: bool
+    patterns: List[LearningPattern]
+    events: List[LearningEvent]
+
+
+class LearningPauseRequest(BaseModel):
+    paused: bool
+
+
+class LearningResetResponse(BaseModel):
+    removed_keys: List[str]
+    removed_count: int

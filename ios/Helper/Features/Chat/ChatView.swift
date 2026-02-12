@@ -11,6 +11,8 @@ public struct ChatView: View {
     @Bindable var vm: ChatViewModel
     @FocusState private var focusInput: Bool
     @State private var showContext = false
+    @State private var showSupportSettings = false
+    @State private var supportSettingsViewModel = SupportSettingsViewModel()
 
     init(pipeline: QueryPipeline) {
         self.vm = ChatViewModel(pipeline: pipeline)
@@ -80,6 +82,19 @@ public struct ChatView: View {
             .padding()
         }
         .navigationTitle("Fråga hjälparen")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showSupportSettings = true
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                }
+                .accessibilityLabel("Öppna stödinställningar")
+            }
+        }
+        .sheet(isPresented: $showSupportSettings) {
+            SupportSettingsSheetView(viewModel: supportSettingsViewModel)
+        }
         .alert("Fel", isPresented: .constant(vm.error != nil)) {
             Button("OK") { vm.error = nil }
         } message: {
