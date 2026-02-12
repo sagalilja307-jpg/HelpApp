@@ -195,6 +195,18 @@ class SqliteStore:
                 )
         return self.get_settings()
 
+    def delete_settings(self, keys: Iterable[str]) -> int:
+        key_list = [str(key) for key in keys if str(key).strip()]
+        if not key_list:
+            return 0
+        with self._conn() as conn:
+            placeholders = ",".join(["?"] * len(key_list))
+            cur = conn.execute(
+                f"DELETE FROM settings WHERE key IN ({placeholders})",
+                key_list,
+            )
+            return int(cur.rowcount or 0)
+
     @staticmethod
     def _item_to_row(item: UnifiedItem) -> Dict[str, Any]:
         ext_provider = item.external_ref.provider if item.external_ref else None
@@ -555,6 +567,65 @@ class SqliteStore:
                 "INSERT INTO feedback_events (id, proposal_id, event_type, payload_json, created_at) VALUES (?, ?, ?, ?, ?)",
                 (row_id, proposal_id, event_type, json.dumps(payload, ensure_ascii=False), now),
             )
+
+    def count_audit_events(self, event_type: str, since: datetime) -> int:
+        with self._conn() as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) AS count_value
+                FROM audit_log
+                WHERE event_type=? AND created_at>=?
+                """,
+                (event_type, since.isoformat()),
+            ).fetchone()
+        if not row:
+            return 0
+        return int(row["count_value"] or 0)
+
+    def list_audit_events(
+        self,
+        event_types: Optional[List[str]] = None,
+        since: Optional[datetime] = None,
+        limit: int = 200,
+    ) -> List[Dict[str, Any]]:
+        clauses: List[str] = []
+        params: List[Any] = []
+        if event_types:
+            placeholders = ",".join(["?"] * len(event_types))
+            clauses.append(f"event_type IN ({placeholders})")
+            params.extend(event_types)
+        if since:
+            clauses.append("created_at >= ?")
+            params.append(since.isoformat())
+
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        sql = f"""
+            SELECT id, event_type, payload_json, created_at
+            FROM audit_log
+            {where}
+            ORDER BY created_at DESC
+            LIMIT ?
+        """
+        params.append(int(limit))
+        with self._conn() as conn:
+            rows = conn.execute(sql, params).fetchall()
+
+        out: List[Dict[str, Any]] = []
+        for row in rows:
+            payload = {}
+            try:
+                payload = json.loads(row["payload_json"] or "{}")
+            except Exception:
+                payload = {"raw": row["payload_json"]}
+            out.append(
+                {
+                    "id": row["id"],
+                    "event_type": row["event_type"],
+                    "payload": payload,
+                    "created_at": row["created_at"],
+                }
+            )
+        return out
 
 
 def get_store() -> SqliteStore:

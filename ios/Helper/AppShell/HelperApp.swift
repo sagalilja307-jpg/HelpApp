@@ -18,6 +18,7 @@ struct HelperApp: App {
     private let decisionLogger: DecisionLogger
     private let suggestionCoordinator: SuggestionCoordinator
     private let queryPipeline: QueryPipeline
+    private let supportSettingsService: SupportSettingsAPIService
 
     // Onboarding flag (sparas i UserDefaults)
     @AppStorage("onboardingComplete") private var onboardingComplete = false
@@ -59,6 +60,15 @@ struct HelperApp: App {
                 fetcher: fetcher,
                 composer: composer
             )
+            let supportSettingsService = SupportSettingsAPIService.shared
+            self.supportSettingsService = supportSettingsService
+
+            let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            if !isRunningTests {
+                Task {
+                    await supportSettingsService.syncSupportSettingsCache()
+                }
+            }
 
         } catch {
             fatalError("Failed to initialize HelperApp core services: \(error)")
@@ -72,10 +82,14 @@ struct HelperApp: App {
             Group {
                 if onboardingComplete {
                     // Main app
-                    ChatView(pipeline: queryPipeline)
+                    NavigationStack {
+                        ChatView(pipeline: queryPipeline)
+                    }
                 } else {
                     // Permission onboarding flow
-                    PermissionOnboardingView(pipeline: queryPipeline)
+                    NavigationStack {
+                        PermissionOnboardingView(pipeline: queryPipeline)
+                    }
                 }
             }
             .environment(\.modelContext, modelContext)

@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+from helpershelp.assistant.language_guardrails import enforce_neutral_language
 from helpershelp.assistant.models import Proposal, ProposalDecisionRequest, ProposalType, UnifiedItem, UnifiedItemType
+from helpershelp.assistant.support import adaptation_allowed, clamp_follow_up_days, resolve_support_policy
 from helpershelp.assistant.date_extract import extract_due_at
 from helpershelp.assistant.scheduling import suggest_free_slots
 from helpershelp.assistant.time_utils import utcnow
@@ -76,7 +78,7 @@ def generate_follow_up_proposals(items: List[UnifiedItem], now: datetime, cfg: P
         if not ok:
             continue
 
-        summary = f"Följ upp: {it.title or 'Obesvarat mail'}"
+        summary = enforce_neutral_language(f"Följ upp: {it.title or 'Obesvarat mail'}")
         why = {
             "rule": "follow_up_email",
             "reason": reason,
@@ -132,7 +134,7 @@ def generate_create_reminder_proposals(items: List[UnifiedItem], now: datetime) 
         if due - now > timedelta(days=14):
             continue
 
-        summary = f"Skapa påminnelse: {it.title or 'Mail'}"
+        summary = enforce_neutral_language(f"Skapa påminnelse: {it.title or 'Mail'}")
         why = {
             "rule": "create_reminder_from_email_date_hint",
             "due_at": due.isoformat(),
@@ -199,7 +201,7 @@ def generate_schedule_timeblock_proposals(
         if not slots:
             continue
 
-        summary = f"Föreslå tid: {it.title or 'Uppgift'}"
+        summary = enforce_neutral_language(f"Föreslå tid: {it.title or 'Uppgift'}")
         why = {
             "rule": "schedule_timeblock_before_due",
             "duration_minutes": cfg.schedule_duration_minutes,
@@ -258,6 +260,10 @@ def maybe_adjust_followup_days_on_feedback(
     - Many dismisses → increase follow-up delay (less intrusive).
     - Accepts → decrease slightly (more proactive).
     """
+    policy = resolve_support_policy(settings)
+    if not adaptation_allowed(policy):
+        return None
+
     current = settings.get("assistant.follow_up_days", 3)
     try:
         current = int(current)
@@ -265,12 +271,13 @@ def maybe_adjust_followup_days_on_feedback(
         current = 3
 
     if event_type == "dismiss":
-        new = min(7, current + 1)
+        new = current + 1
     elif event_type == "accept":
-        new = max(2, current - 1)
+        new = current - 1
     else:
         return None
 
+    new = clamp_follow_up_days(new, policy)
     if new == current:
         return None
     return {"assistant.follow_up_days": new}
