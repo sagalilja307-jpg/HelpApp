@@ -6,10 +6,21 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		0392812A42456135A38B86A5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 203B11442F256B93003EB3D8 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 203B114B2F256B93003EB3D8;
+			remoteInfo = Helper;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		203B114C2F256B93003EB3D8 /* Helper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Helper.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		203B11BD2F25783E003EB3D8 /* Helper.Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Helper.Info.plist; sourceTree = "<group>"; };
 		203B11BF2F257BDB003EB3D8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		216FC887795FC3AE32EBC715 /* HelperTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HelperTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -18,10 +29,22 @@
 			path = Helper;
 			sourceTree = "<group>";
 		};
+		7337808E7C894659339FA380 /* HelperTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = HelperTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		203B11492F256B93003EB3D8 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7828102059315944116204E1 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -35,6 +58,7 @@
 			isa = PBXGroup;
 			children = (
 				203B114E2F256B93003EB3D8 /* Helper */,
+				7337808E7C894659339FA380 /* HelperTests */,
 				203B114D2F256B93003EB3D8 /* Products */,
 				203B11BD2F25783E003EB3D8 /* Helper.Info.plist */,
 			);
@@ -45,6 +69,7 @@
 			children = (
 				203B11BF2F257BDB003EB3D8 /* Info.plist */,
 				203B114C2F256B93003EB3D8 /* Helper.app */,
+				216FC887795FC3AE32EBC715 /* HelperTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -74,6 +99,29 @@
 			productReference = 203B114C2F256B93003EB3D8 /* Helper.app */;
 			productType = "com.apple.product-type.application";
 		};
+		30F8BFDE201F1F5BA444E3B3 /* HelperTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E64DFE6A3C46EA25FAFAF992 /* Build configuration list for PBXNativeTarget "HelperTests" */;
+			buildPhases = (
+				126102730AA18268665EC85B /* Sources */,
+				7828102059315944116204E1 /* Frameworks */,
+				003FB278EE99ED050D43847B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				6A200B353C0B140B55A30724 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				7337808E7C894659339FA380 /* HelperTests */,
+			);
+			name = HelperTests;
+			packageProductDependencies = (
+			);
+			productName = HelperTests;
+			productReference = 216FC887795FC3AE32EBC715 /* HelperTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -85,6 +133,9 @@
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					203B114B2F256B93003EB3D8 = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					30F8BFDE201F1F5BA444E3B3 = {
 						CreatedOnToolsVersion = 26.2;
 					};
 				};
@@ -105,11 +156,19 @@
 			projectRoot = "";
 			targets = (
 				203B114B2F256B93003EB3D8 /* Helper */,
+				30F8BFDE201F1F5BA444E3B3 /* HelperTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		003FB278EE99ED050D43847B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		203B114A2F256B93003EB3D8 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -120,6 +179,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		126102730AA18268665EC85B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		203B11482F256B93003EB3D8 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -128,6 +194,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		6A200B353C0B140B55A30724 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 203B114B2F256B93003EB3D8 /* Helper */;
+			targetProxy = 0392812A42456135A38B86A5 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		203B115B2F256B93003EB3D8 /* Debug */ = {
@@ -338,6 +412,55 @@
 			};
 			name = Release;
 		};
+		7BA5C5F2840398581B921F93 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 7LATJXH2RV;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = saga.com.HelperTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Helper.app/Helper";
+			};
+			name = Release;
+		};
+		D859E316A655886C4192734D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 7LATJXH2RV;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = saga.com.HelperTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Helper.app/Helper";
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -355,6 +478,15 @@
 			buildConfigurations = (
 				203B115B2F256B93003EB3D8 /* Debug */,
 				203B115C2F256B93003EB3D8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E64DFE6A3C46EA25FAFAF992 /* Build configuration list for PBXNativeTarget "HelperTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D859E316A655886C4192734D /* Debug */,
+				7BA5C5F2840398581B921F93 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
