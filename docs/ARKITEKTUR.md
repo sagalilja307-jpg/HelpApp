@@ -1,5 +1,10 @@
 # Helper System Arkitektur - Hur Delarna Pratar
 
+## Repo-paths
+- iOS-projekt: `ios/Helper.xcodeproj`
+- Backend: `backend/`
+- Arkitektur-dokument: `docs/ARKITEKTUR.md`
+
 ## Överblick
 ```
 ┌─────────────────────────────────────────────────────────────┐

@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+
+    <key>CFBundleDevelopmentRegion</key>
+    <string>$(DEVELOPMENT_LANGUAGE)</string>
+
+    <key>CFBundleDisplayName</key>
+    <string>Helper</string>
+
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+
+    <key>CFBundleIdentifier</key>
+    <string>saga.com.Helper</string>
+
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+
+    <key>CFBundleName</key>
+    <string>Helper</string>
+
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+
+    <key>CFBundleVersion</key>
+    <string>1</string>
+
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.productivity</string>
+
+    <!-- Permissions -->
+    <!-- Calendar -->
+    <key>NSCalendarsUsageDescription</key>
+    <string>Helper behöver läsa din kalender för att ge smarta förslag och sammanfattningar.</string>
+
+    <!-- Reminders -->
+    <key>NSRemindersUsageDescription</key>
+    <string>Helper behöver läsa dina påminnelser för att hjälpa dig komma ihåg saker.</string>
+
+    <!-- Camera (document scanner, OCR) -->
+    <key>NSCameraUsageDescription</key>
+    <string>Helper använder kameran för att skanna dokument och text du väljer.</string>
+
+    <!-- Microphone (voice input, future use) -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Helper använder mikrofonen om du väljer att prata med appen.</string>
+
+    <!-- Photos (if you allow image import) -->
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Helper behöver tillgång till bilder du väljer att analysera.</string>
+
+    <!-- Notifications (optional, but recommended text shown in system sheet) -->
+    <key>NSUserNotificationUsageDescription</key>
+    <string>Helper skickar notiser för viktiga påminnelser och förslag.</string>
+
+    <!-- UI -->
+    <key>UILaunchStoryboardName</key>
+    <string>LaunchScreen</string>
+
+    <key>UIStatusBarHidden</key>
+    <false/>
+
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+
+</dict>
+</plist>
+
