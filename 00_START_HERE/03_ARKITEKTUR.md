@@ -1,1 +1,1 @@
-../ARKITEKTUR.md
+../docs/ARKITEKTUR.md
