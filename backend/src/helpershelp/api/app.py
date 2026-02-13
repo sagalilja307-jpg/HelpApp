@@ -13,6 +13,7 @@ from helpershelp.api.routes.auth import router as auth_router
 from helpershelp.api.routes.health import router as health_router
 from helpershelp.api.routes.llm import router as llm_router
 from helpershelp.api.routes.mail import router as mail_router
+from helpershelp.api.routes.oauth_gmail import router as oauth_gmail_router
 from helpershelp.api.routes.query import router as query_router
 from helpershelp.api.routes.sync import router as sync_router
 from helpershelp.assistant.sync import start_sync_loop
@@ -68,6 +69,7 @@ async def unhandled_exception_handler(_: Request, exc: Exception):
 app.include_router(llm_router)
 app.include_router(query_router)
 app.include_router(auth_router)
+app.include_router(oauth_gmail_router)
 app.include_router(mail_router)
 app.include_router(health_router)
 app.include_router(assistant_router)

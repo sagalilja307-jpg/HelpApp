@@ -17,4 +17,21 @@ final class MailSyncService {
         )
         return try JSONDecoder().decode([Mail].self, from: data)
     }
+
+    func syncGmail(
+        accessToken: String,
+        days: Int = 90,
+        maxResults: Int = 50
+    ) async throws {
+        HelperAPIClient.shared.setAccessToken(accessToken)
+
+        let payload: [String: Any] = [
+            "access_token": accessToken,
+            "days": days,
+            "max_results": maxResults
+        ]
+
+        let body = try JSONSerialization.data(withJSONObject: payload, options: [])
+        _ = try await HelperAPIClient.shared.post(path: "/sync/gmail", body: body)
+    }
 }

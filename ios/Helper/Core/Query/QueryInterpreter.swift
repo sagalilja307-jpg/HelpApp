@@ -1,6 +1,10 @@
 import Foundation
 
-final class QueryInterpreter {
+protocol QueryInterpreting {
+    func interpret(_ query: UserQuery) async throws -> QueryInterpretation
+}
+
+final class QueryInterpreter: QueryInterpreting {
 
     private let llm: LLMClient
 

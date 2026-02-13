@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from fastapi import APIRouter
+import requests
+from fastapi import APIRouter, HTTPException
 
 from helpershelp.api.deps import get_assistant_store
 from helpershelp.assistant.linking import link_emails_to_events
@@ -18,7 +19,22 @@ router = APIRouter()
 def sync_gmail(request: SyncGmailRequest):
     store = get_assistant_store()
     adapter = GmailAdapter(access_token=request.access_token)
-    items = adapter.fetch_items(days=request.days, max_results=request.max_results)
+    try:
+        items = adapter.fetch_items(days=request.days, max_results=request.max_results)
+    except requests.HTTPError as exc:
+        code = exc.response.status_code if exc.response is not None else 502
+        detail = "gmail_sync_failed"
+        if exc.response is not None:
+            try:
+                payload = exc.response.json()
+                detail = payload.get("error", detail)
+            except Exception:
+                detail = exc.response.text or detail
+        store.audit("sync_gmail_fail", {"status": code, "detail": detail})
+        raise HTTPException(status_code=code, detail=detail) from exc
+    except requests.RequestException as exc:
+        store.audit("sync_gmail_fail", {"status": 502, "detail": "network_error"})
+        raise HTTPException(status_code=502, detail="gmail_sync_network_error") from exc
     inserted, updated = store.upsert_items(items)
     store.audit(
         "sync_gmail",

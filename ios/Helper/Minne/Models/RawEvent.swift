@@ -15,7 +15,7 @@ public final class RawEvent {
 
     // MARK: - Relationships
     
-    @Relationship(inverse: \ClusterItem.event)
+    @Relationship(deleteRule: .cascade, inverse: \ClusterItem.event)
     public var clusterItems: [ClusterItem] = []
 
     // MARK: - Init
@@ -36,4 +36,3 @@ public final class RawEvent {
         self.createdAt = createdAt
     }
 }
-

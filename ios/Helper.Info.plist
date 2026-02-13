@@ -15,6 +15,20 @@
     <key>CFBundleIdentifier</key>
     <string>saga.com.Helper</string>
 
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>CFBundleURLName</key>
+            <string>saga.com.Helper.oauth</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>helper-oauth</string>
+            </array>
+        </dict>
+    </array>
+
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
 
@@ -71,4 +85,3 @@
 
 </dict>
 </plist>
-
