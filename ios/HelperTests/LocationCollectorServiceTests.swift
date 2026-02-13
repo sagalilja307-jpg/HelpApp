@@ -2,6 +2,7 @@ import XCTest
 import SwiftData
 @testable import Helper
 
+@MainActor
 final class LocationCollectorServiceTests: XCTestCase {
     
     private var modelContainer: ModelContainer!

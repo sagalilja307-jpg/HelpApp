@@ -73,6 +73,7 @@ struct PermissionView: View {
         case .camera: return "camera.viewfinder"
         case .contacts: return "person.2.fill"
         case .photos: return "photo.on.rectangle.angled"
+        case .location: return "location.fill"
         }
     }
 
@@ -84,6 +85,7 @@ struct PermissionView: View {
         case .camera: return "Tillgång till kamera"
         case .contacts: return "Tillgång till kontakter"
         case .photos: return "Tillgång till bilder"
+        case .location: return "Tillgång till plats"
         }
     }
 
@@ -101,6 +103,8 @@ struct PermissionView: View {
             return "Kontakter används när du vill låta hjälparen svara med kontaktkontext."
         case .photos:
             return "Bilder används när du aktiverar bildindexering i datakällor."
+        case .location:
+            return "Din plats används för att svara på platsfrågor som 'vad finns nära mig'."
         }
     }
 
@@ -134,6 +138,8 @@ struct PermissionView: View {
                     try await PermissionManager.shared.requestContactsAccess()
                 case .photos:
                     try await PermissionManager.shared.requestPhotosAccess()
+                case .location:
+                    try await PermissionManager.shared.requestLocationAccess()
                 }
 
                 status = .granted

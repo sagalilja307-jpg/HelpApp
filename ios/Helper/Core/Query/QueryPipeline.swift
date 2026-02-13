@@ -182,7 +182,9 @@ extension QueryPipeline {
             "current location",
             "nearby",
             "around here",
-            "här i närheten"
+            "här i närheten",
+            "vilken plats är jag",
+            "vad finns nära"
         ]
         return locationHints.contains { lower.contains($0) }
     }

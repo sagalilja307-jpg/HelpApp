@@ -405,6 +405,10 @@ private final class MockFetcher: QueryDataFetching {
     }
 
     func collect(days: Int, access: QuerySourceAccessing) async throws -> QueryCollectedData {
+        return try await collect(days: days, access: access, options: .default)
+    }
+
+    func collect(days: Int, access: QuerySourceAccessing, options: QueryCollectionOptions) async throws -> QueryCollectedData {
         recorder.calls.append("collect")
         return result
     }
@@ -420,6 +424,10 @@ private final class SequenceMockFetcher: QueryDataFetching {
     }
 
     func collect(days: Int, access: QuerySourceAccessing) async throws -> QueryCollectedData {
+        return try await collect(days: days, access: access, options: .default)
+    }
+
+    func collect(days: Int, access: QuerySourceAccessing, options: QueryCollectionOptions) async throws -> QueryCollectedData {
         recorder.calls.append("collect")
         guard !remaining.isEmpty else {
             return QueryCollectedData(
