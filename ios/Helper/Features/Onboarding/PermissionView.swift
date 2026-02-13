@@ -71,6 +71,8 @@ struct PermissionView: View {
         case .reminder: return "checklist"
         case .notification: return "bell.badge"
         case .camera: return "camera.viewfinder"
+        case .contacts: return "person.2.fill"
+        case .photos: return "photo.on.rectangle.angled"
         }
     }
 
@@ -80,6 +82,8 @@ struct PermissionView: View {
         case .reminder: return "Tillgång till påminnelser"
         case .notification: return "Tillåt notiser"
         case .camera: return "Tillgång till kamera"
+        case .contacts: return "Tillgång till kontakter"
+        case .photos: return "Tillgång till bilder"
         }
     }
 
@@ -93,6 +97,10 @@ struct PermissionView: View {
             return "Notiser används för att ställa frågor och ge förslag när det passar."
         case .camera:
             return "Kameran används för att scanna dokument och bilder."
+        case .contacts:
+            return "Kontakter används när du vill låta hjälparen svara med kontaktkontext."
+        case .photos:
+            return "Bilder används när du aktiverar bildindexering i datakällor."
         }
     }
 
@@ -122,6 +130,10 @@ struct PermissionView: View {
                     try await PermissionManager.shared.requestNotificationAccess()
                 case .camera:
                     try await PermissionManager.shared.requestCameraAccess()
+                case .contacts:
+                    try await PermissionManager.shared.requestContactsAccess()
+                case .photos:
+                    try await PermissionManager.shared.requestPhotosAccess()
                 }
 
                 status = .granted

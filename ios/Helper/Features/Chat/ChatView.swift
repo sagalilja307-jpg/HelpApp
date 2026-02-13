@@ -15,6 +15,7 @@ public struct ChatView: View {
     @State private var showContext = false
     @State private var showSupportSettings = false
     @State private var showCreateNote = false
+    @State private var showDataSources = false
     @State private var supportSettingsViewModel = SupportSettingsViewModel()
     @State private var gmailSyncCoordinator = GmailSyncCoordinator()
     @State private var gmailOAuthService = GmailOAuthService()
@@ -22,8 +23,20 @@ public struct ChatView: View {
     @State private var noteTitle = ""
     @State private var noteBody = ""
 
-    init(pipeline: QueryPipeline) {
+    private let sourceConnectionStore: SourceConnectionStore
+    private let photosIndexService: PhotosIndexService
+    private let filesImportService: FilesImportService
+
+    init(
+        pipeline: QueryPipeline,
+        sourceConnectionStore: SourceConnectionStore,
+        photosIndexService: PhotosIndexService,
+        filesImportService: FilesImportService
+    ) {
         self.vm = ChatViewModel(pipeline: pipeline)
+        self.sourceConnectionStore = sourceConnectionStore
+        self.photosIndexService = photosIndexService
+        self.filesImportService = filesImportService
     }
 
     public var body: some View {
@@ -91,6 +104,14 @@ public struct ChatView: View {
         }
         .navigationTitle("Fråga hjälparen")
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    showDataSources = true
+                } label: {
+                    Image(systemName: "externaldrive.connected.to.line.below")
+                }
+                .accessibilityLabel("Datakallor")
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     Task { await handleGmailSync() }
@@ -118,6 +139,13 @@ public struct ChatView: View {
         }
         .sheet(isPresented: $showSupportSettings) {
             SupportSettingsSheetView(viewModel: supportSettingsViewModel)
+        }
+        .sheet(isPresented: $showDataSources) {
+            DataSourcesSheetView(
+                sourceConnectionStore: sourceConnectionStore,
+                photosIndexService: photosIndexService,
+                filesImportService: filesImportService
+            )
         }
         .sheet(isPresented: $showCreateNote) {
             NavigationStack {

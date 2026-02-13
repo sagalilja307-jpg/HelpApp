@@ -10,6 +10,9 @@ import SwiftUI
 
 struct PermissionOnboardingView: View {
     let pipeline: QueryPipeline
+    let sourceConnectionStore: SourceConnectionStore
+    let photosIndexService: PhotosIndexService
+    let filesImportService: FilesImportService
 
     @AppStorage("onboardingComplete") private var onboardingComplete = false
     @State private var currentIndex: Int? = nil
@@ -42,7 +45,12 @@ struct PermissionOnboardingView: View {
                 .transition(.slide)
                 .padding()
             } else {
-                ChatView(pipeline: pipeline)
+                ChatView(
+                    pipeline: pipeline,
+                    sourceConnectionStore: sourceConnectionStore,
+                    photosIndexService: photosIndexService,
+                    filesImportService: filesImportService
+                )
             }
         }
         .animation(.easeInOut, value: currentIndex)

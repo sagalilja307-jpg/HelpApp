@@ -166,6 +166,75 @@ class APIQueryAssistantStoreTests(unittest.TestCase):
         self.assertIsInstance(used_sources, list)
         self.assertTrue(bool(set(used_sources).intersection({"calendar", "reminders", "notes"})))
 
+    def test_ingest_then_query_returns_stage2_source_evidence(self):
+        client = TestClient(self.app)
+        now = utcnow()
+
+        ingest_payload = {
+            "items": [
+                {
+                    "id": "contact:anna",
+                    "source": "contacts",
+                    "type": "contact",
+                    "title": "Anna Andersson",
+                    "body": "Resekoordinator\\nanna@example.com\\n+46700000000",
+                    "created_at": now.isoformat(),
+                    "updated_at": now.isoformat(),
+                    "status": {"has_email": True, "has_phone": True},
+                },
+                {
+                    "id": "photo:asset-1",
+                    "source": "photos",
+                    "type": "photo",
+                    "title": "Bild 2026-02-12",
+                    "body": "Metadata: favoritbild fran packning",
+                    "created_at": now.isoformat(),
+                    "updated_at": now.isoformat(),
+                    "status": {"ocr_enabled": False, "favorite": True},
+                },
+                {
+                    "id": "file:doc-1",
+                    "source": "files",
+                    "type": "file",
+                    "title": "Resplan.pdf",
+                    "body": "Dokument med bokningsdetaljer",
+                    "created_at": now.isoformat(),
+                    "updated_at": now.isoformat(),
+                    "status": {"uti": "com.adobe.pdf", "size_bytes": 2048},
+                },
+            ]
+        }
+
+        ingest_resp = client.post("/ingest", json=ingest_payload)
+        self.assertEqual(ingest_resp.status_code, 200)
+
+        resp = client.post(
+            "/query",
+            json={
+                "query": "sammanfatta kontakter bilder och filer for resan",
+                "language": "sv",
+                "days": 90,
+                "sources": ["assistant_store"],
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        payload = resp.json()
+        evidence = payload.get("evidence_items") or []
+        self.assertGreaterEqual(len(evidence), 1)
+
+        evidence_sources = {row.get("source") for row in evidence}
+        self.assertTrue(
+            bool(evidence_sources.intersection({"contacts", "photos", "files"}))
+        )
+
+        evidence_types = {row.get("type") for row in evidence}
+        self.assertTrue(bool(evidence_types.intersection({"contact", "photo", "file"})))
+
+        used_sources = payload.get("used_sources")
+        self.assertIsInstance(used_sources, list)
+        self.assertTrue(bool(set(used_sources).intersection({"contacts", "photos", "files"})))
+
 
 if __name__ == "__main__":
     unittest.main()

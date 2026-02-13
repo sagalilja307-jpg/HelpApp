@@ -21,6 +21,9 @@ class RetrievalConfig:
                 "memory": 4,
                 "signal": 2,
                 "notes": 2,
+                "contacts": 2,
+                "photos": 2,
+                "files": 2,
                 "default": 2
             }
 

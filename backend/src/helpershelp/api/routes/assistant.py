@@ -173,12 +173,38 @@ def ingest(request: IngestRequest):
         for item in request.items
         if str(getattr(item, "source", "")).lower() == "notes"
     )
+    stage2_counts = {"contacts": 0, "photos": 0, "files": 0}
+    for item in request.items:
+        source = str(getattr(item, "source", "")).strip().lower()
+        item_type = str(getattr(getattr(item, "type", None), "value", "")).strip().lower()
+
+        if source in stage2_counts:
+            stage2_counts[source] += 1
+            continue
+        if item_type == "contact":
+            stage2_counts["contacts"] += 1
+        elif item_type == "photo":
+            stage2_counts["photos"] += 1
+        elif item_type == "file":
+            stage2_counts["files"] += 1
+
     store.audit(
         "ingest",
         {"inserted": inserted, "updated": updated, "count": len(request.items)},
     )
     if notes_count > 0:
         store.audit("notes_imported", {"count": notes_count})
+    stage2_total = sum(stage2_counts.values())
+    if stage2_total > 0:
+        store.audit(
+            "stage2_delta_ingest",
+            {
+                "count": stage2_total,
+                "sources": stage2_counts,
+                "inserted": inserted,
+                "updated": updated,
+            },
+        )
     return {"status": "ok", "inserted": inserted, "updated": updated}
 
 

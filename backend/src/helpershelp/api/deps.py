@@ -57,18 +57,38 @@ def assistant_store_fetch(
         if isinstance(applies_to, list) and applies_to:
             allowed_types = {str(item_type).lower() for item_type in applies_to if item_type}
 
-    def map_source(type_value: str) -> str:
-        normalized_type = (type_value or "").lower()
-        if normalized_type == "email":
-            return "email"
+    explicit_source_map = {
+        "email": "email",
+        "gmail": "email",
+        "mail": "email",
+        "calendar": "calendar",
+        "event": "calendar",
+        "events": "calendar",
+        "reminder": "reminders",
+        "reminders": "reminders",
+        "note": "notes",
+        "notes": "notes",
+        "task": "tasks",
+        "tasks": "tasks",
+        "contact": "contacts",
+        "contacts": "contacts",
+        "photo": "photos",
+        "photos": "photos",
+        "file": "files",
+        "files": "files",
+    }
+
+    def map_source(source_value: str, type_value: str) -> str:
+        normalized_source = (source_value or "").strip().lower()
+        if normalized_source in explicit_source_map:
+            return explicit_source_map[normalized_source]
+
+        normalized_type = (type_value or "").strip().lower()
+        if normalized_type in explicit_source_map:
+            return explicit_source_map[normalized_type]
+
         if normalized_type == "event":
             return "calendar"
-        if normalized_type == "reminder":
-            return "reminders"
-        if normalized_type == "note":
-            return "notes"
-        if normalized_type == "task":
-            return "tasks"
         return "raw"
 
     def snippet(text: str, max_len: int = 280) -> str:
@@ -82,7 +102,8 @@ def assistant_store_fetch(
         type_value = getattr(getattr(item, "type", None), "value", None) or str(
             getattr(item, "type", "") or ""
         )
-        mapped_source = map_source(type_value)
+        source_value = str(getattr(item, "source", "") or "")
+        mapped_source = map_source(source_value, type_value)
 
         if allowed_types is not None and mapped_source not in allowed_types:
             continue
