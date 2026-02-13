@@ -1,5 +1,4 @@
 import Foundation
-import SwiftData
 
 struct QueryPipelineFactory {
 
@@ -7,8 +6,9 @@ struct QueryPipelineFactory {
         QueryPipeline(
             interpreter: QueryInterpreter(),
             access: QuerySourceAccess(memory: .allowed, rawEvents: .allowed),
-            fetcher: QueryDataFetcher(),
-            composer: QueryAnswerComposer()
+            fetcher: QueryDataFetcher(memoryService: memoryService),
+            ingestService: AssistantIngestAPIService.shared,
+            backendQueryService: BackendQueryAPIService.shared
         )
     }
 }

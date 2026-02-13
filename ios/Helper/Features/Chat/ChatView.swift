@@ -5,14 +5,22 @@
 //  Created by Saga Lilja on 2026-01-24.
 //
 
+import SwiftData
 import SwiftUI
 
 public struct ChatView: View {
     @Bindable var vm: ChatViewModel
+    @Environment(\.modelContext) private var modelContext
     @FocusState private var focusInput: Bool
     @State private var showContext = false
     @State private var showSupportSettings = false
+    @State private var showCreateNote = false
     @State private var supportSettingsViewModel = SupportSettingsViewModel()
+    @State private var gmailSyncCoordinator = GmailSyncCoordinator()
+    @State private var gmailOAuthService = GmailOAuthService()
+    @State private var syncStatusMessage: String?
+    @State private var noteTitle = ""
+    @State private var noteBody = ""
 
     init(pipeline: QueryPipeline) {
         self.vm = ChatViewModel(pipeline: pipeline)
@@ -85,6 +93,22 @@ public struct ChatView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
+                    Task { await handleGmailSync() }
+                } label: {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                }
+                .accessibilityLabel("Synka Gmail")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showCreateNote = true
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                }
+                .accessibilityLabel("Skapa anteckning")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
                     showSupportSettings = true
                 } label: {
                     Image(systemName: "slider.horizontal.3")
@@ -95,10 +119,55 @@ public struct ChatView: View {
         .sheet(isPresented: $showSupportSettings) {
             SupportSettingsSheetView(viewModel: supportSettingsViewModel)
         }
+        .sheet(isPresented: $showCreateNote) {
+            NavigationStack {
+                Form {
+                    Section("Titel") {
+                        TextField("Anteckningstitel", text: $noteTitle)
+                    }
+                    Section("Innehåll") {
+                        TextEditor(text: $noteBody)
+                            .frame(minHeight: 140)
+                    }
+                }
+                .navigationTitle("Ny anteckning")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Avbryt") {
+                            noteTitle = ""
+                            noteBody = ""
+                            showCreateNote = false
+                        }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Spara") {
+                            createNote()
+                        }
+                        .disabled(noteTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            && noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+            }
+        }
         .alert("Fel", isPresented: .constant(vm.error != nil)) {
             Button("OK") { vm.error = nil }
         } message: {
             Text(vm.error ?? "")
+        }
+        .alert(
+            "Gmail",
+            isPresented: Binding(
+                get: { syncStatusMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        syncStatusMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button("OK") { syncStatusMessage = nil }
+        } message: {
+            Text(syncStatusMessage ?? "")
         }
     }
 
@@ -115,5 +184,41 @@ public struct ChatView: View {
                 .textSelection(.enabled)
             if !isUser { Spacer() }
         }
+    }
+
+    private func handleGmailSync() async {
+        do {
+            _ = try await OAuthTokenManager.shared.loadToken()
+        } catch {
+            do {
+                _ = try await gmailOAuthService.startAuthorization()
+            } catch {
+                syncStatusMessage = "Kunde inte ansluta Gmail: \(error.localizedDescription)"
+                return
+            }
+        }
+
+        do {
+            try await gmailSyncCoordinator.syncInbox()
+            syncStatusMessage = "Gmail synkades."
+        } catch {
+            syncStatusMessage = "Gmail-synk misslyckades: \(error.localizedDescription)"
+        }
+    }
+
+    private func createNote() {
+        let service = NotesStoreService(context: modelContext)
+        do {
+            _ = try service.createNote(
+                title: noteTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+                body: noteBody.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+        } catch {
+            vm.error = "Kunde inte spara anteckning: \(error.localizedDescription)"
+            return
+        }
+        noteTitle = ""
+        noteBody = ""
+        showCreateNote = false
     }
 }

@@ -89,6 +89,83 @@ class APIQueryAssistantStoreTests(unittest.TestCase):
         self.assertIsInstance(time_range, dict)
         self.assertEqual(time_range.get("days"), 7)
 
+    def test_ingest_then_query_returns_note_event_and_reminder_evidence(self):
+        client = TestClient(self.app)
+        now = utcnow()
+
+        ingest_payload = {
+            "items": [
+                {
+                    "id": "calendar:event-1",
+                    "source": "calendar",
+                    "type": "event",
+                    "title": "Packa for Grekland",
+                    "body": "Fixa pass och biljetter",
+                    "created_at": now.isoformat(),
+                    "updated_at": now.isoformat(),
+                    "start_at": now.isoformat(),
+                    "end_at": (now + timedelta(hours=2)).isoformat(),
+                    "status": {"is_all_day": False},
+                },
+                {
+                    "id": "reminder:item-1",
+                    "source": "reminders",
+                    "type": "reminder",
+                    "title": "Kop solskydd",
+                    "body": "",
+                    "created_at": now.isoformat(),
+                    "updated_at": now.isoformat(),
+                    "due_at": (now + timedelta(days=1)).isoformat(),
+                    "status": {"is_completed": False},
+                },
+                {
+                    "id": "memory:item-1",
+                    "source": "notes",
+                    "type": "note",
+                    "title": "Reseanteckning",
+                    "body": "Vi har bokat hotell i Aten",
+                    "created_at": now.isoformat(),
+                    "updated_at": now.isoformat(),
+                    "status": {"memory_source": "memory"},
+                },
+            ]
+        }
+
+        ingest_resp = client.post("/ingest", json=ingest_payload)
+        self.assertEqual(ingest_resp.status_code, 200)
+
+        resp = client.post(
+            "/query",
+            json={
+                "query": "Sammanfatta vad vi planerat och bokat till Grekland",
+                "language": "sv",
+                "days": 90,
+                "sources": ["assistant_store"],
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        payload = resp.json()
+        evidence = payload.get("evidence_items")
+        self.assertIsInstance(evidence, list)
+        self.assertGreaterEqual(len(evidence), 1)
+
+        titles = {row.get("title") for row in evidence}
+        self.assertTrue(
+            bool(
+                titles.intersection(
+                    {"Packa for Grekland", "Kop solskydd", "Reseanteckning"}
+                )
+            )
+        )
+
+        sources = {row.get("source") for row in evidence if row.get("source")}
+        self.assertTrue(bool(sources.intersection({"calendar", "reminders", "notes"})))
+
+        used_sources = payload.get("used_sources")
+        self.assertIsInstance(used_sources, list)
+        self.assertTrue(bool(set(used_sources).intersection({"calendar", "reminders", "notes"})))
+
 
 if __name__ == "__main__":
     unittest.main()

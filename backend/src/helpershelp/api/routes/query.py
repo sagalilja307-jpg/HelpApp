@@ -7,6 +7,7 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, status
 
 from helpershelp.api.deps import (
+    get_assistant_store,
     assistant_store_fetch,
     mail_queries,
     query_service,
@@ -98,6 +99,18 @@ async def unified_query(request: UnifiedQueryRequest):
                 for item in retrieved_items
                 if getattr(item, "source", None)
             }
+        )
+        store = get_assistant_store()
+        coverage: dict[str, int] = {}
+        for source in used_sources:
+            coverage[source] = coverage.get(source, 0) + 1
+        store.audit(
+            "query_source_coverage",
+            {
+                "used_sources": used_sources,
+                "evidence_items": len(retrieved_items),
+                "coverage": coverage,
+            },
         )
 
         for item in retrieved_items[:8]:

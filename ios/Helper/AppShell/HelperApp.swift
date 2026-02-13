@@ -19,6 +19,8 @@ struct HelperApp: App {
     private let suggestionCoordinator: SuggestionCoordinator
     private let queryPipeline: QueryPipeline
     private let supportSettingsService: SupportSettingsAPIService
+    private let notesStoreService: NotesStoreService
+    private let shareImportService: ShareImportService
 
     // Onboarding flag (sparas i UserDefaults)
     @AppStorage("onboardingComplete") private var onboardingComplete = false
@@ -51,22 +53,29 @@ struct HelperApp: App {
             // 5️⃣ Skapa QueryPipeline
             let access = QuerySourceAccess()
             let interpreter = QueryInterpreter()
-            let fetcher = QueryDataFetcher()
-            let composer = QueryAnswerComposer()
+            let fetcher = QueryDataFetcher(memoryService: service)
+            let ingestService = AssistantIngestAPIService.shared
+            let backendQueryService = BackendQueryAPIService.shared
 
             self.queryPipeline = QueryPipeline(
                 interpreter: interpreter,
                 access: access,
                 fetcher: fetcher,
-                composer: composer
+                ingestService: ingestService,
+                backendQueryService: backendQueryService
             )
             let supportSettingsService = SupportSettingsAPIService.shared
             self.supportSettingsService = supportSettingsService
+            let notesStoreService = NotesStoreService(memoryService: service)
+            self.notesStoreService = notesStoreService
+            let shareImportService = ShareImportService(notesStore: notesStoreService)
+            self.shareImportService = shareImportService
 
             let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
             if !isRunningTests {
                 Task {
                     await supportSettingsService.syncSupportSettingsCache()
+                    _ = try? shareImportService.importPendingSharedItems()
                 }
             }
 

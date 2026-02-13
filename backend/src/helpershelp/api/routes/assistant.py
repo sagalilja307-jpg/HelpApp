@@ -168,10 +168,17 @@ def dashboard(days: int = Query(default=90, ge=1, le=365)):
 def ingest(request: IngestRequest):
     store = get_assistant_store()
     inserted, updated = store.upsert_items(request.items)
+    notes_count = sum(
+        1
+        for item in request.items
+        if str(getattr(item, "source", "")).lower() == "notes"
+    )
     store.audit(
         "ingest",
         {"inserted": inserted, "updated": updated, "count": len(request.items)},
     )
+    if notes_count > 0:
+        store.audit("notes_imported", {"count": notes_count})
     return {"status": "ok", "inserted": inserted, "updated": updated}
 
 

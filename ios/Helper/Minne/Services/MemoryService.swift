@@ -28,7 +28,8 @@ public final class MemoryService {
             BehaviorPattern.self,
             SemanticEmbedding.self,
             ActorRaw.self,
-            TitleConfidenceRaw.self
+            TitleConfidenceRaw.self,
+            UserNote.self
         ])
 
         let config = ModelConfiguration(isStoredInMemoryOnly: inMemory)
@@ -405,9 +406,11 @@ public final class MemoryService {
 
             let titleConfs = try context.fetch(FetchDescriptor<TitleConfidenceRaw>())
             for obj in titleConfs { context.delete(obj) }
+
+            let userNotes = try context.fetch(FetchDescriptor<UserNote>())
+            for obj in userNotes { context.delete(obj) }
         }
 
         try context.save()
     }
 }
-

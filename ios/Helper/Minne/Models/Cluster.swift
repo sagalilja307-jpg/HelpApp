@@ -18,7 +18,7 @@ public final class Cluster {
     public var waitingSince: Date?
     public var followUpSuggested: Bool
 
-    @Relationship(inverse: \ClusterItem.cluster)
+    @Relationship(deleteRule: .cascade, inverse: \ClusterItem.cluster)
     public var items: [ClusterItem] = []
 
     public init(
