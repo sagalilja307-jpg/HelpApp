@@ -13,6 +13,7 @@ struct PermissionOnboardingView: View {
     let sourceConnectionStore: SourceConnectionStore
     let photosIndexService: PhotosIndexService
     let filesImportService: FilesImportService
+    let locationSnapshotService: LocationSnapshotService?
 
     @AppStorage("onboardingComplete") private var onboardingComplete = false
     @State private var currentIndex: Int? = nil
@@ -49,7 +50,8 @@ struct PermissionOnboardingView: View {
                     pipeline: pipeline,
                     sourceConnectionStore: sourceConnectionStore,
                     photosIndexService: photosIndexService,
-                    filesImportService: filesImportService
+                    filesImportService: filesImportService,
+                    locationSnapshotService: locationSnapshotService
                 )
             }
         }

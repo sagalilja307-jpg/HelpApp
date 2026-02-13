@@ -5,31 +5,37 @@ struct DataSourcesSheetView: View {
     private let sourceConnectionStore: SourceConnectionStore
     private let photosIndexService: PhotosIndexService
     private let filesImportService: FilesImportService
+    private let locationSnapshotService: LocationSnapshotService?
 
     @Environment(\.dismiss) private var dismiss
 
     @State private var contactsEnabled: Bool
     @State private var photosEnabled: Bool
     @State private var filesEnabled: Bool
+    @State private var locationEnabled: Bool
     @State private var photosOCREnabled: Bool
     @State private var filesOCREnabled: Bool
     @State private var hasImportedFiles: Bool
     @State private var isWorking = false
     @State private var showFileImporter = false
     @State private var message: String?
+    @State private var lastLocationUpdate: Date?
 
     init(
         sourceConnectionStore: SourceConnectionStore,
         photosIndexService: PhotosIndexService,
-        filesImportService: FilesImportService
+        filesImportService: FilesImportService,
+        locationSnapshotService: LocationSnapshotService? = nil
     ) {
         self.sourceConnectionStore = sourceConnectionStore
         self.photosIndexService = photosIndexService
         self.filesImportService = filesImportService
+        self.locationSnapshotService = locationSnapshotService
 
         _contactsEnabled = State(initialValue: sourceConnectionStore.isEnabled(.contacts))
         _photosEnabled = State(initialValue: sourceConnectionStore.isEnabled(.photos))
         _filesEnabled = State(initialValue: sourceConnectionStore.isEnabled(.files))
+        _locationEnabled = State(initialValue: sourceConnectionStore.isEnabled(.location))
         _photosOCREnabled = State(initialValue: sourceConnectionStore.isOCREnabled(for: .photos))
         _filesOCREnabled = State(initialValue: sourceConnectionStore.isOCREnabled(for: .files))
         _hasImportedFiles = State(initialValue: sourceConnectionStore.hasImportedFiles())
@@ -116,6 +122,34 @@ struct DataSourcesSheetView: View {
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
+                        }
+                    }
+
+                    SourceCardView(
+                        icon: "location.fill",
+                        title: "Plats",
+                        subtitle: "Ungefärlig plats för platsfrågor som \"nära mig\".",
+                        isOn: $locationEnabled,
+                        onToggle: { enabled in
+                            Task { await toggleLocation(enabled) }
+                        }
+                    ) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Button("Uppdatera plats nu") {
+                                Task { await refreshLocation() }
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(!locationEnabled || isWorking)
+
+                            if let lastUpdate = lastLocationUpdate {
+                                Text("Senast uppdaterad: \(Self.formatRelativeDate(lastUpdate))")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Text("Platsdata är alltid ungefärlig och sparas endast i 7 dagar.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
 
@@ -258,5 +292,57 @@ private extension DataSourcesSheetView {
         } catch {
             hasImportedFiles = sourceConnectionStore.hasImportedFiles()
         }
+    }
+
+    func toggleLocation(_ enabled: Bool) async {
+        guard enabled else {
+            sourceConnectionStore.setEnabled(false, for: .location)
+            locationEnabled = false
+            return
+        }
+
+        do {
+            try await PermissionManager.shared.requestLocationAccess()
+            let status = await PermissionManager.shared.status(for: .location)
+            guard status == .granted else {
+                locationEnabled = false
+                sourceConnectionStore.setEnabled(false, for: .location)
+                message = "Plats kunde inte aktiveras: behörighet saknas."
+                return
+            }
+
+            sourceConnectionStore.setEnabled(true, for: .location)
+            locationEnabled = true
+            message = "Plats aktiverad. Tryck \"Uppdatera plats nu\" för att indexera din position."
+        } catch {
+            locationEnabled = false
+            sourceConnectionStore.setEnabled(false, for: .location)
+            message = "Plats kunde inte aktiveras: \(error.localizedDescription)"
+        }
+    }
+
+    func refreshLocation() async {
+        guard locationEnabled, let service = locationSnapshotService else { return }
+        isWorking = true
+        defer { isWorking = false }
+
+        do {
+            let result = try await service.captureSnapshot()
+            lastLocationUpdate = result.snapshot.observedAt
+            if result.fallbackUsed {
+                message = "Plats uppdaterad (använder tidigare uppmätt position)."
+            } else {
+                message = "Plats uppdaterad: \(result.snapshot.placeLabel)"
+            }
+        } catch {
+            message = "Platsuppdatering misslyckades: \(error.localizedDescription)"
+        }
+    }
+
+    static func formatRelativeDate(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "sv_SE")
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }

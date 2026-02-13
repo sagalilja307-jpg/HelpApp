@@ -124,6 +124,7 @@ async def unified_query(request: UnifiedQueryRequest):
                 "contacts",
                 "photos",
                 "files",
+                "locations",
             }:
                 src = "raw"
 
@@ -144,6 +145,8 @@ async def unified_query(request: UnifiedQueryRequest):
                 inferred_type = "photo"
             elif src == "files":
                 inferred_type = "file"
+            elif src == "locations":
+                inferred_type = "location"
 
             title = str(getattr(item, "subject", "") or "").strip()
             body = str(getattr(item, "body", "") or "").strip()

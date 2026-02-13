@@ -9,6 +9,9 @@ import Contacts
 #if canImport(PhotoKit)
 import PhotoKit
 #endif
+#if canImport(CoreLocation)
+import CoreLocation
+#endif
 
 // MARK: - App Permission Types & Status
 
@@ -19,6 +22,7 @@ enum AppPermissionType {
     case camera
     case contacts
     case photos
+    case location
 }
 
 enum AppPermissionStatus {
@@ -55,6 +59,8 @@ final class PermissionManager {
             return contactsPermissionStatus()
         case .photos:
             return photosPermissionStatus()
+        case .location:
+            return locationPermissionStatus()
         }
     }
 
@@ -74,6 +80,8 @@ final class PermissionManager {
             return contactsPermissionStatus()
         case .photos:
             return photosPermissionStatus()
+        case .location:
+            return locationPermissionStatus()
         }
     }
 
@@ -113,6 +121,15 @@ final class PermissionManager {
     func requestPhotosAccess() async throws {
         #if canImport(PhotoKit)
         _ = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+        #endif
+    }
+
+    func requestLocationAccess() async throws {
+        #if canImport(CoreLocation)
+        let locationManager = CLLocationManager()
+        locationManager.requestWhenInUseAuthorization()
+        // Allow time for the system dialog to process
+        try await Task.sleep(for: .milliseconds(100))
         #endif
     }
 
@@ -172,6 +189,29 @@ final class PermissionManager {
         return .denied
         #endif
     }
+
+    private func locationPermissionStatus() -> AppPermissionStatus {
+        #if canImport(CoreLocation)
+        return mapLocationStatus(CLLocationManager.authorizationStatus())
+        #else
+        return .denied
+        #endif
+    }
+
+    #if canImport(CoreLocation)
+    private func mapLocationStatus(_ status: CLAuthorizationStatus) -> AppPermissionStatus {
+        switch status {
+        case .notDetermined:
+            return .notDetermined
+        case .authorizedAlways, .authorizedWhenInUse:
+            return .granted
+        case .denied, .restricted:
+            return .denied
+        @unknown default:
+            return .denied
+        }
+    }
+    #endif
 
     #if canImport(Contacts)
     private func mapContactsStatus(

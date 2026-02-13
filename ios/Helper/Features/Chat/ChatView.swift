@@ -26,17 +26,20 @@ public struct ChatView: View {
     private let sourceConnectionStore: SourceConnectionStore
     private let photosIndexService: PhotosIndexService
     private let filesImportService: FilesImportService
+    private let locationSnapshotService: LocationSnapshotService?
 
     init(
         pipeline: QueryPipeline,
         sourceConnectionStore: SourceConnectionStore,
         photosIndexService: PhotosIndexService,
-        filesImportService: FilesImportService
+        filesImportService: FilesImportService,
+        locationSnapshotService: LocationSnapshotService? = nil
     ) {
         self.vm = ChatViewModel(pipeline: pipeline)
         self.sourceConnectionStore = sourceConnectionStore
         self.photosIndexService = photosIndexService
         self.filesImportService = filesImportService
+        self.locationSnapshotService = locationSnapshotService
     }
 
     public var body: some View {
@@ -144,7 +147,8 @@ public struct ChatView: View {
             DataSourcesSheetView(
                 sourceConnectionStore: sourceConnectionStore,
                 photosIndexService: photosIndexService,
-                filesImportService: filesImportService
+                filesImportService: filesImportService,
+                locationSnapshotService: locationSnapshotService
             )
         }
         .sheet(isPresented: $showCreateNote) {

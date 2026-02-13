@@ -492,3 +492,71 @@ private final class MockCheckpointStore: Etapp2IngestCheckpointStoring, @uncheck
         recorder.calls.append("checkpoint:\(source.rawValue)")
     }
 }
+
+// MARK: - Location Intent Tests
+
+extension BackendQueryPipelineTests {
+    
+    func testIsLocationIntentDetectsSwedishHints() {
+        // Swedish location hints
+        XCTAssertTrue(QueryPipeline.isLocationIntent("var är jag just nu?"))
+        XCTAssertTrue(QueryPipeline.isLocationIntent("Vad finns nära mig?"))
+        XCTAssertTrue(QueryPipeline.isLocationIntent("Finns det restauranger i närheten?"))
+        XCTAssertTrue(QueryPipeline.isLocationIntent("Vilken plats är jag på?"))
+    }
+    
+    func testIsLocationIntentDetectsEnglishHints() {
+        // English location hints
+        XCTAssertTrue(QueryPipeline.isLocationIntent("where am i?"))
+        XCTAssertTrue(QueryPipeline.isLocationIntent("What is near me?"))
+        XCTAssertTrue(QueryPipeline.isLocationIntent("Restaurants close to me"))
+        XCTAssertTrue(QueryPipeline.isLocationIntent("What's nearby?"))
+    }
+    
+    func testIsLocationIntentReturnsFalseForNonLocationQueries() {
+        // Non-location queries
+        XCTAssertFalse(QueryPipeline.isLocationIntent("Vad har jag för möten idag?"))
+        XCTAssertFalse(QueryPipeline.isLocationIntent("Visa mina påminnelser"))
+        XCTAssertFalse(QueryPipeline.isLocationIntent("What are my tasks?"))
+        XCTAssertFalse(QueryPipeline.isLocationIntent("Hjälp mig med min packlista"))
+    }
+    
+    func testMissingAccessPrefixIncludesLocation() async throws {
+        let recorder = CallRecorder()
+        
+        let pipeline = QueryPipeline(
+            interpreter: MockInterpreter(result: QueryInterpretation(
+                intent: .summary,
+                requiredSources: [.memory],
+                timeRange: nil,
+                confidence: nil
+            )),
+            access: MockAccess(),
+            fetcher: MockFetcher(
+                recorder: recorder,
+                result: QueryCollectedData(
+                    timeRange: DateInterval(start: Date(), end: Date()),
+                    items: [],
+                    entries: [],
+                    missingAccess: [.location]
+                )
+            ),
+            ingestService: MockIngestService(recorder: CallRecorder()),
+            backendQueryService: MockBackendQueryService(
+                recorder: CallRecorder(),
+                response: BackendLLMResponseDTO(
+                    content: "Svar utan plats.",
+                    confidence: nil,
+                    sourceDocuments: nil,
+                    evidenceItems: nil,
+                    usedSources: nil,
+                    timeRange: nil
+                )
+            )
+        )
+        
+        let result = try await pipeline.run(UserQuery(text: "var är jag?", source: .userTyped))
+        
+        XCTAssertTrue(result.answer?.contains("Obs: Platsåtkomst saknas") == true)
+    }
+}

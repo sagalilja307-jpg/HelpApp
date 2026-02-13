@@ -8,6 +8,9 @@ import Contacts
 #if canImport(PhotoKit)
 import PhotoKit
 #endif
+#if canImport(CoreLocation)
+import CoreLocation
+#endif
 
 // ===============================================================
 // File: Helper/Core/Query/QuerySourceAccess.swift
@@ -22,6 +25,7 @@ enum QuerySource: String, Sendable, Codable {
     case contacts
     case photos
     case files
+    case location
 }
 
 protocol QuerySourceAccessing: Sendable {
@@ -69,6 +73,8 @@ struct QuerySourceAccess: QuerySourceAccessing, Sendable {
             return sourceConnectionStore.isEnabled(.photos) && photosAuthorized()
         case .files:
             return sourceConnectionStore.isEnabled(.files) && sourceConnectionStore.hasImportedFiles()
+        case .location:
+            return sourceConnectionStore.isEnabled(.location) && locationAuthorized()
         }
     }
 
@@ -112,6 +118,11 @@ struct QuerySourceAccess: QuerySourceAccessing, Sendable {
                 return "Filer är inte aktiverad som datakälla."
             }
             return "Jag hittar ingen importerad fil-data ännu."
+        case .location:
+            if !sourceConnectionStore.isEnabled(.location) {
+                return "Plats är inte aktiverad som datakälla."
+            }
+            return "Jag kan inte läsa plats – du har inte godkänt åtkomst."
         }
     }
 }
@@ -173,6 +184,15 @@ private extension QuerySourceAccess {
         #if canImport(PhotoKit)
         let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         return status == .authorized || status == .limited
+        #else
+        return false
+        #endif
+    }
+
+    func locationAuthorized() -> Bool {
+        #if canImport(CoreLocation)
+        let status = CLLocationManager.authorizationStatus()
+        return status == .authorizedAlways || status == .authorizedWhenInUse
         #else
         return false
         #endif

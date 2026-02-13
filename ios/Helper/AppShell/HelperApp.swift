@@ -24,6 +24,7 @@ struct HelperApp: App {
     private let sourceConnectionStore: SourceConnectionStore
     private let photosIndexService: PhotosIndexService
     private let filesImportService: FilesImportService
+    private let locationSnapshotService: LocationSnapshotService
 
     // Onboarding flag (sparas i UserDefaults)
     @AppStorage("onboardingComplete") private var onboardingComplete = false
@@ -69,11 +70,17 @@ struct HelperApp: App {
                 memoryService: service,
                 sourceConnectionStore: sourceConnectionStore
             )
+            let locationSnapshotService = LocationSnapshotService(memoryService: service)
+            let locationCollector = LocationCollectorService(
+                memoryService: service,
+                snapshotService: locationSnapshotService
+            )
             let fetcher = QueryDataFetcher(
                 memoryService: service,
                 contactsCollector: contactsCollector,
                 photosIndexService: photosIndexService,
                 filesImportService: filesImportService,
+                locationCollector: locationCollector,
                 sourceConnectionStore: sourceConnectionStore,
                 checkpointStore: checkpointStore
             )
@@ -86,10 +93,12 @@ struct HelperApp: App {
                 fetcher: fetcher,
                 ingestService: ingestService,
                 backendQueryService: backendQueryService,
-                checkpointStore: checkpointStore
+                checkpointStore: checkpointStore,
+                sourceConnectionStore: sourceConnectionStore
             )
             self.photosIndexService = photosIndexService
             self.filesImportService = filesImportService
+            self.locationSnapshotService = locationSnapshotService
             let supportSettingsService = SupportSettingsAPIService.shared
             self.supportSettingsService = supportSettingsService
             let notesStoreService = NotesStoreService(memoryService: service)
@@ -122,7 +131,8 @@ struct HelperApp: App {
                             pipeline: queryPipeline,
                             sourceConnectionStore: sourceConnectionStore,
                             photosIndexService: photosIndexService,
-                            filesImportService: filesImportService
+                            filesImportService: filesImportService,
+                            locationSnapshotService: locationSnapshotService
                         )
                     }
                 } else {
@@ -132,7 +142,8 @@ struct HelperApp: App {
                             pipeline: queryPipeline,
                             sourceConnectionStore: sourceConnectionStore,
                             photosIndexService: photosIndexService,
-                            filesImportService: filesImportService
+                            filesImportService: filesImportService,
+                            locationSnapshotService: locationSnapshotService
                         )
                     }
                 }

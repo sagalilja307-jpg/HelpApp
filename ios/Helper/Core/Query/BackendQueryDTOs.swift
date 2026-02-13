@@ -9,6 +9,7 @@ enum UnifiedItemTypeDTO: String, Codable, Sendable {
     case contact
     case photo
     case file
+    case location
 }
 
 struct UnifiedItemDTO: Codable, Sendable, Equatable {

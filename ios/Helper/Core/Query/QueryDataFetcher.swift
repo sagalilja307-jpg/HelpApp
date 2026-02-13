@@ -10,24 +10,38 @@ struct QueryCollectedData {
     let entries: [QueryResult.Entry]
     let missingAccess: [QuerySource]
     let checkpointSources: [QuerySource]
+    let locationFallbackUsed: Bool
 
     init(
         timeRange: DateInterval,
         items: [UnifiedItemDTO],
         entries: [QueryResult.Entry],
         missingAccess: [QuerySource],
-        checkpointSources: [QuerySource] = []
+        checkpointSources: [QuerySource] = [],
+        locationFallbackUsed: Bool = false
     ) {
         self.timeRange = timeRange
         self.items = items
         self.entries = entries
         self.missingAccess = missingAccess
         self.checkpointSources = checkpointSources
+        self.locationFallbackUsed = locationFallbackUsed
     }
+}
+
+struct QueryCollectionOptions: Sendable {
+    let shouldCaptureLocation: Bool
+    
+    init(shouldCaptureLocation: Bool = false) {
+        self.shouldCaptureLocation = shouldCaptureLocation
+    }
+    
+    static let `default` = QueryCollectionOptions()
 }
 
 protocol QueryDataFetching {
     func collect(days: Int, access: QuerySourceAccessing) async throws -> QueryCollectedData
+    func collect(days: Int, access: QuerySourceAccessing, options: QueryCollectionOptions) async throws -> QueryCollectedData
 }
 
 final class QueryDataFetcher: QueryDataFetching {
@@ -48,6 +62,7 @@ final class QueryDataFetcher: QueryDataFetching {
     private let contactsCollector: ContactsCollecting
     private let photosIndexService: PhotosIndexing
     private let filesImportService: FilesImporting
+    private let locationCollector: LocationCollecting?
     private let sourceConnectionStore: SourceConnectionStoring
     private let checkpointStore: Etapp2IngestCheckpointStoring
     private let nowProvider: () -> Date
@@ -63,6 +78,7 @@ final class QueryDataFetcher: QueryDataFetching {
         contactsCollector: ContactsCollecting? = nil,
         photosIndexService: PhotosIndexing? = nil,
         filesImportService: FilesImporting? = nil,
+        locationCollector: LocationCollecting? = nil,
         sourceConnectionStore: SourceConnectionStoring = SourceConnectionStore.shared,
         checkpointStore: Etapp2IngestCheckpointStoring? = nil,
         nowProvider: @escaping () -> Date = Date.init,
@@ -79,6 +95,7 @@ final class QueryDataFetcher: QueryDataFetching {
             memoryService: memoryService,
             sourceConnectionStore: sourceConnectionStore
         )
+        self.locationCollector = locationCollector
         self.sourceConnectionStore = sourceConnectionStore
         self.checkpointStore = checkpointStore ?? Etapp2IngestCheckpointStore(memoryService: memoryService)
         self.nowProvider = nowProvider
@@ -91,6 +108,7 @@ final class QueryDataFetcher: QueryDataFetching {
         contactsCollector: ContactsCollecting? = nil,
         photosIndexService: PhotosIndexing? = nil,
         filesImportService: FilesImporting? = nil,
+        locationCollector: LocationCollecting? = nil,
         sourceConnectionStore: SourceConnectionStoring = SourceConnectionStore.shared,
         checkpointStore: Etapp2IngestCheckpointStoring? = nil,
         nowProvider: @escaping () -> Date = Date.init
@@ -106,6 +124,7 @@ final class QueryDataFetcher: QueryDataFetching {
             memoryService: memoryService,
             sourceConnectionStore: sourceConnectionStore
         )
+        self.locationCollector = locationCollector
         self.sourceConnectionStore = sourceConnectionStore
         self.checkpointStore = checkpointStore ?? Etapp2IngestCheckpointStore(memoryService: memoryService)
         self.nowProvider = nowProvider
@@ -113,12 +132,17 @@ final class QueryDataFetcher: QueryDataFetching {
     #endif
 
     func collect(days: Int, access: QuerySourceAccessing) async throws -> QueryCollectedData {
+        return try await collect(days: days, access: access, options: .default)
+    }
+
+    func collect(days: Int, access: QuerySourceAccessing, options: QueryCollectionOptions) async throws -> QueryCollectedData {
         let range = Self.timeRange(days: days, now: nowProvider())
 
         var allItems: [UnifiedItemDTO] = []
         var allEntries: [QueryResult.Entry] = []
         var missingAccess: [QuerySource] = []
         var checkpointSources: [QuerySource] = []
+        var locationFallbackUsed = false
 
         if access.isAllowed(.memory) {
             let result = try fetchMemory(in: range)
@@ -186,12 +210,40 @@ final class QueryDataFetcher: QueryDataFetching {
             }
         }
 
+        // Location collection (on-demand only)
+        if sourceConnectionStore.isEnabled(.location) && options.shouldCaptureLocation {
+            if access.isAllowed(.location) {
+                if let locationCollector {
+                    do {
+                        _ = try await locationCollector.captureAndIndex()
+                        let checkpoint = try checkpointStore.lastCheckpoint(for: .location)
+                        let result = try locationCollector.collectDelta(since: checkpoint)
+                        allItems += result.items
+                        allEntries += result.entries
+                        checkpointSources.append(.location)
+                        
+                        // Check if fallback was used by looking at last snapshot date
+                        if let lastDate = try? locationCollector.lastSnapshotDate(),
+                           nowProvider().timeIntervalSince(lastDate) > 60 {
+                            locationFallbackUsed = true
+                        }
+                    } catch {
+                        // Location capture failed, but don't fail the whole query
+                        missingAccess.append(.location)
+                    }
+                }
+            } else {
+                missingAccess.append(.location)
+            }
+        }
+
         return QueryCollectedData(
             timeRange: range,
             items: dedup(items: allItems),
             entries: allEntries.sorted(by: Self.sortEntriesDescending),
             missingAccess: missingAccess,
-            checkpointSources: dedupSources(checkpointSources)
+            checkpointSources: dedupSources(checkpointSources),
+            locationFallbackUsed: locationFallbackUsed
         )
     }
 
