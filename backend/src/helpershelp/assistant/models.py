@@ -18,6 +18,7 @@ class UnifiedItemType(str, Enum):
     contact = "contact"
     photo = "photo"
     file = "file"
+    location = "location"
 
 
 class ProposalType(str, Enum):

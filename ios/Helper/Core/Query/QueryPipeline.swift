@@ -25,6 +25,7 @@ struct QueryPipeline {
     let ingestService: AssistantIngesting
     let backendQueryService: BackendQuerying
     let checkpointStore: Etapp2IngestCheckpointStoring
+    let sourceConnectionStore: SourceConnectionStoring
 
     init(
         interpreter: QueryInterpreting,
@@ -32,7 +33,8 @@ struct QueryPipeline {
         fetcher: QueryDataFetching,
         ingestService: AssistantIngesting,
         backendQueryService: BackendQuerying,
-        checkpointStore: Etapp2IngestCheckpointStoring = NoOpEtapp2IngestCheckpointStore()
+        checkpointStore: Etapp2IngestCheckpointStoring = NoOpEtapp2IngestCheckpointStore(),
+        sourceConnectionStore: SourceConnectionStoring = SourceConnectionStore.shared
     ) {
         self.interpreter = interpreter
         self.access = access
@@ -40,6 +42,7 @@ struct QueryPipeline {
         self.ingestService = ingestService
         self.backendQueryService = backendQueryService
         self.checkpointStore = checkpointStore
+        self.sourceConnectionStore = sourceConnectionStore
     }
 }
 
@@ -49,7 +52,11 @@ extension QueryPipeline {
         let interpretation = try? await interpreter.interpret(query)
         let days = Self.inferredDays(for: query.text, interpretation: interpretation)
 
-        let collected = try await fetcher.collect(days: days, access: access)
+        // Determine if we should capture location (on-demand trigger)
+        let shouldCaptureLocation = sourceConnectionStore.isEnabled(.location) && Self.isLocationIntent(query.text)
+        let options = QueryCollectionOptions(shouldCaptureLocation: shouldCaptureLocation)
+
+        let collected = try await fetcher.collect(days: days, access: access, options: options)
         let missingPrefix = Self.missingAccessPrefix(for: collected.missingAccess)
 
         if !collected.items.isEmpty {
@@ -68,6 +75,16 @@ extension QueryPipeline {
         var answer = backendResponse.content.trimmingCharacters(in: .whitespacesAndNewlines)
         if answer.isEmpty {
             answer = "Jag hittar ingen data att svara på ännu."
+        }
+
+        // Add location uncertainty prefix if location evidence was used
+        let locationPrefix = Self.locationUncertaintyPrefix(
+            usedSources: backendResponse.usedSources ?? [],
+            collected: collected,
+            missingAccess: collected.missingAccess
+        )
+        if !locationPrefix.isEmpty {
+            answer = "\(locationPrefix)\n\n\(answer)"
         }
 
         if !missingPrefix.isEmpty {
@@ -118,6 +135,8 @@ extension QueryPipeline {
             return .photos
         case "files":
             return .files
+        case "locations", "location":
+            return .location
         default:
             return .rawEvents
         }
@@ -141,8 +160,52 @@ extension QueryPipeline {
         if missing.contains(.files) {
             messages.append("Obs: Ingen importerad fil-data hittades")
         }
+        if missing.contains(.location) {
+            messages.append("Obs: Platsåtkomst saknas")
+        }
 
         return messages.joined(separator: "\n")
+    }
+
+    /// Detect if query has location intent
+    static func isLocationIntent(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        let locationHints = [
+            "var är jag",
+            "nära mig",
+            "i närheten",
+            "close to me",
+            "near me",
+            "where am i",
+            "min plats",
+            "nuvarande plats",
+            "current location",
+            "nearby",
+            "around here",
+            "här i närheten",
+            "vilken plats är jag",
+            "vad finns nära"
+        ]
+        return locationHints.contains { lower.contains($0) }
+    }
+
+    /// Generate location uncertainty prefix based on usage
+    private static func locationUncertaintyPrefix(
+        usedSources: [String],
+        collected: QueryCollectedData,
+        missingAccess: [QuerySource]
+    ) -> String {
+        let locationUsed = usedSources.contains { $0.lowercased() == "locations" }
+        let hasLocationEntries = collected.entries.contains { $0.source == .location }
+
+        if locationUsed || hasLocationEntries {
+            if collected.locationFallbackUsed {
+                return "Obs: Platsdata är ungefärlig och kan vara inaktuell (använder tidigare uppmätt plats)."
+            }
+            return "Obs: Platsdata är ungefärlig och kan vara inaktuell."
+        }
+
+        return ""
     }
 
     private static func inferredDays(for text: String, interpretation: QueryInterpretation?) -> Int {

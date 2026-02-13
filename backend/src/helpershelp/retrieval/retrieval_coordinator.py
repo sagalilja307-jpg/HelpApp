@@ -24,6 +24,7 @@ class RetrievalConfig:
                 "contacts": 2,
                 "photos": 2,
                 "files": 2,
+                "locations": 2,
                 "default": 2
             }
 

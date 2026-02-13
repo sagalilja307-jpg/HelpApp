@@ -174,6 +174,7 @@ def ingest(request: IngestRequest):
         if str(getattr(item, "source", "")).lower() == "notes"
     )
     stage2_counts = {"contacts": 0, "photos": 0, "files": 0}
+    location_count = 0
     for item in request.items:
         source = str(getattr(item, "source", "")).strip().lower()
         item_type = str(getattr(getattr(item, "type", None), "value", "")).strip().lower()
@@ -181,12 +182,17 @@ def ingest(request: IngestRequest):
         if source in stage2_counts:
             stage2_counts[source] += 1
             continue
+        if source in {"location", "locations"}:
+            location_count += 1
+            continue
         if item_type == "contact":
             stage2_counts["contacts"] += 1
         elif item_type == "photo":
             stage2_counts["photos"] += 1
         elif item_type == "file":
             stage2_counts["files"] += 1
+        elif item_type == "location":
+            location_count += 1
 
     store.audit(
         "ingest",
@@ -201,6 +207,15 @@ def ingest(request: IngestRequest):
             {
                 "count": stage2_total,
                 "sources": stage2_counts,
+                "inserted": inserted,
+                "updated": updated,
+            },
+        )
+    if location_count > 0:
+        store.audit(
+            "stage3_location_ingest",
+            {
+                "count": location_count,
                 "inserted": inserted,
                 "updated": updated,
             },

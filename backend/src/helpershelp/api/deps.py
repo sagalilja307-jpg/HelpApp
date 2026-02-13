@@ -76,6 +76,8 @@ def assistant_store_fetch(
         "photos": "photos",
         "file": "files",
         "files": "files",
+        "location": "locations",
+        "locations": "locations",
     }
 
     def map_source(source_value: str, type_value: str) -> str:
@@ -89,6 +91,8 @@ def assistant_store_fetch(
 
         if normalized_type == "event":
             return "calendar"
+        if normalized_type == "location":
+            return "locations"
         return "raw"
 
     def snippet(text: str, max_len: int = 280) -> str:
@@ -98,6 +102,7 @@ def assistant_store_fetch(
         return stripped[: max(0, max_len - 1)].rstrip() + "…"
 
     out: List[ContentObject] = []
+    location_retention_cutoff = utcnow() - timedelta(days=7)
     for item in items:
         type_value = getattr(getattr(item, "type", None), "value", None) or str(
             getattr(item, "type", "") or ""
@@ -117,6 +122,8 @@ def assistant_store_fetch(
             or getattr(item, "updated_at", None)
             or getattr(item, "created_at", None)
         )
+        if mapped_source == "locations" and dt and dt < location_retention_cutoff:
+            continue
 
         hints: List[str] = []
         if mapped_source == "calendar":
