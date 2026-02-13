@@ -2,6 +2,12 @@ import Foundation
 #if canImport(EventKit)
 import EventKit
 #endif
+#if canImport(Contacts)
+import Contacts
+#endif
+#if canImport(PhotoKit)
+import PhotoKit
+#endif
 
 // ===============================================================
 // File: Helper/Core/Query/QuerySourceAccess.swift
@@ -13,6 +19,9 @@ enum QuerySource: String, Sendable, Codable {
     case rawEvents
     case calendar
     case reminders
+    case contacts
+    case photos
+    case files
 }
 
 protocol QuerySourceAccessing: Sendable {
@@ -30,13 +39,16 @@ struct QuerySourceAccess: QuerySourceAccessing, Sendable {
 
     private let memoryAccess: MemoryAccess
     private let rawEventsAccess: MemoryAccess
+    private let sourceConnectionStore: SourceConnectionStoring
 
     init(
         memory: MemoryAccess = .allowed,
-        rawEvents: MemoryAccess = .allowed
+        rawEvents: MemoryAccess = .allowed,
+        sourceConnectionStore: SourceConnectionStoring = SourceConnectionStore.shared
     ) {
         self.memoryAccess = memory
         self.rawEventsAccess = rawEvents
+        self.sourceConnectionStore = sourceConnectionStore
     }
 
     // MARK: - Public API
@@ -51,6 +63,12 @@ struct QuerySourceAccess: QuerySourceAccessing, Sendable {
             return calendarAuthorized()
         case .reminders:
             return remindersAuthorized()
+        case .contacts:
+            return sourceConnectionStore.isEnabled(.contacts) && contactsAuthorized()
+        case .photos:
+            return sourceConnectionStore.isEnabled(.photos) && photosAuthorized()
+        case .files:
+            return sourceConnectionStore.isEnabled(.files) && sourceConnectionStore.hasImportedFiles()
         }
     }
 
@@ -79,6 +97,21 @@ struct QuerySourceAccess: QuerySourceAccessing, Sendable {
             return "Jag kan inte se kalendern – du har inte godkänt åtkomst."
         case .reminders:
             return "Jag kan inte se påminnelser – du har inte godkänt åtkomst."
+        case .contacts:
+            if !sourceConnectionStore.isEnabled(.contacts) {
+                return "Kontakter är inte aktiverad som datakälla."
+            }
+            return "Jag kan inte läsa kontakter – du har inte godkänt åtkomst."
+        case .photos:
+            if !sourceConnectionStore.isEnabled(.photos) {
+                return "Bilder är inte aktiverad som datakälla."
+            }
+            return "Jag kan inte läsa bilder – du har inte godkänt åtkomst."
+        case .files:
+            if !sourceConnectionStore.isEnabled(.files) {
+                return "Filer är inte aktiverad som datakälla."
+            }
+            return "Jag hittar ingen importerad fil-data ännu."
         }
     }
 }
@@ -122,6 +155,24 @@ private extension QuerySourceAccess {
         } else {
             return status == .authorized
         }
+        #else
+        return false
+        #endif
+    }
+
+    func contactsAuthorized() -> Bool {
+        #if canImport(Contacts)
+        let status = CNContactStore.authorizationStatus(for: .contacts)
+        return status == .authorized
+        #else
+        return false
+        #endif
+    }
+
+    func photosAuthorized() -> Bool {
+        #if canImport(PhotoKit)
+        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        return status == .authorized || status == .limited
         #else
         return false
         #endif

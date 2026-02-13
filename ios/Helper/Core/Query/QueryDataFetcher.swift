@@ -9,6 +9,21 @@ struct QueryCollectedData {
     let items: [UnifiedItemDTO]
     let entries: [QueryResult.Entry]
     let missingAccess: [QuerySource]
+    let checkpointSources: [QuerySource]
+
+    init(
+        timeRange: DateInterval,
+        items: [UnifiedItemDTO],
+        entries: [QueryResult.Entry],
+        missingAccess: [QuerySource],
+        checkpointSources: [QuerySource] = []
+    ) {
+        self.timeRange = timeRange
+        self.items = items
+        self.entries = entries
+        self.missingAccess = missingAccess
+        self.checkpointSources = checkpointSources
+    }
 }
 
 protocol QueryDataFetching {
@@ -30,6 +45,11 @@ final class QueryDataFetcher: QueryDataFetching {
 
     private let memoryService: MemoryService
     private let reminderSyncManager: ReminderSyncManager
+    private let contactsCollector: ContactsCollecting
+    private let photosIndexService: PhotosIndexing
+    private let filesImportService: FilesImporting
+    private let sourceConnectionStore: SourceConnectionStoring
+    private let checkpointStore: Etapp2IngestCheckpointStoring
     private let nowProvider: () -> Date
 
     #if canImport(EventKit)
@@ -40,11 +60,27 @@ final class QueryDataFetcher: QueryDataFetching {
     init(
         memoryService: MemoryService,
         reminderSyncManager: ReminderSyncManager = .shared,
+        contactsCollector: ContactsCollecting? = nil,
+        photosIndexService: PhotosIndexing? = nil,
+        filesImportService: FilesImporting? = nil,
+        sourceConnectionStore: SourceConnectionStoring = SourceConnectionStore.shared,
+        checkpointStore: Etapp2IngestCheckpointStoring? = nil,
         nowProvider: @escaping () -> Date = Date.init,
         eventStore: EKEventStore = EKEventStore()
     ) {
         self.memoryService = memoryService
         self.reminderSyncManager = reminderSyncManager
+        self.contactsCollector = contactsCollector ?? ContactsCollectorService(memoryService: memoryService)
+        self.photosIndexService = photosIndexService ?? PhotosIndexService(
+            memoryService: memoryService,
+            sourceConnectionStore: sourceConnectionStore
+        )
+        self.filesImportService = filesImportService ?? FilesImportService(
+            memoryService: memoryService,
+            sourceConnectionStore: sourceConnectionStore
+        )
+        self.sourceConnectionStore = sourceConnectionStore
+        self.checkpointStore = checkpointStore ?? Etapp2IngestCheckpointStore(memoryService: memoryService)
         self.nowProvider = nowProvider
         self.eventStore = eventStore
     }
@@ -52,10 +88,26 @@ final class QueryDataFetcher: QueryDataFetching {
     init(
         memoryService: MemoryService,
         reminderSyncManager: ReminderSyncManager = .shared,
+        contactsCollector: ContactsCollecting? = nil,
+        photosIndexService: PhotosIndexing? = nil,
+        filesImportService: FilesImporting? = nil,
+        sourceConnectionStore: SourceConnectionStoring = SourceConnectionStore.shared,
+        checkpointStore: Etapp2IngestCheckpointStoring? = nil,
         nowProvider: @escaping () -> Date = Date.init
     ) {
         self.memoryService = memoryService
         self.reminderSyncManager = reminderSyncManager
+        self.contactsCollector = contactsCollector ?? ContactsCollectorService(memoryService: memoryService)
+        self.photosIndexService = photosIndexService ?? PhotosIndexService(
+            memoryService: memoryService,
+            sourceConnectionStore: sourceConnectionStore
+        )
+        self.filesImportService = filesImportService ?? FilesImportService(
+            memoryService: memoryService,
+            sourceConnectionStore: sourceConnectionStore
+        )
+        self.sourceConnectionStore = sourceConnectionStore
+        self.checkpointStore = checkpointStore ?? Etapp2IngestCheckpointStore(memoryService: memoryService)
         self.nowProvider = nowProvider
     }
     #endif
@@ -66,6 +118,7 @@ final class QueryDataFetcher: QueryDataFetching {
         var allItems: [UnifiedItemDTO] = []
         var allEntries: [QueryResult.Entry] = []
         var missingAccess: [QuerySource] = []
+        var checkpointSources: [QuerySource] = []
 
         if access.isAllowed(.memory) {
             let result = try fetchMemory(in: range)
@@ -95,11 +148,50 @@ final class QueryDataFetcher: QueryDataFetching {
             missingAccess.append(.reminders)
         }
 
+        if sourceConnectionStore.isEnabled(.contacts) {
+            if access.isAllowed(.contacts) {
+                _ = try contactsCollector.refreshIndex()
+                let checkpoint = try checkpointStore.lastCheckpoint(for: .contacts)
+                let result = try contactsCollector.collectDelta(since: checkpoint)
+                allItems += result.items
+                allEntries += result.entries
+                checkpointSources.append(.contacts)
+            } else {
+                missingAccess.append(.contacts)
+            }
+        }
+
+        if sourceConnectionStore.isEnabled(.photos) {
+            if access.isAllowed(.photos) {
+                _ = try await photosIndexService.indexIncremental()
+                let checkpoint = try checkpointStore.lastCheckpoint(for: .photos)
+                let result = try photosIndexService.collectDelta(since: checkpoint)
+                allItems += result.items
+                allEntries += result.entries
+                checkpointSources.append(.photos)
+            } else {
+                missingAccess.append(.photos)
+            }
+        }
+
+        if sourceConnectionStore.isEnabled(.files) {
+            if access.isAllowed(.files) {
+                let checkpoint = try checkpointStore.lastCheckpoint(for: .files)
+                let result = try filesImportService.collectDelta(since: checkpoint)
+                allItems += result.items
+                allEntries += result.entries
+                checkpointSources.append(.files)
+            } else {
+                missingAccess.append(.files)
+            }
+        }
+
         return QueryCollectedData(
             timeRange: range,
             items: dedup(items: allItems),
             entries: allEntries.sorted(by: Self.sortEntriesDescending),
-            missingAccess: missingAccess
+            missingAccess: missingAccess,
+            checkpointSources: dedupSources(checkpointSources)
         )
     }
 
@@ -168,6 +260,16 @@ final class QueryDataFetcher: QueryDataFetching {
         }
 
         return deduped
+    }
+
+    private func dedupSources(_ sources: [QuerySource]) -> [QuerySource] {
+        var seen: Set<QuerySource> = []
+        var out: [QuerySource] = []
+        for source in sources where !seen.contains(source) {
+            seen.insert(source)
+            out.append(source)
+        }
+        return out
     }
 
     private static func sortEntriesDescending(_ lhs: QueryResult.Entry, _ rhs: QueryResult.Entry) -> Bool {

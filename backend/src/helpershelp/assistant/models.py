@@ -15,6 +15,9 @@ class UnifiedItemType(str, Enum):
     task = "task"
     reminder = "reminder"
     note = "note"
+    contact = "contact"
+    photo = "photo"
+    file = "file"
 
 
 class ProposalType(str, Enum):

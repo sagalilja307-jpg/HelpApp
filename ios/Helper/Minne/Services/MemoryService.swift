@@ -29,7 +29,11 @@ public final class MemoryService {
             SemanticEmbedding.self,
             ActorRaw.self,
             TitleConfidenceRaw.self,
-            UserNote.self
+            UserNote.self,
+            IndexedContact.self,
+            IndexedPhotoAsset.self,
+            IndexedFileDocument.self,
+            Etapp2IngestCheckpoint.self
         ])
 
         let config = ModelConfiguration(isStoredInMemoryOnly: inMemory)

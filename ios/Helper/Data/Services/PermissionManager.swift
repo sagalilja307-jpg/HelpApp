@@ -3,6 +3,12 @@ import EventKit
 import AVFoundation
 import UserNotifications
 import Combine
+#if canImport(Contacts)
+import Contacts
+#endif
+#if canImport(PhotoKit)
+import PhotoKit
+#endif
 
 // MARK: - App Permission Types & Status
 
@@ -11,6 +17,8 @@ enum AppPermissionType {
     case reminder
     case notification
     case camera
+    case contacts
+    case photos
 }
 
 enum AppPermissionStatus {
@@ -43,6 +51,10 @@ final class PermissionManager {
             return mapNotificationStatus(settings.authorizationStatus)
         case .camera:
             return mapCameraStatus(AVCaptureDevice.authorizationStatus(for: .video))
+        case .contacts:
+            return contactsPermissionStatus()
+        case .photos:
+            return photosPermissionStatus()
         }
     }
 
@@ -58,6 +70,10 @@ final class PermissionManager {
             return .notDetermined
         case .camera:
             return mapCameraStatus(AVCaptureDevice.authorizationStatus(for: .video))
+        case .contacts:
+            return contactsPermissionStatus()
+        case .photos:
+            return photosPermissionStatus()
         }
     }
 
@@ -86,6 +102,18 @@ final class PermissionManager {
 
     func requestCameraAccess() async throws {
         _ = await AVCaptureDevice.requestAccess(for: .video)
+    }
+
+    func requestContactsAccess() async throws {
+        #if canImport(Contacts)
+        _ = try await CNContactStore().requestAccess(for: .contacts)
+        #endif
+    }
+
+    func requestPhotosAccess() async throws {
+        #if canImport(PhotoKit)
+        _ = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+        #endif
     }
 
     // MARK: - Private Mapping Helpers
@@ -128,6 +156,56 @@ final class PermissionManager {
             return .denied
         }
     }
+
+    private func contactsPermissionStatus() -> AppPermissionStatus {
+        #if canImport(Contacts)
+        return mapContactsStatus(CNContactStore.authorizationStatus(for: .contacts))
+        #else
+        return .denied
+        #endif
+    }
+
+    private func photosPermissionStatus() -> AppPermissionStatus {
+        #if canImport(PhotoKit)
+        return mapPhotosStatus(PHPhotoLibrary.authorizationStatus(for: .readWrite))
+        #else
+        return .denied
+        #endif
+    }
+
+    #if canImport(Contacts)
+    private func mapContactsStatus(
+        _ status: CNAuthorizationStatus
+    ) -> AppPermissionStatus {
+        switch status {
+        case .notDetermined:
+            return .notDetermined
+        case .authorized, .limited:
+            return .granted
+        case .denied, .restricted:
+            return .denied
+        @unknown default:
+            return .denied
+        }
+    }
+    #endif
+
+    #if canImport(PhotoKit)
+    private func mapPhotosStatus(
+        _ status: PHAuthorizationStatus
+    ) -> AppPermissionStatus {
+        switch status {
+        case .notDetermined:
+            return .notDetermined
+        case .authorized, .limited:
+            return .granted
+        case .denied, .restricted:
+            return .denied
+        @unknown default:
+            return .denied
+        }
+    }
+    #endif
 }
 
 // MARK: - CalendarSyncManager
@@ -193,4 +271,3 @@ public final class CalendarSyncManager: ObservableObject {
         }
     }
 }
-

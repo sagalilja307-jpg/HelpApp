@@ -21,6 +21,9 @@ struct HelperApp: App {
     private let supportSettingsService: SupportSettingsAPIService
     private let notesStoreService: NotesStoreService
     private let shareImportService: ShareImportService
+    private let sourceConnectionStore: SourceConnectionStore
+    private let photosIndexService: PhotosIndexService
+    private let filesImportService: FilesImportService
 
     // Onboarding flag (sparas i UserDefaults)
     @AppStorage("onboardingComplete") private var onboardingComplete = false
@@ -51,9 +54,29 @@ struct HelperApp: App {
             self.suggestionCoordinator = coordinator
 
             // 5️⃣ Skapa QueryPipeline
-            let access = QuerySourceAccess()
+            let sourceConnectionStore = SourceConnectionStore.shared
+            self.sourceConnectionStore = sourceConnectionStore
+
+            let access = QuerySourceAccess(sourceConnectionStore: sourceConnectionStore)
             let interpreter = QueryInterpreter()
-            let fetcher = QueryDataFetcher(memoryService: service)
+            let checkpointStore = Etapp2IngestCheckpointStore(memoryService: service)
+            let contactsCollector = ContactsCollectorService(memoryService: service)
+            let photosIndexService = PhotosIndexService(
+                memoryService: service,
+                sourceConnectionStore: sourceConnectionStore
+            )
+            let filesImportService = FilesImportService(
+                memoryService: service,
+                sourceConnectionStore: sourceConnectionStore
+            )
+            let fetcher = QueryDataFetcher(
+                memoryService: service,
+                contactsCollector: contactsCollector,
+                photosIndexService: photosIndexService,
+                filesImportService: filesImportService,
+                sourceConnectionStore: sourceConnectionStore,
+                checkpointStore: checkpointStore
+            )
             let ingestService = AssistantIngestAPIService.shared
             let backendQueryService = BackendQueryAPIService.shared
 
@@ -62,8 +85,11 @@ struct HelperApp: App {
                 access: access,
                 fetcher: fetcher,
                 ingestService: ingestService,
-                backendQueryService: backendQueryService
+                backendQueryService: backendQueryService,
+                checkpointStore: checkpointStore
             )
+            self.photosIndexService = photosIndexService
+            self.filesImportService = filesImportService
             let supportSettingsService = SupportSettingsAPIService.shared
             self.supportSettingsService = supportSettingsService
             let notesStoreService = NotesStoreService(memoryService: service)
@@ -92,12 +118,22 @@ struct HelperApp: App {
                 if onboardingComplete {
                     // Main app
                     NavigationStack {
-                        ChatView(pipeline: queryPipeline)
+                        ChatView(
+                            pipeline: queryPipeline,
+                            sourceConnectionStore: sourceConnectionStore,
+                            photosIndexService: photosIndexService,
+                            filesImportService: filesImportService
+                        )
                     }
                 } else {
                     // Permission onboarding flow
                     NavigationStack {
-                        PermissionOnboardingView(pipeline: queryPipeline)
+                        PermissionOnboardingView(
+                            pipeline: queryPipeline,
+                            sourceConnectionStore: sourceConnectionStore,
+                            photosIndexService: photosIndexService,
+                            filesImportService: filesImportService
+                        )
                     }
                 }
             }

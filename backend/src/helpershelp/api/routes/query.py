@@ -115,7 +115,16 @@ async def unified_query(request: UnifiedQueryRequest):
 
         for item in retrieved_items[:8]:
             src = str(getattr(item, "source", "") or "raw")
-            if src not in {"email", "calendar", "reminders", "notes", "tasks"}:
+            if src not in {
+                "email",
+                "calendar",
+                "reminders",
+                "notes",
+                "tasks",
+                "contacts",
+                "photos",
+                "files",
+            }:
                 src = "raw"
 
             inferred_type: Optional[str] = None
@@ -129,6 +138,12 @@ async def unified_query(request: UnifiedQueryRequest):
                 inferred_type = "note"
             elif src == "tasks":
                 inferred_type = "task"
+            elif src == "contacts":
+                inferred_type = "contact"
+            elif src == "photos":
+                inferred_type = "photo"
+            elif src == "files":
+                inferred_type = "file"
 
             title = str(getattr(item, "subject", "") or "").strip()
             body = str(getattr(item, "body", "") or "").strip()

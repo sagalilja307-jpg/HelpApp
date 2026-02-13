@@ -6,6 +6,9 @@ enum UnifiedItemTypeDTO: String, Codable, Sendable {
     case task
     case reminder
     case note
+    case contact
+    case photo
+    case file
 }
 
 struct UnifiedItemDTO: Codable, Sendable, Equatable {

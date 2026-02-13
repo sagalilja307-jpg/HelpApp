@@ -24,19 +24,22 @@ struct QueryPipeline {
     let fetcher: QueryDataFetching
     let ingestService: AssistantIngesting
     let backendQueryService: BackendQuerying
+    let checkpointStore: Etapp2IngestCheckpointStoring
 
     init(
         interpreter: QueryInterpreting,
         access: QuerySourceAccessing,
         fetcher: QueryDataFetching,
         ingestService: AssistantIngesting,
-        backendQueryService: BackendQuerying
+        backendQueryService: BackendQuerying,
+        checkpointStore: Etapp2IngestCheckpointStoring = NoOpEtapp2IngestCheckpointStore()
     ) {
         self.interpreter = interpreter
         self.access = access
         self.fetcher = fetcher
         self.ingestService = ingestService
         self.backendQueryService = backendQueryService
+        self.checkpointStore = checkpointStore
     }
 }
 
@@ -49,18 +52,12 @@ extension QueryPipeline {
         let collected = try await fetcher.collect(days: days, access: access)
         let missingPrefix = Self.missingAccessPrefix(for: collected.missingAccess)
 
-        guard !collected.items.isEmpty else {
-            let emptyMessage = "Jag hittar ingen data att svara på ännu."
-            let answer = missingPrefix.isEmpty ? emptyMessage : "\(missingPrefix)\n\n\(emptyMessage)"
-
-            return QueryResult(
-                timeRange: collected.timeRange,
-                entries: collected.entries,
-                answer: answer
-            )
+        if !collected.items.isEmpty {
+            try await ingestService.ingest(items: collected.items)
+            for source in collected.checkpointSources {
+                try? checkpointStore.updateCheckpoint(for: source, at: Date())
+            }
         }
-
-        try await ingestService.ingest(items: collected.items)
         let backendResponse = try await backendQueryService.query(
             text: query.text,
             days: days,
@@ -79,6 +76,10 @@ extension QueryPipeline {
 
         let mappedEntries = mapEvidenceEntries(from: backendResponse.evidenceItems)
         let entries = mappedEntries.isEmpty ? collected.entries : mappedEntries
+
+        if entries.isEmpty, answer.isEmpty {
+            answer = "Jag hittar ingen data att svara på ännu."
+        }
 
         return QueryResult(
             timeRange: backendResponse.timeRange.map {
@@ -111,6 +112,12 @@ extension QueryPipeline {
             return .reminders
         case "notes":
             return .memory
+        case "contacts":
+            return .contacts
+        case "photos":
+            return .photos
+        case "files":
+            return .files
         default:
             return .rawEvents
         }
@@ -124,6 +131,15 @@ extension QueryPipeline {
         }
         if missing.contains(.reminders) {
             messages.append("Obs: Paminnelseatkomst saknas")
+        }
+        if missing.contains(.contacts) {
+            messages.append("Obs: Kontaktatkomst saknas")
+        }
+        if missing.contains(.photos) {
+            messages.append("Obs: Bildatkomst saknas")
+        }
+        if missing.contains(.files) {
+            messages.append("Obs: Ingen importerad fil-data hittades")
         }
 
         return messages.joined(separator: "\n")
