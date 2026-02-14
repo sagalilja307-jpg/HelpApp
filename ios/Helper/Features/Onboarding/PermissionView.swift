@@ -112,9 +112,6 @@ struct PermissionView: View {
 
     // MARK: - Statusuppdatering
     private func refreshStatus() async {
-        // If PermissionManager.status(for:) is async, this await compiles.
-        // If it's sync, consider adding an async overload or adjust here accordingly.
-        // We use Task.yield() to ensure this runs cooperatively on the main actor.
         await Task.yield()
         self.status = await PermissionManager.shared.status(for: type)
     }
