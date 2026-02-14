@@ -1,8 +1,9 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict
 import jwt
 import logging
 
+from helpershelp.assistant.time_utils import utcnow
 from helpershelp.mail.oauth_models import OAuthToken, TokenValidationResponse, TokenRefreshRequest
 
 logger = logging.getLogger(__name__)
@@ -71,8 +72,8 @@ class OAuthService:
                     message="Token missing expiration"
                 )
             
-            exp_datetime = datetime.utcfromtimestamp(exp_timestamp)
-            now = datetime.utcnow()
+            exp_datetime = datetime.fromtimestamp(exp_timestamp, timezone.utc).replace(tzinfo=None)
+            now = utcnow()
             
             if exp_datetime < now:
                 # Token expired

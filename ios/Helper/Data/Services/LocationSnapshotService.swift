@@ -94,7 +94,7 @@ final class LocationSnapshotService: NSObject, LocationSnapshoting {
     
     func captureSnapshot() async throws -> LocationSnapshotResult {
         #if canImport(CoreLocation)
-        let status = CLLocationManager.authorizationStatus()
+        let status = locationManager.authorizationStatus
         guard status == .authorizedWhenInUse || status == .authorizedAlways else {
             // Try fallback
             if let fallback = try lastSnapshot(maxAge: Self.fallbackMaxAge) {

@@ -165,7 +165,7 @@ struct FilesImportService: FilesImporting {
 }
 
 extension FilesImportService {
-    static func mapIndexedFile(_ row: IndexedFileDocument) -> UnifiedItemDTO {
+    nonisolated static func mapIndexedFile(_ row: IndexedFileDocument) -> UnifiedItemDTO {
         UnifiedItemDTO(
             id: row.id,
             source: "files",
@@ -185,7 +185,7 @@ extension FilesImportService {
         )
     }
 
-    static func makeEntry(_ row: IndexedFileDocument) -> QueryResult.Entry {
+    nonisolated static func makeEntry(_ row: IndexedFileDocument) -> QueryResult.Entry {
         QueryResult.Entry(
             id: UUID(),
             source: .files,

@@ -1,17 +1,12 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 from datetime import datetime
 
 
 class OAuthToken(BaseModel):
     """OAuth token contract."""
-    access_token: str
-    refresh_token: Optional[str] = None
-    expires_in: int
-    token_type: str = "Bearer"
-    
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "access_token": "ya29.a0AfH6SMBx...",
                 "refresh_token": "1//0gF...",
@@ -19,6 +14,12 @@ class OAuthToken(BaseModel):
                 "token_type": "Bearer"
             }
         }
+    )
+    
+    access_token: str
+    refresh_token: Optional[str] = None
+    expires_in: int
+    token_type: str = "Bearer"
 
 
 class TokenValidationRequest(BaseModel):
