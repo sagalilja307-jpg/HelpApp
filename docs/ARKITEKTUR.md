@@ -1,534 +1,317 @@
-# Helper System Arkitektur - Hur Delarna Pratar
+# Helper System Arkitektur
 
-## Repo-paths
-- iOS-projekt: `ios/Helper.xcodeproj`
-- Backend: `backend/`
-- Arkitektur-dokument: `docs/ARKITEKTUR.md`
+## Hur delarna pratar med varandra
 
-## Mappstruktur (iOS)
+Repo-paths
+
+* iOS-projekt: `ios/Helper.xcodeproj`
+* Backend: `backend/`
+* Arkitektur-dokument: `docs/ARKITEKTUR.md`
+
+---
+
+# 🗂 Mappstruktur (iOS)
+
 ```
 Helper/
 ├── Architecture/              ← Arkitektur & Koordinering
-│   ├── Coordinators/         (MemoryCoordinator, IndexingCoordinator, QueryDataCoordinator)
-│   └── Pipeline/             (QueryPipeline, QueryDataFetcher, QueryPipelineFactory)
+│   ├── Coordinators/          (MemoryCoordinator, IndexingCoordinator, QueryDataCoordinator, DecisionCoordinator, SafetyCoordinator)
+│   └── Pipeline/              (QueryPipeline, QueryInterpreter, QueryAnswerComposer)
 │
-├── Core/                     ← Business logic & Processing
-│   ├── LLM/                  (LLMClient, LLMIntent, TextEmbedding, LLMAvailability)
-│   ├── Safety/               (SafetyDecisionEngine, SafetyCoordinator, SafetyPolicy)
-│   ├── Decision/             (DecisionEngine, DecisionLogger, DecisionPipeline)
-│   └── Query/                (QueryPipeline, QueryDataFetcher, QuerySourceAccess)
+├── Core/                      ← Business Logic
+│   ├── LLM/                   (LLMClient, LLMIntent, TextEmbedding, LLMAvailability)
+│   ├── Safety/                (SafetyDecisionEngine, SafetyPolicy)
+│   ├── Decision/              (DecisionEngine, DecisionPipeline)
+│   └── Query/                 (QuerySourceAccess, QueryModels)
 │
-├── Services/                 ← Domän-organiserade tjänster
-│   ├── Memory/               (MemoryService, NotesStoreService)
-│   ├── Indexing/             (Stage 2 collectors - Contacts, Photos, Files, Locations, Checkpoint)
-│   ├── Backend/              (API services - AssistantIngest, BackendQuery, SupportSettings)
-│   ├── System/               (PermissionManager)
-│   ├── Sharing/              (ShareImportService, SourceConnectionStore)
-│   ├── FollowUp/             (FollowUpManager, FollowUpEvaluator, FollowUpPolicy)
-│   ├── Reminders/            (ReminderSyncManager)
-│   └── Query/                (Query-specific services)
+├── Services/                  ← Infrastructure & Integration
+│   ├── Memory/                (MemoryService, NotesStoreService)
+│   ├── Indexing/              (ContactsCollectorService, PhotosIndexService, FilesImportService, LocationCollectorService, LocationSnapshotService)
+│   ├── Backend/               (AssistantIngestService, BackendQueryService, SupportSettingsService)
+│   ├── System/                (PermissionManager)
+│   ├── Sharing/               (ShareImportService, SourceConnectionStore)
+│   ├── FollowUp/              (FollowUpManager, FollowUpEvaluator, FollowUpPolicy)
+│   ├── Reminders/             (ReminderSyncManager)
 │
-├── Data/                     ← Models & Utilities
-│   ├── Models/               (FollowUpItem, ReminderItem, CalendarEvent)
-│   ├── Helpers/              (DateFormatterHelper, PhotoOCR, Input helpers)
-│   └── MailManagerUpdated/   (Gmail OAuth & sync)
+├── Data/                      ← Models & Utilities
+│   ├── Models/
+│   ├── Helpers/
+│   └── MailManagerUpdated/
 │
-├── Features/                 ← UI Layer
-│   ├── Chat/                 (ChatView, ChatViewModel)
-│   ├── Settings/             (DataSourcesSheetView, EventEditView)
-│   └── Onboarding/           (PermissionOnboardingView)
+├── Features/                  ← UI Layer
+│   ├── Chat/
+│   ├── Settings/
+│   └── Onboarding/
 │
-├── AppShell/                 ← App entry point
-│   ├── HelperApp.swift       (Main app with DI)
+├── AppShell/
+│   ├── HelperApp.swift
 │   └── AppIntegrationConfig.swift
 │
-├── Shared/                   ← Shared utilities
-│   └── UI/
-│
-├── Minne/                    ← Memory models & legacy code
-│   ├── Models/
-│   ├── SamlaMinnen/
-│   └── Utils/
-│
-└── Resources/                ← Assets & localization
-```
-
-## Överblick
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    iOS APP (Helper)                                  │
-│  App Layer → Coordinators → MemoryService → ModelContext → Services │
-│    ↓                                                                 │
-│  ContentAnalysis → DecisionEngine → QueryPipeline                   │
-└─────────────┬───────────────────────────────────────────────────────┘
-              │
-              │ HTTP/JSON
-              │
-┌─────────────▼───────────────────────────────────────────────────────┐
-│            BACKEND (HelpersHelp)                                     │
-│  LLM ← → MailSource ← → RetrievalCoordinator ← → API                 │
-└─────────────────────────────────────────────────────────────────────┘
+├── Shared/
+├── Minne/                     ← Legacy
+└── Resources/
 ```
 
 ---
 
-## Stabilitetslager (v1)
+# 🧱 ÖVERGRIPANDE ARKITEKTUR
 
-Helper använder ett explicit stabilitetslager där backend är source-of-truth:
-- `assistant.support.level` (`0..3`) styr interventionsgrad.
-- `assistant.support.paused` pausar interventioner utan att ändra nivå.
-- `assistant.support.adaptation_enabled` tillåter adaptation inom vald nivå.
-- Daglig nudgetak per nivå: `0/2/3/5`.
-- Tidskritisk fallback visas med 24h-fönster även vid låg intensitet.
-
-I iOS finns en settings-sheet i `ChatView` (toolbar) som:
-- ändrar stödnivå,
-- pausar/återupptar adaptation,
-- visar lärda mönster och ändringsorsaker,
-- återställer enbart lärda vikter.
-
----
-
-## iOS ARKITEKTUR LAGER
-
-### Coordinator-Driven Architecture
 ```
-App Layer (HelperApp)
-   ↓
-Coordinators (äger context lifecycle)
-   ├─ MemoryCoordinator      (CRUD, notes, search)
-   ├─ IndexingCoordinator    (Contacts, Photos, Files, Locations)
-   ├─ QueryDataCoordinator   (Query data collection)
-   ├─ DecisionLogger         (Audit logging)
-   └─ SafetyCoordinator      (Safety checks)
-   ↓
-MemoryService (creates ModelContext per operation)
-   ↓
-ModelContext (per operation, never stored)
-   ↓
+App Layer (SwiftUI)
+        ↓
+Coordinators (@MainActor)
+        ↓
+MemoryService
+        ↓
+ModelContext (per operation)
+        ↓
 Services (context passed as parameter)
-   ├─ MemoryService
-   ├─ NotesStoreService
-   ├─ ContactsCollectorService
-   ├─ PhotosIndexService
-   ├─ FilesImportService
-   ├─ FilesTextExtractionService
-   ├─ LocationCollectorService
-   ├─ LocationSnapshotService
-   ├─ Etapp2IngestCheckpointStore
-   ├─ FollowUpManager
-   ├─ ReminderSyncManager
-   └─ PermissionManager
 ```
 
-**Arkitekturregler:**
-- ✅ Services tar ALDRIG MemoryService i init
-- ✅ Services sparar ALDRIG ModelContext
-- ✅ Services får context per method call (`in context: ModelContext`)
-- ✅ Coordinators äger context lifecycle
-- ✅ En ModelContext per operation (skapas av coordinator)
+Viktig regel:
+
+> ModelContext skapas per operation och lagras aldrig.
 
 ---
 
-## DEL 1️⃣: INNEHÅLLSANALYS (iOS)
-### ContentAnalysis → DecisionEngine
+# 🏛 Coordinator-Driven Architecture (Swift 6-kompatibel)
 
-```
-Användare skriver något
-        ↓
-[ContentClassifier]
-        ↓
-Bestämmer typ: .sendMessage, .calendar, .reminder, .note, .none
-        ↓
-Skickas till DecisionEngine
-```
+## Roller
 
-**Indata:** Naturlig text från användare
-**Utdata:** IntentType enum (klassificering)
-**Kontakt:** Internt i iOS - ingen backend-anrop ännu
+### App Layer
+
+* Skapar MemoryService
+* Skapar Coordinators
+* Skickar coordinators till views
+* Äger ingen ModelContext
 
 ---
 
-## DEL 2️⃣: BESLUTSSYSTEM (iOS)
-### DecisionEngine → QueryPipeline eller DecisionLogger
+### Coordinators (`@MainActor`)
 
-```
-[Klassificerad innehål]
-        ↓
-[DecisionEngine]
-  - Värderar förslagets relevans
-  - Kontrollerar policies (supportive mode, nudges osv)
-        ↓
-Beslut: "show suggestion" / "suppress" / "schedule" / "none"
-        ↓
-[DecisionLogger Coordinator]
-  - Skapar ModelContext
-  - Loggar beslut i append-only log via MemoryService
-  - Context raderas efter operation
-        ↓
-Om "show" → Skickas till QueryPipeline
-```
+* Äger MemoryService
+* Skapar `ModelContext` per metod
+* Anropar services
+* Låter context dö efter operation
 
-**Indata:** ActionSuggestion (vad systemet vill göra)
-**Utdata:** DecisionAction (What to do)
-**Kontakt:** Internt i iOS, DecisionLogger använder MemoryService
+Exempel:
 
----
+```swift
+@MainActor
+final class MemoryCoordinator {
 
-## DEL 3️⃣: FRÅGEPIPELINE (iOS) ↔ BACKEND
-### iOS QueryPipeline → QueryDataCoordinator → Backend /llm/* endpoints
+    private let memoryService: MemoryService
+    private let notesStore = NotesStoreService()
 
-```
-┌─ iOS APP ──────────────────────────────────┐
-│ [UserQuery]                                │
-│  "Vad är min försäkringstatus?"           │
-│         ↓                                  │
-│ [QueryInterpreter]                        │
-│  Förberedelser för frågans                │
-│         ↓                                  │
-│ POST /llm/interpret-query                 │
-│ {                                         │
-│   "query": "Vad är min försäkringstatus?" │
-│   "language": "sv"                        │
-│ }                                         │
-└─────────┬────────────────────────────────┘
-          │
-          │ HTTP POST
-          │
-┌─────────▼────────────────────────────────────────┐
-│ Backend: API Layer                               │
-│                                                  │
-│ query_service.interpret_query()                  │
-│   ↓                                              │
-│ [LLMService - QueryInterpretationService]        │
-│   - BGE-M3 embedding av query                   │
-│   - Similarity mot INTENT_LABELS                │
-│   - Similarity mot TOPIC_LABELS                 │
-│   - Applicerar INTENT_THRESHOLD (0.75)          │
-│   - Applicerar TOPIC_THRESHOLD (0.7)            │
-│                                                  │
-│ Returnerar:                                      │
-│ {                                               │
-│   "intent": "status",                          │
-│   "topic": "försäkring",                       │
-│   "confidence": 0.82,                          │
-│   "sources": ["email", "memory"]               │
-│ }                                               │
-└─────────┬────────────────────────────────────┘
-          │
-          │ JSON Response
-          │
-┌─────────▼──────────────────────────────────┐
-│ iOS QueryPipeline                          │
-│         ↓                                  │
-│ [QueryDataFetcher]                        │
-│  - Bestämmer vad som behöver hämtas      │
-│  - Kilder: calendar, reminders, memory   │
-│         ↓                                  │
-│ POST /retrieval/fetch                    │ (Framtida)
-│ {                                        │
-│   "intent": "status",                   │
-│   "topic": "försäkring",                │
-│   "sources": ["memory", "email"],       │
-│   "timeRange": {"days": 90}             │
-│ }                                        │
-└─────────┬──────────────────────────────┘
-          │
-          │ HTTP POST
-          │
-┌─────────▼────────────────────────────────────┐
-│ Backend: RetrievalCoordinator                │
-│                                              │
-│ [retrieval_coordinator.run()]                │
-│   ↓                                          │
-│ För varje källa:                            │
-│  - MailSource.fetch() → E-post              │
-│  - MemoryService.fetch() → Sparade minnen  │
-│   ↓                                          │
-│ [RetrievalCoordinator]                      │
-│   - Samlar alla kandidater                 │
-│   - BGE-M3 embedding av varje kandidat    │
-│   - Räknar similarity till query           │
-│   - Sorterar efter relevans                │
-│   - Applicerar max_per_source limits:      │
-│     * email: 6                             │
-│     * memory: 4                            │
-│     * signal: 2                            │
-│   - Total max: 12 items                    │
-│   ↓                                        │
-│ Returnerar topranked ContentObjects       │
-└─────────┬────────────────────────────────┘
-          │
-          │ JSON (ContentObjects)
-          │
-┌─────────▼──────────────────────────────────┐
-│ iOS QueryPipeline                          │
-│         ↓                                  │
-│ [QueryAnswerComposer]                     │
-│  - Tar rankat data                       │
-│  - Formaterar för visning                │
-│  - Sparar i QueryResult                  │
-│         ↓                                  │
-│ POST /llm/formulate-items                │
-│ {                                        │
-│   "items": [                             │
-│     {                                    │
-│       "id": "email_123",                │
-│       "source": "email",                │
-│       "subject": "Försäkring update",   │
-│       "body": "Vi behöver..."           │
-│     }                                    │
-│   ],                                     │
-│   "intent": "SUMMARY",                  │
-│   "language": "sv"                       │
-│ }                                        │
-└─────────┬───────────────────────────────┘
-          │
-          │ HTTP POST
-          │
-┌─────────▼────────────────────────────────────┐
-│ Backend: LLM Layer                           │
-│                                              │
-│ [text_generation_service.formulate()]       │
-│   ↓                                         │
-│ GPT-SWE3:                                   │
-│  - Tar exakt de items som gavs            │
-│  - Formulerar på svenska                  │
-│  - Lägger INTE till ny info               │
-│  - Respekterar intent (SUMMARY, osv)      │
-│  - Skriver naturlig text                  │
-│   ↓                                        │
-│ Returnerar:                                │
-│ {                                         │
-│   "text": "Din försäkringsstatus är...", │
-│   "items_used": 5,                       │
-│   "language": "sv"                       │
-│ }                                         │
-└─────────┬───────────────────────────────┘
-          │
-          │ JSON Response
-          │
-┌─────────▼────────────────────────────────┐
-│ iOS App - Visar resultatet                │
-│ "Din försäkringsstatus är..."            │
-└──────────────────────────────────────────┘
+    init(memoryService: MemoryService) {
+        self.memoryService = memoryService
+    }
+
+    func createNote(title: String, body: String) throws {
+        let context = memoryService.context()
+        try notesStore.createNote(title: title, body: body, in: context)
+    }
+}
 ```
 
 ---
 
-## DEL 4️⃣: MINNESHANTERING (iOS)
-### Coordinator → MemoryService → ModelContext → Services
+### Services
 
-```
-App vill spara något (notes, decisions, indexed data)
-        ↓
-[MemoryCoordinator / IndexingCoordinator]
-  - Skapar fresh ModelContext via memoryService.context()
-        ↓
-[Services]
-  - NotesStoreService.createNote(in: context)
-  - ContactsCollectorService.refreshIndex(in: context)
-  - PhotosIndexService.indexIncremental(in: context)
-  - FilesImportService.importDocuments(in: context)
-  - LocationCollectorService.captureAndIndex(in: context)
-        ↓
-[ModelContext]
-  - context.save() (per operation)
-        ↓
-[MemoryService / SwiftData]
-  - Sparas i lokal ModelContainer
-  - Context raderas efter operation
-```
+* Får `ModelContext` som parameter
+* Sparar aldrig context
+* Sparar aldrig MemoryService
+* Är inte actors
+* Är inte `@MainActor`
 
-**Arkitekturflöde:**
-1. Coordinator tar emot request från App Layer
-2. Coordinator skapar ModelContext via `memoryService.context()`
-3. Coordinator anropar service-metoder med context som parameter
-4. Service utför operation och sparar via `context.save()`
-5. Context raderas automatiskt när operation är klar
-6. Nästa operation får fresh context
+Exempel:
 
-**Indata:** CRUD-requests, indexing-requests
-**Utdata:** Persisterad data i SwiftData
-**Kontakt:** Lokal iOS-only, ingen backend-sync ännu
+```swift
+struct NotesStoreService {
 
----
+    func createNote(
+        title: String,
+        body: String,
+        in context: ModelContext
+    ) throws {
 
-## API ENDPOINTS - KOMPLETT LISTA
-
-### 🧠 LLM Endpoints (Backend)
-
-| Endpoint | Method | Från | Till | Syfte |
-|----------|--------|------|------|-------|
-| `/llm/interpret-query` | POST | QueryInterpreter | QueryInterpretationService | Klassificera intent + topic |
-| `/llm/embed` | POST | QueryDataFetcher | EmbeddingService | Embed en text |
-| `/llm/embed-batch` | POST | RetrievalCoordinator | EmbeddingService | Embed flera texter |
-| `/llm/similarity` | POST | RetrievalCoordinator | EmbeddingService | Räkna similarity mellan två texts |
-| `/llm/similarity-batch` | POST | RetrievalCoordinator | EmbeddingService | Rank många texts mot query |
-| `/llm/formulate-items` | POST | QueryAnswerComposer | TextGenerationService | Omformulera items till naturlig text |
-
-### 📧 Mail Endpoints (Backend)
-
-| Endpoint | Method | Från | Syfte |
-|----------|--------|------|-------|
-| `/mail/unanswered` | GET | RetrievalCoordinator | Hämta obesverade mejl |
-| `/mail/recent` | GET | RetrievalCoordinator | Hämta senaste mejl |
-| `/mail/from-domain` | GET | RetrievalCoordinator | Sök mejl från domän |
-
-### 🔐 Auth Endpoints
-
-| Endpoint | Method | Syfte |
-|----------|--------|-------|
-| `/auth/validate` | POST | Validera token |
-| `/auth/refresh` | POST | Uppdatera token |
-| `/auth/store` | POST | Spara token i backend-store |
-
-### 🛟 Support/learning Endpoints
-
-| Endpoint | Method | Syfte |
-|----------|--------|-------|
-| `/settings/support` | GET | Hämta stödnivå, caps och effektiv policy |
-| `/settings/support` | POST | Uppdatera `support_level`, `paused`, `adaptation_enabled` |
-| `/settings/learning` | GET | Visa lärda mönster + auditorsaker |
-| `/settings/learning/pause` | POST | Pausa/återuppta adaptation |
-| `/settings/learning/reset` | POST | Nollställ lärda vikter (inte stödnivå) |
-
----
-
-## DATA FLOW SAMMANDRAG
-
-### Request → Response Cykel
-
-```
-1. [iOS] Användare frågar något
-   └─→ ContentAnalysis klassificerar
-   
-2. [iOS] DecisionEngine värderar
-   └─→ Bestämmer om QueryPipeline ska köras
-   
-3. [iOS] QueryPipeline.interpret()
-   └─→ POST /llm/interpret-query
-   
-4. [Backend] LLM klassificerar
-   └─→ Returnerar intent + topic
-   
-5. [iOS] QueryDataFetcher bestämmer sources
-   └─→ Hämtar från calendar, reminders, memory, osv
-   
-6. [Backend] RetrievalCoordinator rankar
-   └─→ BGE-M3 embeddings + similarity scoring
-   
-7. [iOS] QueryAnswerComposer prepares items
-   └─→ POST /llm/formulate-items
-   
-8. [Backend] LLM formulerar
-   └─→ GPT-SWE3 omskriver
-   
-9. [iOS] Visar resultat
-   └─→ QueryResult presenteras
-   
-10. [iOS] MemoryService sparar
-    └─→ Append-only decision log
+        let note = UserNote(...)
+        context.insert(note)
+        try context.save()
+    }
+}
 ```
 
 ---
 
-## KRITISKA GRÄNSER
+# 🔐 Arkitekturregler (Swift 6)
 
-### iOS → Backend
-- **LLM-anrop minimal**: Bara när QueryPipeline är aktivt
-- **Offline-först**: iOS fungerar utan backend
-- **Privacy**: All data enkrypterad vid överföring
-
-### Backend → iOS
-- **Stateless**: Backenden är inte ansvarig för context
-- **Rankad data**: Returnerar alltid ranked candidates, ej beslut
-- **Formulation only**: GPT-SWE3 omformulerar aldrig omöjligheter
+✅ Services tar ALDRIG `MemoryService` i init
+✅ Services lagrar ALDRIG `ModelContext`
+✅ Services får `in context: ModelContext` per method call
+✅ Coordinators är `@MainActor`
+✅ Coordinators äger context lifecycle
+✅ En ModelContext per operation
+✅ ModelContext lämnar aldrig isolation-boundary
 
 ---
 
-## EXEMPEL: Fullständig Convo
+# 🧠 Stabilitetslager (v1)
 
-```
-Användare:  "Vad hände med min försäkringsskada?"
+Backend är source-of-truth för support policies.
 
-iOS QueryPipeline:
-  POST /llm/interpret-query
-  {
-    "query": "Vad hände med min försäkringsskada?",
-    "language": "sv"
-  }
-
-Backend:
-  → BGE-M3 embedding
-  → Compare mot: "summary", "status", "question"
-  → Confidence för "status": 0.88 ✓
-  → Topic "försäkring": 0.92 ✓
-  ← {intent: "status", topic: "försäkring", ...}
-
-iOS RetrievalCoordinator:
-  Hämtar:
-  - Email från "försäkring" domain (6 max)
-  - Memory entries om "försäkring" (4 max)
-  
-  POST /llm/similarity-batch
-  {
-    "query": "försäkringsskada",
-    "candidates": [email1, email2, memory1, ...]
-  }
-
-Backend:
-  → BGE-M3 rank alla
-  ← Top 10 ranked items
-
-iOS QueryAnswerComposer:
-  POST /llm/formulate-items
-  {
-    "items": [
-      {email_123: "Försäkringskada ref #1234..."},
-      {memory_45: "Skickade in underlag 2026-01..."},
-      ...
-    ],
-    "intent": "STATUS"
-  }
-
-Backend:
-  → GPT-SWE3 skriver
-  ← "Din försäkringsskada #1234 är nu under granskning..."
+* `assistant.support.level` (0..3)
+* `assistant.support.paused`
+* `assistant.support.adaptation_enabled`
+* Daglig nudging cap: 0 / 2 / 3 / 5
+* 24h fallback-fönster
 
 iOS:
-  Visar resultat + Sparar i DecisionLog
-```
+
+* Visar settings sheet
+* Uppdaterar backend via API
+* Visar lärda mönster
+* Kan återställa vikter
 
 ---
 
-## SÄKERHET & GRÄNSER
+# 🧩 DEL 1 — Innehållsanalys (iOS)
 
-### Vad Backend GÖR(via Coordinators)  
-✅ Fattar alla användarrelaterade beslut  
-✅ Hanterar ModelContext lifecycle (per operation)  
-✅ Koordinerar data-operationer via Coordinators  
+```
+User Input
+    ↓
+ContentClassifier
+    ↓
+IntentType (.note, .calendar, .none ...)
+    ↓
+DecisionEngine
+```
 
-### Vad iOS GÖR INTE
-❌ Embed text (backend gör det)  
-❌ Formulera (GPT-SWE3 gör det)  
-❌ Rank items (BGE-M3 gör det)  
-❌ Dela ModelContext mellan operationer  
-❌ Låta services lagra MemoryService eller ModelContext
-❌ Bestämma vilken data som är viktigast  
-❌ Lägga till ny information  
-❌ Lagra user data (allt lokalt på iOS)  
-❌ Se user history (stateless)  
-❌ Döma lämpliga beslut  
+Ingen backend involverad ännu.
 
-### Vad iOS GÖR
-✅ Klassificera innehål lokalt  
-✅ Värderar förslag mot policies  
-✅ Väljer vilka källor att söka  
-✅ Lagrar all data lokalt  
-✅ Fattar alla användarrelaterade beslut  
+---
 
-### Vad iOS GÖR INTE
-❌ Embed text (backend gör det)  
-❌ Formulera (GPT-SWE3 gör det)  
-❌ Rank items (BGE-M3 gör det)
+# 🧩 DEL 2 — Beslutssystem (iOS)
+
+```
+Intent
+    ↓
+DecisionEngine
+    ↓
+DecisionAction (show / suppress / schedule / none)
+    ↓
+DecisionCoordinator
+    ↓
+MemoryService.appendDecision(in: context)
+```
+
+All loggning är append-only.
+
+---
+
+# 🧩 DEL 3 — QueryPipeline (iOS ↔ Backend)
+
+Flöde:
+
+1. `POST /llm/interpret-query`
+2. Backend klassificerar intent + topic
+3. iOS väljer källor
+4. `POST /llm/similarity-batch`
+5. Backend rankar
+6. `POST /llm/formulate-items`
+7. Backend formulerar
+8. iOS visar svar
+9. iOS loggar beslut
+
+Backend är:
+
+* Stateless
+* Rankar
+* Formulerar
+* Embed:ar
+* Men fattar inga användarbeslut
+
+---
+
+# 🧠 DEL 4 — Minneshantering (iOS Only)
+
+```
+App → Coordinator
+       ↓
+memoryService.context()
+       ↓
+ServiceMethod(in: context)
+       ↓
+context.save()
+       ↓
+Context dör
+```
+
+Ingen context delas.
+Ingen context lagras.
+
+---
+
+# 🔌 API-ENDPOINTS (Backend)
+
+LLM:
+
+* /llm/interpret-query
+* /llm/embed
+* /llm/similarity-batch
+* /llm/formulate-items
+
+Mail:
+
+* /mail/unanswered
+* /mail/recent
+* /mail/from-domain
+
+Support:
+
+* /settings/support
+* /settings/learning
+* /settings/learning/reset
+
+Auth:
+
+* /auth/validate
+* /auth/refresh
+
+---
+
+# 🔒 Säkerhetsgränser
+
+Backend gör:
+
+✅ Embedding
+✅ Ranking
+✅ Formulering
+✅ Retrieval
+
+Backend gör INTE:
+
+❌ Beslutslogik
+❌ Lagra user data
+❌ Se historik
+❌ Fatta policybeslut
+
+iOS gör:
+
+✅ Beslut
+✅ Policy
+✅ Lokal lagring
+✅ Datakällval
+✅ All context-lifecycle
+
+---
+
+# 🎯 Viktigaste Arkitekturprincipen
+
+> Coordinator äger livscykeln.
+> Service gör arbetet.
+> Context lever och dör inom samma funktion.
+
+---
+
+
