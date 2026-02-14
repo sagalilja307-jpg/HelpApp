@@ -7,62 +7,58 @@ import UIKit
 #endif
 
 protocol FilesImporting {
-    func importDocuments(urls: [URL]) async throws -> Int
-    func collectDelta(since: Date?) throws -> (items: [UnifiedItemDTO], entries: [QueryResult.Entry])
-    func hasImportedDocuments() throws -> Bool
+    func importDocuments(
+        urls: [URL],
+        in context: ModelContext
+    ) async throws -> Int
+
+    func collectDelta(
+        since: Date?,
+        in context: ModelContext
+    ) throws -> (items: [UnifiedItemDTO], entries: [QueryResult.Entry])
+
+    func hasImportedDocuments(
+        in context: ModelContext
+    ) throws -> Bool
 }
 
 struct FilesImportService: FilesImporting {
-    private let memoryService: MemoryService?
-    private let modelContext: ModelContext?
+
     private let textExtractionService: FileTextExtractionService
     private let sourceConnectionStore: SourceConnectionStoring
     private let nowProvider: () -> Date
 
     init(
-        memoryService: MemoryService,
         textExtractionService: FileTextExtractionService = FileTextExtractionService(),
         sourceConnectionStore: SourceConnectionStoring = SourceConnectionStore.shared,
         nowProvider: @escaping () -> Date = Date.init
     ) {
-        self.memoryService = memoryService
-        self.modelContext = nil
         self.textExtractionService = textExtractionService
         self.sourceConnectionStore = sourceConnectionStore
         self.nowProvider = nowProvider
     }
 
-    init(
-        context: ModelContext,
-        textExtractionService: FileTextExtractionService = FileTextExtractionService(),
-        sourceConnectionStore: SourceConnectionStoring = SourceConnectionStore.shared,
-        nowProvider: @escaping () -> Date = Date.init
-    ) {
-        self.memoryService = nil
-        self.modelContext = context
-        self.textExtractionService = textExtractionService
-        self.sourceConnectionStore = sourceConnectionStore
-        self.nowProvider = nowProvider
-    }
+    // MARK: - Import
 
-    func importDocuments(urls: [URL]) async throws -> Int {
+    func importDocuments(
+        urls: [URL],
+        in context: ModelContext
+    ) async throws -> Int {
+
         guard !urls.isEmpty else { return 0 }
 
-        let context = context()
         let existing = try context.fetch(FetchDescriptor<IndexedFileDocument>())
-        var existingByHash: [String: IndexedFileDocument] = Dictionary(
-            uniqueKeysWithValues: existing.map { ($0.stableHash, $0) }
-        )
+        var existingByHash: [String: IndexedFileDocument] =
+            Dictionary(uniqueKeysWithValues: existing.map { ($0.stableHash, $0) })
 
         var changed = 0
         let now = nowProvider()
 
         for url in urls {
+
             let didAccess = url.startAccessingSecurityScopedResource()
             defer {
-                if didAccess {
-                    url.stopAccessingSecurityScopedResource()
-                }
+                if didAccess { url.stopAccessingSecurityScopedResource() }
             }
 
             let values = try url.resourceValues(forKeys: [
@@ -71,16 +67,19 @@ struct FilesImportService: FilesImporting {
                 .fileSizeKey,
                 .contentModificationDateKey
             ])
+
             let fileName = values.name ?? url.lastPathComponent
             let uti = values.contentType?.identifier ?? "public.data"
             let size = max(0, values.fileSize ?? 0)
             let modifiedAt = values.contentModificationDate ?? now
+
             let stableHash = Self.stableHash(
                 url: url,
                 fileName: fileName,
                 size: size,
                 modifiedAt: modifiedAt
             )
+
             let rowId = "file:\(stableHash)"
 
             let extracted = await extractBody(
@@ -89,6 +88,7 @@ struct FilesImportService: FilesImporting {
                 fileName: fileName,
                 sizeBytes: size
             )
+
             let bookmark = try? url.bookmarkData(
                 options: [.minimalBookmark],
                 includingResourceValuesForKeys: nil,
@@ -96,15 +96,15 @@ struct FilesImportService: FilesImporting {
             )
 
             if let row = existingByHash[stableHash] {
-                let hasChanged = row.fileName != fileName
-                    || row.bodySnippet != extracted
-                    || row.uti != uti
-                    || row.sizeBytes != size
-                    || row.bookmarkData != bookmark
 
-                if !hasChanged {
-                    continue
-                }
+                let hasChanged =
+                    row.fileName != fileName ||
+                    row.bodySnippet != extracted ||
+                    row.uti != uti ||
+                    row.sizeBytes != size ||
+                    row.bookmarkData != bookmark
+
+                if !hasChanged { continue }
 
                 row.id = rowId
                 row.fileName = fileName
@@ -114,8 +114,11 @@ struct FilesImportService: FilesImporting {
                 row.bookmarkData = bookmark
                 row.source = "files_import"
                 row.updatedAt = now
+
                 changed += 1
+
             } else {
+
                 let row = IndexedFileDocument(
                     id: rowId,
                     stableHash: stableHash,
@@ -128,6 +131,7 @@ struct FilesImportService: FilesImporting {
                     createdAt: now,
                     updatedAt: now
                 )
+
                 context.insert(row)
                 existingByHash[stableHash] = row
                 changed += 1
@@ -142,30 +146,47 @@ struct FilesImportService: FilesImporting {
         return changed
     }
 
-    func collectDelta(since: Date?) throws -> (items: [UnifiedItemDTO], entries: [QueryResult.Entry]) {
-        let context = context()
+    // MARK: - Collect
+
+    func collectDelta(
+        since: Date?,
+        in context: ModelContext
+    ) throws -> (items: [UnifiedItemDTO], entries: [QueryResult.Entry]) {
+
         let descriptor = FetchDescriptor<IndexedFileDocument>(
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
+
         let rows = try context.fetch(descriptor)
+
         let filtered = rows.filter { row in
             guard let since else { return true }
             return row.updatedAt > since
         }
+
         let items = filtered.map(Self.mapIndexedFile)
         let entries = filtered.map(Self.makeEntry)
+
         return (items, entries)
     }
 
-    func hasImportedDocuments() throws -> Bool {
-        let context = context()
+    func hasImportedDocuments(
+        in context: ModelContext
+    ) throws -> Bool {
+
         let rows = try context.fetch(FetchDescriptor<IndexedFileDocument>())
         return !rows.isEmpty
     }
 }
 
+// MARK: - Mapping
+
 extension FilesImportService {
-    nonisolated static func mapIndexedFile(_ row: IndexedFileDocument) -> UnifiedItemDTO {
+
+    nonisolated static func mapIndexedFile(
+        _ row: IndexedFileDocument
+    ) -> UnifiedItemDTO {
+
         UnifiedItemDTO(
             id: row.id,
             source: "files",
@@ -185,7 +206,10 @@ extension FilesImportService {
         )
     }
 
-    nonisolated static func makeEntry(_ row: IndexedFileDocument) -> QueryResult.Entry {
+    nonisolated static func makeEntry(
+        _ row: IndexedFileDocument
+    ) -> QueryResult.Entry {
+
         QueryResult.Entry(
             id: UUID(),
             source: .files,
@@ -195,23 +219,22 @@ extension FilesImportService {
         )
     }
 
-    static func stableHash(url: URL, fileName: String, size: Int, modifiedAt: Date) -> String {
+    static func stableHash(
+        url: URL,
+        fileName: String,
+        size: Int,
+        modifiedAt: Date
+    ) -> String {
+
         let signature = "\(url.path)|\(fileName)|\(size)|\(modifiedAt.timeIntervalSince1970)"
         let digest = SHA256.hash(data: Data(signature.utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 }
 
+// MARK: - Private helpers
+
 private extension FilesImportService {
-    func context() -> ModelContext {
-        if let modelContext {
-            return modelContext
-        }
-        if let memoryService {
-            return memoryService.context()
-        }
-        fatalError("FilesImportService saknar ModelContext och MemoryService.")
-    }
 
     func extractBody(
         from url: URL,
@@ -219,7 +242,9 @@ private extension FilesImportService {
         fileName: String,
         sizeBytes: Int
     ) async -> String {
-        if let text = textExtractionService.extractText(from: url), !text.isEmpty {
+
+        if let text = textExtractionService.extractText(from: url),
+           !text.isEmpty {
             return text
         }
 
@@ -232,11 +257,21 @@ private extension FilesImportService {
         return "Fil: \(fileName)\nTyp: \(uti)\nStorlek: \(sizeBytes) bytes"
     }
 
-    func performImageOCRIfPossible(url: URL, uti: String) async -> String? {
+    func performImageOCRIfPossible(
+        url: URL,
+        uti: String
+    ) async -> String? {
+
         #if canImport(UIKit)
-        guard let type = UTType(uti), type.conforms(to: .image) else { return nil }
-        guard let data = try? Data(contentsOf: url), let image = UIImage(data: data) else { return nil }
-        let text = await PhotoOCR.recognize(from: image).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let type = UTType(uti),
+              type.conforms(to: .image) else { return nil }
+
+        guard let data = try? Data(contentsOf: url),
+              let image = UIImage(data: data) else { return nil }
+
+        let text = await PhotoOCR.recognize(from: image)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
         return text.isEmpty ? nil : text
         #else
         return nil

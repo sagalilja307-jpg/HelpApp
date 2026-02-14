@@ -2,31 +2,16 @@ import Foundation
 import SwiftData
 
 struct NotesStoreService {
-    private let memoryService: MemoryService?
-    private let modelContext: ModelContext?
 
-    init(memoryService: MemoryService) {
-        self.memoryService = memoryService
-        self.modelContext = nil
-    }
+    // MARK: - Create
 
-    init(context: ModelContext) {
-        self.memoryService = nil
-        self.modelContext = context
-    }
+    func createNote(
+        title: String,
+        body: String,
+        source: String = "user",
+        in context: ModelContext
+    ) throws -> UserNote {
 
-    private func context() -> ModelContext {
-        if let modelContext {
-            return modelContext
-        }
-        if let memoryService {
-            return memoryService.context()
-        }
-        fatalError("NotesStoreService saknar ModelContext och MemoryService.")
-    }
-
-    func createNote(title: String, body: String, source: String = "user") throws -> UserNote {
-        let context = context()
         let note = UserNote(
             title: title,
             body: body,
@@ -35,24 +20,30 @@ struct NotesStoreService {
             createdAt: Date(),
             updatedAt: Date()
         )
+
         context.insert(note)
         try context.save()
+
         return note
     }
+
+    // MARK: - Upsert Imported
 
     func upsertImportedNote(
         title: String,
         body: String,
         source: String,
-        externalRef: String
+        externalRef: String,
+        in context: ModelContext
     ) throws -> UserNote {
-        let context = context()
 
-        let descriptor = FetchDescriptor<UserNote>(
+        var descriptor = FetchDescriptor<UserNote>(
             predicate: #Predicate { $0.externalRef == externalRef }
         )
+        descriptor.fetchLimit = 1
 
         let note: UserNote
+
         if let existing = try context.fetch(descriptor).first {
             note = existing
             note.title = title
@@ -76,22 +67,47 @@ struct NotesStoreService {
         return note
     }
 
-    func listNotes() throws -> [UserNote] {
-        let context = context()
-        let descriptor = FetchDescriptor<UserNote>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)])
+    // MARK: - List
+
+    func listNotes(
+        in context: ModelContext
+    ) throws -> [UserNote] {
+
+        let descriptor = FetchDescriptor<UserNote>(
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+
         return try context.fetch(descriptor)
     }
 
-    func deleteNote(id: String) throws {
-        let context = context()
-        let descriptor = FetchDescriptor<UserNote>(predicate: #Predicate { $0.id == id })
-        guard let note = try context.fetch(descriptor).first else { return }
+    // MARK: - Delete
+
+    func deleteNote(
+        id: String,
+        in context: ModelContext
+    ) throws {
+
+        var descriptor = FetchDescriptor<UserNote>(
+            predicate: #Predicate { $0.id == id }
+        )
+        descriptor.fetchLimit = 1
+
+        guard let note = try context.fetch(descriptor).first else {
+            return
+        }
+
         context.delete(note)
         try context.save()
     }
 
-    func exportUnifiedItems(in range: DateInterval?) throws -> [UnifiedItemDTO] {
-        let notes = try listNotes().filter { note in
+    // MARK: - Export
+
+    func exportUnifiedItems(
+        in range: DateInterval?,
+        context: ModelContext
+    ) throws -> [UnifiedItemDTO] {
+
+        let notes = try listNotes(in: context).filter { note in
             guard let range else { return true }
             return range.contains(note.updatedAt)
         }
