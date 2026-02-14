@@ -18,17 +18,17 @@ Helper/
 │   ├── Decision/             (DecisionEngine, DecisionLogger, DecisionPipeline)
 │   └── Query/                (QueryPipeline, QueryDataFetcher, QuerySourceAccess)
 │
-├── Data/                     ← Core Data & Services
-│   ├── Services/             ← Domän-organiserade tjänster
-│   │   ├── Memory/           (MemoryService, NotesStoreService)
-│   │   ├── Indexing/         (Stage 2 collectors - Contacts, Photos, Files, Locations, Checkpoint)
-│   │   ├── Backend/          (API services - AssistantIngest, BackendQuery, SupportSettings)
-│   │   ├── System/           (PermissionManager)
-│   │   ├── Sharing/          (ShareImportService, SourceConnectionStore)
-│   │   ├── FollowUp/         (FollowUpManager, FollowUpEvaluator, FollowUpPolicy)
-│   │   ├── Reminders/        (ReminderSyncManager)
-│   │   ├── Notifications/    (Push notifications)
-│   │   └── Store/            (Checkpoint & coordination)
+├── Services/                 ← Domän-organiserade tjänster
+│   ├── Memory/               (MemoryService, NotesStoreService)
+│   ├── Indexing/             (Stage 2 collectors - Contacts, Photos, Files, Locations, Checkpoint)
+│   ├── Backend/              (API services - AssistantIngest, BackendQuery, SupportSettings)
+│   ├── System/               (PermissionManager)
+│   ├── Sharing/              (ShareImportService, SourceConnectionStore)
+│   ├── FollowUp/             (FollowUpManager, FollowUpEvaluator, FollowUpPolicy)
+│   ├── Reminders/            (ReminderSyncManager)
+│   └── Query/                (Query-specific services)
+│
+├── Data/                     ← Models & Utilities
 │   ├── Models/               (FollowUpItem, ReminderItem, CalendarEvent)
 │   ├── Helpers/              (DateFormatterHelper, PhotoOCR, Input helpers)
 │   └── MailManagerUpdated/   (Gmail OAuth & sync)
@@ -45,10 +45,10 @@ Helper/
 ├── Shared/                   ← Shared utilities
 │   └── UI/
 │
-├── Minne/                    ← Memory models & examples (legacy)
+├── Minne/                    ← Memory models & legacy code
 │   ├── Models/
-│   ├── Services/
-│   └── SamlaMinnen/
+│   ├── SamlaMinnen/
+│   └── Utils/
 │
 └── Resources/                ← Assets & localization
 ```
