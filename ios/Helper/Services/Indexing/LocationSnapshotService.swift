@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 #if canImport(CoreLocation)
-import CoreLocation
+@preconcurrency import CoreLocation
 #endif
 
 // MARK: - Protocol
@@ -288,27 +288,31 @@ final class LocationSnapshotService: NSObject, LocationSnapshoting {
 
 #if canImport(CoreLocation)
 extension LocationSnapshotService: CLLocationManagerDelegate {
-
-    func locationManager(
+    
+    nonisolated func locationManager(
         _ manager: CLLocationManager,
         didUpdateLocations locations: [CLLocation]
     ) {
-        guard let location = locations.last,
-              let continuation = locationContinuation else { return }
-
-        locationContinuation = nil
-        continuation.resume(returning: location)
+        guard let location = locations.last else { return }
+        
+        Task { @MainActor in
+            guard let continuation = locationContinuation else { return }
+            locationContinuation = nil
+            continuation.resume(returning: location)
+        }
     }
-
-    func locationManager(
+    
+    nonisolated func locationManager(
         _ manager: CLLocationManager,
         didFailWithError error: Error
     ) {
-        guard let continuation = locationContinuation else { return }
-        locationContinuation = nil
-        continuation.resume(
-            throwing: LocationError.locationUnavailable
-        )
+        Task { @MainActor in
+            guard let continuation = locationContinuation else { return }
+            locationContinuation = nil
+            continuation.resume(
+                throwing: LocationError.locationUnavailable
+            )
+        }
     }
 }
 #endif

@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 import CryptoKit
 #if canImport(Contacts)
-import Contacts
+@preconcurrency import Contacts
 #endif
 
 protocol ContactsCollecting {

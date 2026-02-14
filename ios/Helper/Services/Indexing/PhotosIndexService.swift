@@ -1,10 +1,10 @@
 import Foundation
 import SwiftData
 #if canImport(PhotoKit)
-import PhotoKit
+@preconcurrency import PhotoKit
 #endif
 #if canImport(UIKit)
-import UIKit
+@preconcurrency import UIKit
 #endif
 
 protocol PhotosIndexing {

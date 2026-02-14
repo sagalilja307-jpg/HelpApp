@@ -7,10 +7,10 @@ import Combine
 import Contacts
 #endif
 #if canImport(PhotoKit)
-import PhotoKit
+@preconcurrency import PhotoKit
 #endif
 #if canImport(CoreLocation)
-import CoreLocation
+@preconcurrency import CoreLocation
 #endif
 
 // MARK: - App Permission Types & Status
@@ -195,8 +195,6 @@ final class PermissionManager {
     private func locationPermissionStatus() -> AppPermissionStatus {
         #if canImport(CoreLocation)
         return mapLocationStatus(locationManager.authorizationStatus)
-        let manager = CLLocationManager()
-        return mapLocationStatus(manager.authorizationStatus)
         #else
         return .denied
         #endif
