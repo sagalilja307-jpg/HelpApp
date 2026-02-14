@@ -1,5 +1,5 @@
 //
-//  SuggestionCoordinator.swift
+//  DecisionCoordinator.swift
 //  Helper
 //
 //  Created by Saga Lilja on 2026-01-27.
@@ -7,7 +7,7 @@
 
 import Foundation
 
-final class SuggestionCoordinator {
+final class DecisionCoordinator {
 
     private let pipeline = ActionSuggestionPipeline()
     private let decisionEngine = DecisionEngine()
