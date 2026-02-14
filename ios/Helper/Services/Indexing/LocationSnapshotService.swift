@@ -7,6 +7,7 @@ import CoreLocation
 // MARK: - Protocol
 
 protocol LocationSnapshoting: Sendable {
+    @MainActor
     func captureSnapshot(
         in context: ModelContext
     ) async throws -> LocationSnapshotResult
@@ -69,6 +70,7 @@ final class LocationSnapshotService: NSObject, LocationSnapshoting {
 
     // MARK: - Public
 
+    @MainActor
     func captureSnapshot(
         in context: ModelContext
     ) async throws -> LocationSnapshotResult {

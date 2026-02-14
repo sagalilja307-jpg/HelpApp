@@ -3,6 +3,7 @@ import SwiftData
 
 protocol LocationCollecting: Sendable {
 
+    @MainActor
     func captureAndIndex(
         in context: ModelContext
     ) async throws -> Int
@@ -40,6 +41,7 @@ struct LocationCollectorService: LocationCollecting {
 
     // MARK: - Convenience Methods
     
+    @MainActor
     func captureCurrentLocation(in context: ModelContext) async throws -> IndexedLocationSnapshot {
         let result = try await snapshotService.captureSnapshot(in: context)
         return result.snapshot
@@ -66,6 +68,7 @@ struct LocationCollectorService: LocationCollecting {
         return try context.fetch(descriptor)
     }
 
+    @MainActor
     func captureAndIndex(
         in context: ModelContext
     ) async throws -> Int {
@@ -147,7 +150,7 @@ struct LocationCollectorService: LocationCollecting {
     
     // MARK: - Private Helpers
     
-    private static func mapToUnifiedItem(_ snapshot: IndexedLocationSnapshot) -> UnifiedItemDTO {
+    nonisolated private static func mapToUnifiedItem(_ snapshot: IndexedLocationSnapshot) -> UnifiedItemDTO {
         UnifiedItemDTO(
             id: snapshot.id,
             source: "location",
@@ -168,7 +171,7 @@ struct LocationCollectorService: LocationCollecting {
         )
     }
     
-    private static func makeEntry(_ snapshot: IndexedLocationSnapshot) -> QueryResult.Entry {
+    nonisolated private static func makeEntry(_ snapshot: IndexedLocationSnapshot) -> QueryResult.Entry {
         QueryResult.Entry(
             id: UUID(),
             source: .location,

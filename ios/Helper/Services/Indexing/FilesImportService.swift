@@ -7,6 +7,7 @@ import UIKit
 #endif
 
 protocol FilesImporting {
+    @MainActor
     func importDocuments(
         urls: [URL],
         in context: ModelContext
@@ -40,6 +41,7 @@ struct FilesImportService: FilesImporting {
 
     // MARK: - Import
 
+    @MainActor
     func importFile(at url: URL, in context: ModelContext) async throws -> IndexedFileDocument {
         _ = try await importDocuments(urls: [url], in: context)
         
@@ -91,6 +93,7 @@ struct FilesImportService: FilesImporting {
         return try context.fetch(descriptor)
     }
 
+    @MainActor
     func importDocuments(
         urls: [URL],
         in context: ModelContext

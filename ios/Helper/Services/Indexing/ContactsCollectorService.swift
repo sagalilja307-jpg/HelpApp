@@ -6,6 +6,7 @@ import Contacts
 #endif
 
 protocol ContactsCollecting {
+    @MainActor
     func refreshIndex(
         in context: ModelContext
     ) throws -> Int
@@ -41,6 +42,7 @@ struct ContactsCollectorService: ContactsCollecting {
 
     // MARK: - Convenience Methods
     
+    @MainActor
     func indexAllContacts(in context: ModelContext) async throws -> Int {
         return try refreshIndex(in: context)
     }
@@ -65,6 +67,7 @@ struct ContactsCollectorService: ContactsCollecting {
         return try context.fetch(descriptor)
     }
 
+    @MainActor
     func refreshIndex(
         in context: ModelContext
     ) throws -> Int {
@@ -240,7 +243,7 @@ struct ContactsCollectorService: ContactsCollecting {
         return parts.isEmpty ? "Kontakt" : parts.joined(separator: " | ")
     }
     
-    private static func mapIndexedContact(_ contact: IndexedContact) -> UnifiedItemDTO {
+    nonisolated private static func mapIndexedContact(_ contact: IndexedContact) -> UnifiedItemDTO {
         UnifiedItemDTO(
             id: contact.id,
             source: "contacts",
@@ -260,7 +263,7 @@ struct ContactsCollectorService: ContactsCollecting {
         )
     }
     
-    private static func makeEntry(_ contact: IndexedContact) -> QueryResult.Entry {
+    nonisolated private static func makeEntry(_ contact: IndexedContact) -> QueryResult.Entry {
         QueryResult.Entry(
             id: UUID(),
             source: .contacts,
