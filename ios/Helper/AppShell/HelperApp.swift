@@ -23,7 +23,7 @@ struct HelperApp: App {
     private let queryDataCoordinator: QueryDataCoordinator
     private let decisionLogger: DecisionLogger
     private let safetyCoordinator: SafetyCoordinator
-    private let suggestionCoordinator: SuggestionCoordinator
+    private let suggestionCoordinator: DecisionCoordinator
     
     // MARK: - Other services
     
@@ -79,7 +79,7 @@ struct HelperApp: App {
             let safetyCoord = SafetyCoordinator(memoryService: service)
             self.safetyCoordinator = safetyCoord
 
-            let coordinator = SuggestionCoordinator(decisionLogger: logger)
+            let coordinator = DecisionCoordinator(decisionLogger: logger)
             self.suggestionCoordinator = coordinator
 
             // 4️⃣ Skapa QueryPipeline (needs refactoring, but keep for now)
