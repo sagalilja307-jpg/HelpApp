@@ -7,10 +7,10 @@ import Combine
 import Contacts
 #endif
 #if canImport(PhotoKit)
-import PhotoKit
+@preconcurrency import PhotoKit
 #endif
 #if canImport(CoreLocation)
-import CoreLocation
+@preconcurrency import CoreLocation
 #endif
 
 // MARK: - App Permission Types & Status

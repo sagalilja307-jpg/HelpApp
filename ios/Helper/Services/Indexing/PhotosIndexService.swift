@@ -4,7 +4,7 @@ import SwiftData
 @preconcurrency import PhotoKit
 #endif
 #if canImport(UIKit)
-import UIKit
+@preconcurrency import UIKit
 #endif
 
 protocol PhotosIndexing {
