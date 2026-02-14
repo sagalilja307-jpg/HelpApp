@@ -130,12 +130,12 @@ struct QuerySourceAccess: QuerySourceAccessing, Sendable {
 // MARK: - Helpers
 
 private extension QuerySourceAccess {
-
+    
     func isAllowed(_ access: MemoryAccess) -> Bool {
         if case .allowed = access { return true }
         return false
     }
-
+    
     func reason(for access: MemoryAccess, fallback: String) -> String {
         switch access {
         case .allowed:
@@ -144,58 +144,68 @@ private extension QuerySourceAccess {
             return reason
         }
     }
-
+    
     func calendarAuthorized() -> Bool {
-        #if canImport(EventKit)
+#if canImport(EventKit)
         let status = EKEventStore.authorizationStatus(for: .event)
         if #available(iOS 17.0, macOS 14.0, *) {
             return status == .fullAccess || status == .writeOnly
         } else {
             return status == .authorized
         }
-        #else
+#else
         return false
-        #endif
+#endif
     }
-
+    
     func remindersAuthorized() -> Bool {
-        #if canImport(EventKit)
+#if canImport(EventKit)
         let status = EKEventStore.authorizationStatus(for: .reminder)
         if #available(iOS 17.0, macOS 14.0, *) {
             return status == .fullAccess || status == .writeOnly
         } else {
             return status == .authorized
         }
-        #else
+#else
         return false
-        #endif
+#endif
     }
-
+    
     func contactsAuthorized() -> Bool {
-        #if canImport(Contacts)
+#if canImport(Contacts)
         let status = CNContactStore.authorizationStatus(for: .contacts)
         return status == .authorized
-        #else
+#else
         return false
-        #endif
+#endif
     }
-
+    
     func photosAuthorized() -> Bool {
-        #if canImport(PhotoKit)
+#if canImport(PhotoKit)
         let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         return status == .authorized || status == .limited
-        #else
+#else
         return false
-        #endif
+#endif
     }
-
+    
     func locationAuthorized() -> Bool {
+    #if canImport(CoreLocation)
+        let status = CLLocationManager().authorizationStatus
+        
+        switch status {
+        case .authorizedAlways, .authorizedWhenInUse:
+            return true
+        default:
+            return false
+        }
+    #else
         #if canImport(CoreLocation)
         let manager = CLLocationManager()
         let status = manager.authorizationStatus
         return status == .authorizedAlways || status == .authorizedWhenInUse
         #else
         return false
-        #endif
+    #endif
     }
 }
