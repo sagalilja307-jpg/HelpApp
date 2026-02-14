@@ -5,7 +5,7 @@ struct ShareImportService {
     private let notesStore: NotesStoreService
     private let defaults: UserDefaults
 
-    init(
+    nonisolated init(
         notesStore: NotesStoreService,
         defaults: UserDefaults? = UserDefaults(suiteName: AppIntegrationConfig.appGroupIdentifier)
     ) {

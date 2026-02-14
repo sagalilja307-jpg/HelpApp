@@ -191,7 +191,8 @@ private extension QuerySourceAccess {
 
     func locationAuthorized() -> Bool {
         #if canImport(CoreLocation)
-        let status = CLLocationManager.authorizationStatus()
+        let manager = CLLocationManager()
+        let status = manager.authorizationStatus
         return status == .authorizedAlways || status == .authorizedWhenInUse
         #else
         return false
