@@ -3,7 +3,7 @@ import SwiftData
 import CryptoKit
 import UniformTypeIdentifiers
 #if canImport(UIKit)
-import UIKit
+@preconcurrency import UIKit
 #endif
 
 protocol FilesImporting {
