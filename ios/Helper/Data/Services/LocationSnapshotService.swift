@@ -51,6 +51,8 @@ final class LocationSnapshotService: NSObject, LocationSnapshoting {
 
     #if canImport(CoreLocation)
     private let locationManager: CLLocationManager
+    @available(iOS, deprecated: 26.0, message: "Use MapKit MKReverseGeocodingRequest")
+    private let geocoder: CLGeocoder
     private var locationContinuation: CheckedContinuation<CLLocation, Error>?
     #endif
 
@@ -114,6 +116,9 @@ final class LocationSnapshotService: NSObject, LocationSnapshoting {
         guard status == .authorizedWhenInUse ||
               status == .authorizedAlways else {
 
+        let status = locationManager.authorizationStatus
+        guard status == .authorizedWhenInUse || status == .authorizedAlways else {
+            // Try fallback
             if let fallback = try lastSnapshot(maxAge: Self.fallbackMaxAge) {
                 return LocationSnapshotResult(snapshot: fallback, fallbackUsed: true)
             }
@@ -231,6 +236,11 @@ private extension LocationSnapshotService {
     func reverseGeocode(location: CLLocation) async -> String? {
         do {
             let placemarks = try await CLGeocoder().reverseGeocodeLocation(location)
+            if #available(iOS 26.0, *) {
+                // TODO: Migrate to MKReverseGeocodingRequest when iOS 26 is released
+            }
+            let placemarks = try await geocoder.reverseGeocodeLocation(location)
+            guard let placemark = placemarks.first else { return nil }
             
             guard let placemark = placemarks.first else {
                 return nil

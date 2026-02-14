@@ -160,7 +160,7 @@ extension ContactsCollectorService {
         )
     }
 
-    static func mapIndexedContact(_ row: IndexedContact) -> UnifiedItemDTO {
+    nonisolated static func mapIndexedContact(_ row: IndexedContact) -> UnifiedItemDTO {
         UnifiedItemDTO(
             id: row.id,
             source: "contacts",
@@ -180,7 +180,7 @@ extension ContactsCollectorService {
         )
     }
 
-    static func makeEntry(_ row: IndexedContact) -> QueryResult.Entry {
+    nonisolated static func makeEntry(_ row: IndexedContact) -> QueryResult.Entry {
         QueryResult.Entry(
             id: UUID(),
             source: .contacts,

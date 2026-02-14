@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime
 import os
 
 from fastapi import APIRouter
 
+from helpershelp.assistant.time_utils import utcnow
 from helpershelp.config import DEFAULT_DB_PATH
 
 router = APIRouter()
@@ -17,7 +17,7 @@ def health_check():
 
 @router.get("/healthz", tags=["system"])
 def health_check_extended():
-    return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+    return {"status": "ok", "timestamp": utcnow().isoformat()}
 
 
 @router.get("/health/details", tags=["system"])
@@ -25,7 +25,7 @@ def health_details():
     db_path = os.getenv("HELPERSHELP_DB_PATH", str(DEFAULT_DB_PATH))
     return {
         "status": "ok",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": utcnow().isoformat(),
         "db_path": db_path,
         "sync_loop_enabled": os.getenv("HELPERSHELP_ENABLE_SYNC_LOOP", "0") == "1",
         "model": {

@@ -93,7 +93,7 @@ struct PhotosIndexService: PhotosIndexing {
 }
 
 extension PhotosIndexService {
-    static func mapIndexedAsset(_ row: IndexedPhotoAsset) -> UnifiedItemDTO {
+    nonisolated static func mapIndexedAsset(_ row: IndexedPhotoAsset) -> UnifiedItemDTO {
         UnifiedItemDTO(
             id: row.id,
             source: "photos",
@@ -113,7 +113,7 @@ extension PhotosIndexService {
         )
     }
 
-    static func makeEntry(_ row: IndexedPhotoAsset) -> QueryResult.Entry {
+    nonisolated static func makeEntry(_ row: IndexedPhotoAsset) -> QueryResult.Entry {
         QueryResult.Entry(
             id: UUID(),
             source: .photos,

@@ -1,6 +1,6 @@
 import unittest
-from datetime import datetime
 
+from helpershelp.assistant.time_utils import utcnow
 from helpershelp.retrieval.content_object import ContentObject, MailSender
 from helpershelp.retrieval.retrieval_coordinator import RetrievalConfig, RetrievalCoordinator
 
@@ -33,7 +33,7 @@ class RetrievalSourceCapsStage2Tests(unittest.TestCase):
                     subject=f"{source}-{item_id}",
                     body="stage2 token",
                     sender=MailSender(address="noreply@example.com", name=None, domain="example.com"),
-                    received_at=datetime.utcnow(),
+                    received_at=utcnow(),
                     thread_id=None,
                     is_replied=False,
                 ),

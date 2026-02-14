@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, status
 
@@ -23,6 +22,7 @@ from helpershelp.api.models import (
     SimilarityBatchRequest,
     SimilarityRequest,
 )
+from helpershelp.assistant.time_utils import utcnow
 from helpershelp.retrieval.content_object import ContentObject, MailSender
 
 logger = logging.getLogger(__name__)
@@ -115,7 +115,7 @@ def formulate_items(request: FormulateItemsRequest):
                 body=item_dict.get("body", "") or "",
                 sender=sender,
                 received_at=parse_optional_datetime(item_dict.get("received_at"))
-                or datetime.utcnow(),
+                or utcnow(),
                 thread_id=item_dict.get("thread_id"),
                 is_replied=item_dict.get("is_replied", False),
             )

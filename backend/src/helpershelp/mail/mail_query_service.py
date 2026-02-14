@@ -1,6 +1,7 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import List, Optional, Dict
 
+from helpershelp.assistant.time_utils import utcnow
 from helpershelp.retrieval.content_object import ContentObject
 from helpershelp.mail.mail_event import mail_event_to_content_object
 
@@ -43,7 +44,7 @@ class MailQueryService:
         # Calculate cutoff if time_range specified
         since = None
         if time_range and "days" in time_range:
-            since = datetime.utcnow() - timedelta(days=time_range["days"])
+            since = utcnow() - timedelta(days=time_range["days"])
         
         results: list[ContentObject] = []
         
@@ -121,7 +122,7 @@ class MailQueryService:
         max_results: int = 50
     ) -> List[ContentObject]:
         """Legacy method – kept for backwards compatibility."""
-        since = datetime.utcnow() - timedelta(days=days)
+        since = utcnow() - timedelta(days=days)
         mails = self.mail_provider.fetch_all()
         results: list[ContentObject] = []
 

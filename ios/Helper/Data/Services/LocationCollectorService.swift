@@ -130,7 +130,7 @@ struct LocationCollectorService: LocationCollecting {
 
 extension LocationCollectorService {
     
-    static func mapToUnifiedItem(_ snapshot: IndexedLocationSnapshot) -> UnifiedItemDTO {
+    nonisolated static func mapToUnifiedItem(_ snapshot: IndexedLocationSnapshot) -> UnifiedItemDTO {
         UnifiedItemDTO(
             id: snapshot.id,
             source: "locations",
@@ -152,7 +152,7 @@ extension LocationCollectorService {
         )
     }
     
-    static func makeEntry(_ snapshot: IndexedLocationSnapshot) -> QueryResult.Entry {
+    nonisolated static func makeEntry(_ snapshot: IndexedLocationSnapshot) -> QueryResult.Entry {
         QueryResult.Entry(
             id: UUID(),
             source: .location,

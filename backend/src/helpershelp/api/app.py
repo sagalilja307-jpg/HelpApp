@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -20,9 +21,18 @@ from helpershelp.assistant.sync import start_sync_loop
 
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    store = get_assistant_store()
+    start_sync_loop(store)
+    yield
+
+
 app = FastAPI(
     title="HelperAPI - Mail Backend",
     description="Privacy-focused mail filtering with GPT-SW3 + BGE-M3",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -31,12 +41,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-def startup_init():
-    store = get_assistant_store()
-    start_sync_loop(store)
 
 
 def _error_response(code: int, message: str):
