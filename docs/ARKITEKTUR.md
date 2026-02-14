@@ -5,6 +5,54 @@
 - Backend: `backend/`
 - Arkitektur-dokument: `docs/ARKITEKTUR.md`
 
+## Mappstruktur (iOS)
+```
+Helper/
+├── Architecture/              ← Arkitektur & Koordinering
+│   ├── Coordinators/         (MemoryCoordinator, IndexingCoordinator, QueryDataCoordinator)
+│   └── Pipeline/             (QueryPipeline, QueryDataFetcher, QueryPipelineFactory)
+│
+├── Core/                     ← Business logic & Processing
+│   ├── LLM/                  (LLMClient, LLMIntent, TextEmbedding, LLMAvailability)
+│   ├── Safety/               (SafetyDecisionEngine, SafetyCoordinator, SafetyPolicy)
+│   ├── Decision/             (DecisionEngine, DecisionLogger, DecisionPipeline)
+│   └── Query/                (QueryPipeline, QueryDataFetcher, QuerySourceAccess)
+│
+├── Data/                     ← Core Data & Services
+│   ├── Services/             ← Domän-organiserade tjänster
+│   │   ├── Memory/           (MemoryService, NotesStoreService)
+│   │   ├── Indexing/         (Stage 2 collectors - Contacts, Photos, Files, Locations, Checkpoint)
+│   │   ├── Backend/          (API services - AssistantIngest, BackendQuery, SupportSettings)
+│   │   ├── System/           (PermissionManager)
+│   │   ├── Sharing/          (ShareImportService, SourceConnectionStore)
+│   │   ├── FollowUp/         (FollowUpManager, FollowUpEvaluator, FollowUpPolicy)
+│   │   ├── Reminders/        (ReminderSyncManager)
+│   │   ├── Notifications/    (Push notifications)
+│   │   └── Store/            (Checkpoint & coordination)
+│   ├── Models/               (FollowUpItem, ReminderItem, CalendarEvent)
+│   ├── Helpers/              (DateFormatterHelper, PhotoOCR, Input helpers)
+│   └── MailManagerUpdated/   (Gmail OAuth & sync)
+│
+├── Features/                 ← UI Layer
+│   ├── Chat/                 (ChatView, ChatViewModel)
+│   ├── Settings/             (DataSourcesSheetView, EventEditView)
+│   └── Onboarding/           (PermissionOnboardingView)
+│
+├── AppShell/                 ← App entry point
+│   ├── HelperApp.swift       (Main app with DI)
+│   └── AppIntegrationConfig.swift
+│
+├── Shared/                   ← Shared utilities
+│   └── UI/
+│
+├── Minne/                    ← Memory models & examples (legacy)
+│   ├── Models/
+│   ├── Services/
+│   └── SamlaMinnen/
+│
+└── Resources/                ← Assets & localization
+```
+
 ## Överblick
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -59,12 +107,18 @@ MemoryService (creates ModelContext per operation)
 ModelContext (per operation, never stored)
    ↓
 Services (context passed as parameter)
+   ├─ MemoryService
    ├─ NotesStoreService
    ├─ ContactsCollectorService
    ├─ PhotosIndexService
    ├─ FilesImportService
+   ├─ FilesTextExtractionService
    ├─ LocationCollectorService
-   └─ LocationSnapshotService
+   ├─ LocationSnapshotService
+   ├─ Etapp2IngestCheckpointStore
+   ├─ FollowUpManager
+   ├─ ReminderSyncManager
+   └─ PermissionManager
 ```
 
 **Arkitekturregler:**
