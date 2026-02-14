@@ -24,11 +24,13 @@ final class IndexingCoordinator {
         self.contactsCollector = ContactsCollectorService()
         self.photosIndexService = PhotosIndexService(sourceConnectionStore: sourceConnectionStore)
         self.filesImportService = FilesImportService(
-            fileTextExtraction: fileTextExtraction,
+            textExtractionService: fileTextExtraction,
             sourceConnectionStore: sourceConnectionStore
         )
         self.locationSnapshotService = LocationSnapshotService()
-        self.locationCollector = LocationCollectorService(locationSnapshot: locationSnapshotService)
+        self.locationCollector = LocationCollectorService(
+            snapshotService: locationSnapshotService
+        )
         self.checkpointStore = Etapp2IngestCheckpointStore()
     }
     

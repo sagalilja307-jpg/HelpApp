@@ -26,6 +26,7 @@ struct QueryPipeline {
     let backendQueryService: BackendQuerying
     let checkpointStore: Etapp2IngestCheckpointStoring
     let sourceConnectionStore: SourceConnectionStoring
+    let memoryService: MemoryService
 
     init(
         interpreter: QueryInterpreting,
@@ -34,7 +35,8 @@ struct QueryPipeline {
         ingestService: AssistantIngesting,
         backendQueryService: BackendQuerying,
         checkpointStore: Etapp2IngestCheckpointStoring = NoOpEtapp2IngestCheckpointStore(),
-        sourceConnectionStore: SourceConnectionStoring = SourceConnectionStore.shared
+        sourceConnectionStore: SourceConnectionStoring = SourceConnectionStore.shared,
+        memoryService: MemoryService
     ) {
         self.interpreter = interpreter
         self.access = access
@@ -43,6 +45,7 @@ struct QueryPipeline {
         self.backendQueryService = backendQueryService
         self.checkpointStore = checkpointStore
         self.sourceConnectionStore = sourceConnectionStore
+        self.memoryService = memoryService
     }
 }
 
@@ -61,8 +64,9 @@ extension QueryPipeline {
 
         if !collected.items.isEmpty {
             try await ingestService.ingest(items: collected.items)
+            let context = memoryService.context()
             for source in collected.checkpointSources {
-                try? checkpointStore.updateCheckpoint(for: source, at: Date())
+                try? checkpointStore.updateCheckpoint(for: source, at: Date(), in: context)
             }
         }
         let backendResponse = try await backendQueryService.query(

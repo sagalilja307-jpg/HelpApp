@@ -54,103 +54,19 @@ final class MemoryCoordinator {
     
     // MARK: - Raw Events
     
-    func saveRawEvent(
-        type: String,
-        payload: String,
-        sourceType: String,
-        sourceIdentifier: String,
-        detectedAt: Date,
-        permission: MemoryService.WritePermission
-    ) throws {
-        let context = memoryService.context()
-        try memoryService.saveRawEvent(
-            type: type,
-            payload: payload,
-            sourceType: sourceType,
-            sourceIdentifier: sourceIdentifier,
-            detectedAt: detectedAt,
-            permission: permission,
-            in: context
-        )
-    }
-    
-    func fetchRecentRawEvents(limit: Int = 100) throws -> [RawEvent] {
-        let context = memoryService.context()
-        return try memoryService.fetchRecentRawEvents(limit: limit, in: context)
-    }
+    // Raw event operations removed - use MemoryService directly if needed
     
     // MARK: - Clusters
     
-    func saveCluster(
-        title: String,
-        description: String?,
-        items: [ClusterItem],
-        createdBy: MemoryService.WritePermission
-    ) throws -> Cluster {
-        let context = memoryService.context()
-        return try memoryService.saveCluster(
-            title: title,
-            description: description,
-            items: items,
-            createdBy: createdBy,
-            in: context
-        )
-    }
-    
-    func fetchAllClusters() throws -> [Cluster] {
-        let context = memoryService.context()
-        return try memoryService.fetchAllClusters(in: context)
-    }
+    // Cluster operations removed - use MemoryService directly if needed
     
     // MARK: - Decision Logs
     
-    func saveDecisionLog(
-        queryText: String,
-        matchedClusterIds: [UUID],
-        matchedNoteIds: [UUID],
-        actionDecision: String,
-        reasoning: String,
-        decidedBy: MemoryService.WritePermission
-    ) throws -> DecisionLogEntry {
-        let context = memoryService.context()
-        return try memoryService.saveDecisionLog(
-            queryText: queryText,
-            matchedClusterIds: matchedClusterIds,
-            matchedNoteIds: matchedNoteIds,
-            actionDecision: actionDecision,
-            reasoning: reasoning,
-            decidedBy: decidedBy,
-            in: context
-        )
-    }
-    
-    func fetchRecentDecisions(limit: Int = 50) throws -> [DecisionLogEntry] {
-        let context = memoryService.context()
-        return try memoryService.fetchRecentDecisions(limit: limit, in: context)
-    }
+    // Decision log operations removed - use DecisionLogger coordinator
     
     // MARK: - Behavior Patterns
     
-    func saveBehaviorPattern(
-        patternDescription: String,
-        observedFrequency: Int,
-        lastObservedAt: Date,
-        recordedBy: MemoryService.WritePermission
-    ) throws -> BehaviorPattern {
-        let context = memoryService.context()
-        return try memoryService.saveBehaviorPattern(
-            patternDescription: patternDescription,
-            observedFrequency: observedFrequency,
-            lastObservedAt: lastObservedAt,
-            recordedBy: recordedBy,
-            in: context
-        )
-    }
-    
-    func fetchAllBehaviorPatterns() throws -> [BehaviorPattern] {
-        let context = memoryService.context()
-        return try memoryService.fetchAllBehaviorPatterns(in: context)
-    }
+    // Behavior pattern operations removed - use MemoryService directly if needed
     
     // MARK: - Semantic Search
     
@@ -158,28 +74,16 @@ final class MemoryCoordinator {
         entityType: String,
         entityID: UUID,
         embeddingVector: [Double],
-        permission: MemoryService.WritePermission
+        permission: Actor
     ) throws {
         let context = memoryService.context()
-        try memoryService.storeEmbedding(
-            entityType: entityType,
-            entityID: entityID,
-            embeddingVector: embeddingVector,
-            permission: permission,
-            in: context
-        )
-    }
-    
-    func semanticSearch(
-        queryVector: [Double],
-        topK: Int = 10,
-        entityType: String? = nil
-    ) throws -> [(entityID: UUID, entityType: String, similarity: Double)] {
-        let context = memoryService.context()
-        return try memoryService.semanticSearch(
-            queryVector: queryVector,
-            topK: topK,
-            entityType: entityType,
+        let floatVector = embeddingVector.map { Float($0) }
+        try memoryService.putEmbedding(
+            actor: permission,
+            embeddingId: entityID.uuidString,
+            sourceType: entityType,
+            sourceId: entityID.uuidString,
+            vector: floatVector,
             in: context
         )
     }

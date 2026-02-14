@@ -29,17 +29,13 @@ struct ContactsCollectorService: ContactsCollecting {
 
     #if canImport(Contacts)
     private let contactStore: CNContactStore
-    #endif
-
-    init(
-        #if canImport(Contacts)
-        contactStore: CNContactStore = CNContactStore()
-        #endif
-    ) {
-        #if canImport(Contacts)
+    
+    init(contactStore: CNContactStore = CNContactStore()) {
         self.contactStore = contactStore
-        #endif
     }
+    #else
+    init() {}
+    #endif
 
     // MARK: - Refresh
 
@@ -166,5 +162,111 @@ struct ContactsCollectorService: ContactsCollecting {
         let entries = filtered.map(Self.makeEntry)
 
         return (items, entries)
+    }
+    
+    // MARK: - Private Helpers
+    
+    #if canImport(Contacts)
+    private func fetchSnapshots() throws -> [ContactSnapshot] {
+        let keys: [CNKeyDescriptor] = [
+            CNContactIdentifierKey as CNKeyDescriptor,
+            CNContactFormatter.descriptorForRequiredKeys(for: .fullName),
+            CNContactOrganizationNameKey as CNKeyDescriptor,
+            CNContactEmailAddressesKey as CNKeyDescriptor,
+            CNContactPhoneNumbersKey as CNKeyDescriptor
+        ]
+        
+        let request = CNContactFetchRequest(keysToFetch: keys)
+        var snapshots: [ContactSnapshot] = []
+        
+        try contactStore.enumerateContacts(with: request) { contact, _ in
+            let fullName = CNContactFormatter.string(from: contact, style: .fullName) ?? ""
+            guard !fullName.isEmpty else { return }
+            
+            let organization = contact.organizationName
+            let emails = contact.emailAddresses.map { $0.value as String }
+            let phones = contact.phoneNumbers.map { $0.value.stringValue }
+            
+            let hash = Self.computeHash(
+                name: fullName,
+                org: organization,
+                emails: emails,
+                phones: phones
+            )
+            
+            snapshots.append(ContactSnapshot(
+                identifier: contact.identifier,
+                fullName: fullName,
+                organization: organization,
+                emails: emails,
+                phones: phones,
+                hash: hash
+            ))
+        }
+        
+        return snapshots
+    }
+    
+    private static func computeHash(
+        name: String,
+        org: String,
+        emails: [String],
+        phones: [String]
+    ) -> String {
+        let combined = "\(name)|\(org)|\(emails.joined(separator: ","))|\(phones.joined(separator: ","))"
+        return String(combined.hashValue)
+    }
+    #endif
+    
+    private static func contactBody(
+        organization: String,
+        emails: [String],
+        phones: [String]
+    ) -> String {
+        var parts: [String] = []
+        
+        if !organization.isEmpty {
+            parts.append("Org: \(organization)")
+        }
+        
+        if !emails.isEmpty {
+            parts.append("E-post: \(emails.joined(separator: ", "))")
+        }
+        
+        if !phones.isEmpty {
+            parts.append("Tel: \(phones.joined(separator: ", "))")
+        }
+        
+        return parts.isEmpty ? "Kontakt" : parts.joined(separator: " | ")
+    }
+    
+    private static func mapIndexedContact(_ contact: IndexedContact) -> UnifiedItemDTO {
+        UnifiedItemDTO(
+            id: contact.id,
+            source: "contacts",
+            type: .contact,
+            title: contact.fullName,
+            body: contact.bodySnippet,
+            createdAt: contact.createdAt,
+            updatedAt: contact.updatedAt,
+            startAt: nil,
+            endAt: nil,
+            dueAt: nil,
+            status: [
+                "organization": AnyCodable(contact.organization),
+                "has_email": AnyCodable(contact.hasEmail),
+                "has_phone": AnyCodable(contact.hasPhone)
+            ]
+        )
+    }
+    
+    private static func makeEntry(_ contact: IndexedContact) -> QueryResult.Entry {
+        QueryResult.Entry(
+            id: UUID(),
+            source: .contacts,
+            title: contact.fullName,
+            body: contact.bodySnippet,
+            date: contact.updatedAt
+        )
     }
 }

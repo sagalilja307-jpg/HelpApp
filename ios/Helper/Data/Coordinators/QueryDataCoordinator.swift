@@ -24,11 +24,11 @@ final class QueryDataCoordinator {
         self.contactsCollector = ContactsCollectorService()
         self.photosIndexService = PhotosIndexService(sourceConnectionStore: sourceConnectionStore)
         self.filesImportService = FilesImportService(
-            fileTextExtraction: fileTextExtraction,
+            textExtractionService: fileTextExtraction,
             sourceConnectionStore: sourceConnectionStore
         )
         self.locationCollector = LocationCollectorService(
-            locationSnapshot: LocationSnapshotService()
+            snapshotService: LocationSnapshotService()
         )
         self.checkpointStore = Etapp2IngestCheckpointStore()
     }

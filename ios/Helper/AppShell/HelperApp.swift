@@ -31,6 +31,9 @@ struct HelperApp: App {
     private let supportSettingsService: SupportSettingsAPIService
     private let shareImportService: ShareImportService
     private let sourceConnectionStore: SourceConnectionStore
+    private let photosIndexService: PhotosIndexService
+    private let filesImportService: FilesImportService
+    private let locationSnapshotService: LocationSnapshotService
 
     // Onboarding flag (sparas i UserDefaults)
     @AppStorage("onboardingComplete") private var onboardingComplete = false
@@ -114,10 +117,15 @@ struct HelperApp: App {
                 ingestService: ingestService,
                 backendQueryService: backendQueryService,
                 checkpointStore: checkpointStore,
-                sourceConnectionStore: sourceConnectionStore
+                sourceConnectionStore: sourceConnectionStore,
+                memoryService: service
             )
             
             // 5️⃣ Other services
+            self.photosIndexService = photosIndexService
+            self.filesImportService = filesImportService
+            self.locationSnapshotService = locationSnapshotService
+            
             let supportSettingsService = SupportSettingsAPIService.shared
             self.supportSettingsService = supportSettingsService
             
@@ -152,7 +160,9 @@ struct HelperApp: App {
                         ChatView(
                             pipeline: queryPipeline,
                             sourceConnectionStore: sourceConnectionStore,
-                            indexingCoordinator: indexingCoordinator
+                            photosIndexService: photosIndexService,
+                            filesImportService: filesImportService,
+                            locationSnapshotService: locationSnapshotService
                         )
                     }
                 } else {
@@ -161,7 +171,9 @@ struct HelperApp: App {
                         PermissionOnboardingView(
                             pipeline: queryPipeline,
                             sourceConnectionStore: sourceConnectionStore,
-                            indexingCoordinator: indexingCoordinator
+                            photosIndexService: photosIndexService,
+                            filesImportService: filesImportService,
+                            locationSnapshotService: locationSnapshotService
                         )
                     }
                 }

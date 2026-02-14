@@ -86,18 +86,17 @@ final class QueryDataFetcher: QueryDataFetching {
     ) {
         self.memoryService = memoryService
         self.reminderSyncManager = reminderSyncManager
-        self.contactsCollector = contactsCollector ?? ContactsCollectorService(memoryService: memoryService)
+        self.contactsCollector = contactsCollector ?? ContactsCollectorService()
         self.photosIndexService = photosIndexService ?? PhotosIndexService(
-            memoryService: memoryService,
             sourceConnectionStore: sourceConnectionStore
         )
         self.filesImportService = filesImportService ?? FilesImportService(
-            memoryService: memoryService,
+            textExtractionService: FileTextExtractionService(),
             sourceConnectionStore: sourceConnectionStore
         )
         self.locationCollector = locationCollector
         self.sourceConnectionStore = sourceConnectionStore
-        self.checkpointStore = checkpointStore ?? Etapp2IngestCheckpointStore(memoryService: memoryService)
+        self.checkpointStore = checkpointStore ?? Etapp2IngestCheckpointStore()
         self.nowProvider = nowProvider
         self.eventStore = eventStore
     }
@@ -115,18 +114,17 @@ final class QueryDataFetcher: QueryDataFetching {
     ) {
         self.memoryService = memoryService
         self.reminderSyncManager = reminderSyncManager
-        self.contactsCollector = contactsCollector ?? ContactsCollectorService(memoryService: memoryService)
+        self.contactsCollector = contactsCollector ?? ContactsCollectorService()
         self.photosIndexService = photosIndexService ?? PhotosIndexService(
-            memoryService: memoryService,
             sourceConnectionStore: sourceConnectionStore
         )
         self.filesImportService = filesImportService ?? FilesImportService(
-            memoryService: memoryService,
+            textExtractionService: FileTextExtractionService(),
             sourceConnectionStore: sourceConnectionStore
         )
         self.locationCollector = locationCollector
         self.sourceConnectionStore = sourceConnectionStore
-        self.checkpointStore = checkpointStore ?? Etapp2IngestCheckpointStore(memoryService: memoryService)
+        self.checkpointStore = checkpointStore ?? Etapp2IngestCheckpointStore()
         self.nowProvider = nowProvider
     }
     #endif
@@ -174,9 +172,10 @@ final class QueryDataFetcher: QueryDataFetching {
 
         if sourceConnectionStore.isEnabled(.contacts) {
             if access.isAllowed(.contacts) {
-                _ = try contactsCollector.refreshIndex()
-                let checkpoint = try checkpointStore.lastCheckpoint(for: .contacts)
-                let result = try contactsCollector.collectDelta(since: checkpoint)
+                let context = memoryService.context()
+                _ = try contactsCollector.refreshIndex(in: context)
+                let checkpoint = try checkpointStore.lastCheckpoint(for: .contacts, in: context)
+                let result = try contactsCollector.collectDelta(since: checkpoint, in: context)
                 allItems += result.items
                 allEntries += result.entries
                 checkpointSources.append(.contacts)
@@ -187,9 +186,10 @@ final class QueryDataFetcher: QueryDataFetching {
 
         if sourceConnectionStore.isEnabled(.photos) {
             if access.isAllowed(.photos) {
-                _ = try await photosIndexService.indexIncremental()
-                let checkpoint = try checkpointStore.lastCheckpoint(for: .photos)
-                let result = try photosIndexService.collectDelta(since: checkpoint)
+                let context = memoryService.context()
+                _ = try await photosIndexService.indexIncremental(in: context)
+                let checkpoint = try checkpointStore.lastCheckpoint(for: .photos, in: context)
+                let result = try photosIndexService.collectDelta(since: checkpoint, in: context)
                 allItems += result.items
                 allEntries += result.entries
                 checkpointSources.append(.photos)
@@ -200,8 +200,9 @@ final class QueryDataFetcher: QueryDataFetching {
 
         if sourceConnectionStore.isEnabled(.files) {
             if access.isAllowed(.files) {
-                let checkpoint = try checkpointStore.lastCheckpoint(for: .files)
-                let result = try filesImportService.collectDelta(since: checkpoint)
+                let context = memoryService.context()
+                let checkpoint = try checkpointStore.lastCheckpoint(for: .files, in: context)
+                let result = try filesImportService.collectDelta(since: checkpoint, in: context)
                 allItems += result.items
                 allEntries += result.entries
                 checkpointSources.append(.files)
@@ -215,15 +216,16 @@ final class QueryDataFetcher: QueryDataFetching {
             if access.isAllowed(.location) {
                 if let locationCollector {
                     do {
-                        _ = try await locationCollector.captureAndIndex()
-                        let checkpoint = try checkpointStore.lastCheckpoint(for: .location)
-                        let result = try locationCollector.collectDelta(since: checkpoint)
+                        let context = memoryService.context()
+                        _ = try await locationCollector.captureAndIndex(in: context)
+                        let checkpoint = try checkpointStore.lastCheckpoint(for: .location, in: context)
+                        let result = try locationCollector.collectDelta(since: checkpoint, in: context)
                         allItems += result.items
                         allEntries += result.entries
                         checkpointSources.append(.location)
                         
                         // Check if fallback was used by looking at last snapshot date
-                        if let lastDate = try? locationCollector.lastSnapshotDate(),
+                        if let lastDate = try? locationCollector.lastSnapshotDate(in: context),
                            nowProvider().timeIntervalSince(lastDate) > 60 {
                             locationFallbackUsed = true
                         }

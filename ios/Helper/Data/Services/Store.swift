@@ -108,7 +108,7 @@ struct SourceCheckpointStore {
         in context: ModelContext
     ) throws -> Date? {
 
-        let descriptor = FetchDescriptor<IngestCheckpoint>(
+        let descriptor = FetchDescriptor<Etapp2IngestCheckpoint>(
             predicate: #Predicate { $0.source == source.rawValue }
         )
 
@@ -121,7 +121,7 @@ struct SourceCheckpointStore {
         in context: ModelContext
     ) throws {
 
-        let descriptor = FetchDescriptor<IngestCheckpoint>(
+        let descriptor = FetchDescriptor<Etapp2IngestCheckpoint>(
             predicate: #Predicate { $0.source == source.rawValue }
         )
 
@@ -129,7 +129,7 @@ struct SourceCheckpointStore {
             existing.lastIngestAt = date
         } else {
             context.insert(
-                IngestCheckpoint(
+                Etapp2IngestCheckpoint(
                     source: source.rawValue,
                     lastIngestAt: date
                 )

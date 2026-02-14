@@ -200,11 +200,6 @@ private extension QuerySourceAccess {
             return false
         }
     #else
-        #if canImport(CoreLocation)
-        let manager = CLLocationManager()
-        let status = manager.authorizationStatus
-        return status == .authorizedAlways || status == .authorizedWhenInUse
-        #else
         return false
     #endif
     }

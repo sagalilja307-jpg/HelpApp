@@ -262,6 +262,26 @@ final class LocationSnapshotService: NSObject, LocationSnapshoting {
 
         return "Nära \(placeLabel) kl \(timeString) (noggrannhet: \(accuracyText))"
     }
+    
+    private func reverseGeocode(location: CLLocation) async -> String? {
+        do {
+            let placemarks = try await geocoder.reverseGeocodeLocation(location)
+            guard let placemark = placemarks.first else { return nil }
+            
+            if let name = placemark.name, !name.isEmpty {
+                return name
+            }
+            if let locality = placemark.locality {
+                return locality
+            }
+            if let area = placemark.administrativeArea {
+                return area
+            }
+            return nil
+        } catch {
+            return nil
+        }
+    }
 }
 
 #if canImport(CoreLocation)

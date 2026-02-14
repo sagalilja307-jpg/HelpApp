@@ -7,17 +7,19 @@
 
 ## Överblick
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    iOS APP (Helper)                          │
-│  ContentAnalysis → DecisionEngine → QueryPipeline → Memory   │
-└─────────────┬───────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                    iOS APP (Helper)                                  │
+│  App Layer → Coordinators → MemoryService → ModelContext → Services │
+│    ↓                                                                 │
+│  ContentAnalysis → DecisionEngine → QueryPipeline                   │
+└─────────────┬───────────────────────────────────────────────────────┘
               │
               │ HTTP/JSON
               │
-┌─────────────▼───────────────────────────────────────────────┐
-│            BACKEND (HelpersHelp)                             │
-│  LLM ← → MailSource ← → RetrievalCoordinator ← → API         │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────▼───────────────────────────────────────────────────────┐
+│            BACKEND (HelpersHelp)                                     │
+│  LLM ← → MailSource ← → RetrievalCoordinator ← → API                 │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -39,8 +41,43 @@ I iOS finns en settings-sheet i `ChatView` (toolbar) som:
 
 ---
 
+## iOS ARKITEKTUR LAGER
+
+### Coordinator-Driven Architecture
+```
+App Layer (HelperApp)
+   ↓
+Coordinators (äger context lifecycle)
+   ├─ MemoryCoordinator      (CRUD, notes, search)
+   ├─ IndexingCoordinator    (Contacts, Photos, Files, Locations)
+   ├─ QueryDataCoordinator   (Query data collection)
+   ├─ DecisionLogger         (Audit logging)
+   └─ SafetyCoordinator      (Safety checks)
+   ↓
+MemoryService (creates ModelContext per operation)
+   ↓
+ModelContext (per operation, never stored)
+   ↓
+Services (context passed as parameter)
+   ├─ NotesStoreService
+   ├─ ContactsCollectorService
+   ├─ PhotosIndexService
+   ├─ FilesImportService
+   ├─ LocationCollectorService
+   └─ LocationSnapshotService
+```
+
+**Arkitekturregler:**
+- ✅ Services tar ALDRIG MemoryService i init
+- ✅ Services sparar ALDRIG ModelContext
+- ✅ Services får context per method call (`in context: ModelContext`)
+- ✅ Coordinators äger context lifecycle
+- ✅ En ModelContext per operation (skapas av coordinator)
+
+---
+
 ## DEL 1️⃣: INNEHÅLLSANALYS (iOS)
-### ContentAnalysis → Rest of system
+### ContentAnalysis → DecisionEngine
 
 ```
 Användare skriver något
@@ -59,7 +96,7 @@ Skickas till DecisionEngine
 ---
 
 ## DEL 2️⃣: BESLUTSSYSTEM (iOS)
-### DecisionEngine → QueryPipeline eller MemoryService
+### DecisionEngine → QueryPipeline eller DecisionLogger
 
 ```
 [Klassificerad innehål]
@@ -67,22 +104,25 @@ Skickas till DecisionEngine
 [DecisionEngine]
   - Värderar förslagets relevans
   - Kontrollerar policies (supportive mode, nudges osv)
-  - Loggar beslut i append-only log
         ↓
 Beslut: "show suggestion" / "suppress" / "schedule" / "none"
         ↓
+[DecisionLogger Coordinator]
+  - Skapar ModelContext
+  - Loggar beslut i append-only log via MemoryService
+  - Context raderas efter operation
+        ↓
 Om "show" → Skickas till QueryPipeline
-Om lagring → Skickas till MemoryService
 ```
 
 **Indata:** ActionSuggestion (vad systemet vill göra)
 **Utdata:** DecisionAction (What to do)
-**Kontakt:** Internt i iOS
+**Kontakt:** Internt i iOS, DecisionLogger använder MemoryService
 
 ---
 
 ## DEL 3️⃣: FRÅGEPIPELINE (iOS) ↔ BACKEND
-### iOS QueryPipeline → Backend /llm/* endpoints
+### iOS QueryPipeline → QueryDataCoordinator → Backend /llm/* endpoints
 
 ```
 ┌─ iOS APP ──────────────────────────────────┐
@@ -222,24 +262,41 @@ Om lagring → Skickas till MemoryService
 
 ---
 
-## DEL 4️⃣: MINNESHANTERING (iOS ↔ Backend)
-### MemoryService (iOS) ← → Backend API
+## DEL 4️⃣: MINNESHANTERING (iOS)
+### Coordinator → MemoryService → ModelContext → Services
 
 ```
-Systemet vill spara något (mail, beslut, pattern)
+App vill spara något (notes, decisions, indexed data)
         ↓
-[MemoryService] (iOS-lokal SwiftData)
-  - putRawEvent() → Lagrar e-post/event
-  - appendDecision() → Append-only logs
-  - upsertBehaviorPattern() → Mönster
-  - proposeCluster() → Grupperar data
+[MemoryCoordinator / IndexingCoordinator]
+  - Skapar fresh ModelContext via memoryService.context()
         ↓
-Sparas lokalt + möjligtvis sync till backend
+[Services]
+  - NotesStoreService.createNote(in: context)
+  - ContactsCollectorService.refreshIndex(in: context)
+  - PhotosIndexService.indexIncremental(in: context)
+  - FilesImportService.importDocuments(in: context)
+  - LocationCollectorService.captureAndIndex(in: context)
+        ↓
+[ModelContext]
+  - context.save() (per operation)
+        ↓
+[MemoryService / SwiftData]
+  - Sparas i lokal ModelContainer
+  - Context raderas efter operation
 ```
 
-**Indata:** ContentObject, Decision, BehaviorPattern
-**Utdata:** Persisterad data
-**Kontakt:** Mestadels lokal, framtida backend-sync
+**Arkitekturflöde:**
+1. Coordinator tar emot request från App Layer
+2. Coordinator skapar ModelContext via `memoryService.context()`
+3. Coordinator anropar service-metoder med context som parameter
+4. Service utför operation och sparar via `context.save()`
+5. Context raderas automatiskt när operation är klar
+6. Nästa operation får fresh context
+
+**Indata:** CRUD-requests, indexing-requests
+**Utdata:** Persisterad data i SwiftData
+**Kontakt:** Lokal iOS-only, ingen backend-sync ännu
 
 ---
 
@@ -393,13 +450,17 @@ iOS:
 
 ## SÄKERHET & GRÄNSER
 
-### Vad Backend GÖR
-✅ Klassificera intent/topic  
-✅ Embed text (BGE-M3)  
-✅ Rank candidates (similarity)  
-✅ Formulera redan-vald data (GPT-SWE3)  
+### Vad Backend GÖR(via Coordinators)  
+✅ Fattar alla användarrelaterade beslut  
+✅ Hanterar ModelContext lifecycle (per operation)  
+✅ Koordinerar data-operationer via Coordinators  
 
-### Vad Backend GÖR INTE
+### Vad iOS GÖR INTE
+❌ Embed text (backend gör det)  
+❌ Formulera (GPT-SWE3 gör det)  
+❌ Rank items (BGE-M3 gör det)  
+❌ Dela ModelContext mellan operationer  
+❌ Låta services lagra MemoryService eller ModelContext
 ❌ Bestämma vilken data som är viktigast  
 ❌ Lägga till ny information  
 ❌ Lagra user data (allt lokalt på iOS)  
