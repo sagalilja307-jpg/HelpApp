@@ -9,10 +9,12 @@ import UIKit
 
 protocol PhotosIndexing {
 
+    @MainActor
     func indexIncremental(
         in context: ModelContext
     ) async throws -> Int
 
+    @MainActor
     func fullScan(
         in context: ModelContext
     ) async throws -> Int
@@ -53,6 +55,7 @@ struct PhotosIndexService: PhotosIndexing {
 
     // MARK: - Public
 
+    @MainActor
     func indexIncremental(
         in context: ModelContext
     ) async throws -> Int {
@@ -75,6 +78,7 @@ struct PhotosIndexService: PhotosIndexing {
         return count
     }
 
+    @MainActor
     func fullScan(
         in context: ModelContext
     ) async throws -> Int {
@@ -95,10 +99,12 @@ struct PhotosIndexService: PhotosIndexing {
     
     // MARK: - Convenience Methods
     
+    @MainActor
     func indexAllPhotos(in context: ModelContext) async throws -> Int {
         return try await fullScan(in: context)
     }
     
+    @MainActor
     func indexRecentPhotos(since date: Date, in context: ModelContext) async throws -> Int {
         return try await indexAssets(
             modifiedAfter: date,
@@ -255,7 +261,7 @@ private extension PhotosIndexService {
         return changed
     }
     
-    static func mapIndexedAsset(_ asset: IndexedPhotoAsset) -> UnifiedItemDTO {
+    nonisolated static func mapIndexedAsset(_ asset: IndexedPhotoAsset) -> UnifiedItemDTO {
         UnifiedItemDTO(
             id: asset.id,
             source: "photos",
@@ -276,7 +282,7 @@ private extension PhotosIndexService {
         )
     }
     
-    static func makeEntry(_ asset: IndexedPhotoAsset) -> QueryResult.Entry {
+    nonisolated static func makeEntry(_ asset: IndexedPhotoAsset) -> QueryResult.Entry {
         QueryResult.Entry(
             id: UUID(),
             source: .photos,
