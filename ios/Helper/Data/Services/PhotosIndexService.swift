@@ -71,6 +71,10 @@ struct PhotosIndexService: PhotosIndexing {
         return count
     }
 
+    /// Main-actor isolated because mapping helpers (`mapIndexedAsset`, `makeEntry`) are main-actor isolated
+    /// and SwiftData fetches often expect usage on the main actor. This avoids warnings about calling
+    /// main actor methods from a nonisolated context.
+    @MainActor
     func collectDelta(since: Date?) throws -> (items: [UnifiedItemDTO], entries: [QueryResult.Entry]) {
         let context = context()
         let descriptor = FetchDescriptor<IndexedPhotoAsset>(
@@ -328,3 +332,4 @@ private extension PhotosIndexService {
     #endif
     #endif
 }
+
