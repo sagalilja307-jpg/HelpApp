@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 #if canImport(PhotoKit)
-import PhotoKit
+@preconcurrency import PhotoKit
 #endif
 #if canImport(UIKit)
 import UIKit
