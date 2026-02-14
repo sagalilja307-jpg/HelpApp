@@ -190,9 +190,11 @@ final class PermissionManager {
         #endif
     }
 
+    private let locationManager = CLLocationManager()
+
     private func locationPermissionStatus() -> AppPermissionStatus {
         #if canImport(CoreLocation)
-        return mapLocationStatus(CLLocationManager.authorizationStatus())
+        return mapLocationStatus(locationManager.authorizationStatus)
         #else
         return .denied
         #endif
