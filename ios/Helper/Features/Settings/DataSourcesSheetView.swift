@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import UniformTypeIdentifiers
 
 struct DataSourcesSheetView: View {
@@ -8,6 +9,7 @@ struct DataSourcesSheetView: View {
     private let locationSnapshotService: LocationSnapshotService?
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
 
     @State private var contactsEnabled: Bool
     @State private var photosEnabled: Bool
@@ -254,9 +256,9 @@ private extension DataSourcesSheetView {
         do {
             let count: Int
             if fullScan {
-                count = try await photosIndexService.fullScan()
+                count = try await photosIndexService.fullScan(in: modelContext)
             } else {
-                count = try await photosIndexService.indexIncremental()
+                count = try await photosIndexService.indexIncremental(in: modelContext)
             }
             message = "Bildindexering klar: \(count) objekt uppdaterade."
         } catch {
@@ -274,7 +276,7 @@ private extension DataSourcesSheetView {
             defer { isWorking = false }
 
             do {
-                let count = try await filesImportService.importDocuments(urls: urls)
+                let count = try await filesImportService.importDocuments(urls: urls, in: modelContext)
                 hasImportedFiles = hasImportedFiles || count > 0
                 sourceConnectionStore.setHasImportedFiles(hasImportedFiles)
                 message = "Filimport klar: \(count) dokument uppdaterade."
@@ -286,7 +288,7 @@ private extension DataSourcesSheetView {
 
     func refreshImportedFilesState() async {
         do {
-            let imported = try filesImportService.hasImportedDocuments()
+            let imported = try filesImportService.hasImportedDocuments(in: modelContext)
             hasImportedFiles = imported || sourceConnectionStore.hasImportedFiles()
             sourceConnectionStore.setHasImportedFiles(hasImportedFiles)
         } catch {
@@ -327,7 +329,7 @@ private extension DataSourcesSheetView {
         defer { isWorking = false }
 
         do {
-            let result = try await service.captureSnapshot()
+            let result = try await service.captureSnapshot(in: modelContext)
             lastLocationUpdate = result.snapshot.observedAt
             if result.fallbackUsed {
                 message = "Plats uppdaterad (använder tidigare uppmätt position)."

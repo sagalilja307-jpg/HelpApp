@@ -239,11 +239,12 @@ public struct ChatView: View {
     }
 
     private func createNote() {
-        let service = NotesStoreService(context: modelContext)
+        let service = NotesStoreService()
         do {
             _ = try service.createNote(
                 title: noteTitle.trimmingCharacters(in: .whitespacesAndNewlines),
-                body: noteBody.trimmingCharacters(in: .whitespacesAndNewlines)
+                body: noteBody.trimmingCharacters(in: .whitespacesAndNewlines),
+                in: modelContext
             )
         } catch {
             vm.error = "Kunde inte spara anteckning: \(error.localizedDescription)"
