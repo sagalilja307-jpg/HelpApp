@@ -1,13 +1,17 @@
 import Foundation
 import SwiftData
 
+@MainActor
 public final class SafetyCoordinator {
+    
+    private let memoryService: MemoryService
+    
+    public init(memoryService: MemoryService) {
+        self.memoryService = memoryService
+    }
 
-    public static func handle(
-        userInput: String,
-        memoryService: MemoryService,
-        context: ModelContext
-    ) throws -> SafetyDecision {
+    public func handle(userInput: String) throws -> SafetyDecision {
+        let context = memoryService.context()
 
         let decision = SafetyDecisionEngine.decide(userInput: userInput)
 

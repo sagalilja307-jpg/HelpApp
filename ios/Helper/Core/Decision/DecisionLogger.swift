@@ -11,17 +11,14 @@ import SwiftData
 
 /// Thin adapter between decision-making and persistent audit logging.
 /// Owns NO business logic and NEVER affects user experience.
+/// Coordinates context lifecycle - creates fresh context per operation.
+@MainActor
 final class DecisionLogger {
 
     private let memoryService: MemoryService
-    private let context: ModelContext
 
-    init(
-        memoryService: MemoryService,
-        context: ModelContext
-    ) {
+    init(memoryService: MemoryService) {
         self.memoryService = memoryService
-        self.context = context
     }
 
     /// Logs a system decision in an append-only, audit-safe way.
@@ -39,6 +36,7 @@ final class DecisionLogger {
         )
 
         do {
+            let context = memoryService.context()
             try memoryService.appendDecision(
                 actor: .system,
                 decisionId: UUID().uuidString,

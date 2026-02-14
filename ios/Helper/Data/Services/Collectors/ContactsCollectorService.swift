@@ -43,6 +43,32 @@ struct ContactsCollectorService: ContactsCollecting {
 
     // MARK: - Refresh
 
+    // MARK: - Convenience Methods
+    
+    func indexAllContacts(in context: ModelContext) async throws -> Int {
+        return try refreshIndex(in: context)
+    }
+    
+    func fetchIndexedContact(identifier: String, in context: ModelContext) throws -> IndexedContact? {
+        let descriptor = FetchDescriptor<IndexedContact>(
+            predicate: #Predicate { $0.contactIdentifier == identifier }
+        )
+        return try context.fetch(descriptor).first
+    }
+    
+    func searchContactsByName(_ searchText: String, in context: ModelContext) throws -> [IndexedContact] {
+        let lowercased = searchText.lowercased()
+        let descriptor = FetchDescriptor<IndexedContact>(
+            predicate: #Predicate { contact in
+                contact.fullName.localizedStandardContains(lowercased) ||
+                contact.organization.localizedStandardContains(lowercased) ||
+                contact.bodySnippet.localizedStandardContains(lowercased)
+            },
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        return try context.fetch(descriptor)
+    }
+
     func refreshIndex(
         in context: ModelContext
     ) throws -> Int {

@@ -15,16 +15,22 @@ struct HelperApp: App {
 
     private let memoryService: MemoryService
     private let modelContext: ModelContext
+    
+    // MARK: - Coordinators
+    
+    private let memoryCoordinator: MemoryCoordinator
+    private let indexingCoordinator: IndexingCoordinator
+    private let queryDataCoordinator: QueryDataCoordinator
     private let decisionLogger: DecisionLogger
+    private let safetyCoordinator: SafetyCoordinator
     private let suggestionCoordinator: SuggestionCoordinator
+    
+    // MARK: - Other services
+    
     private let queryPipeline: QueryPipeline
     private let supportSettingsService: SupportSettingsAPIService
-    private let notesStoreService: NotesStoreService
     private let shareImportService: ShareImportService
     private let sourceConnectionStore: SourceConnectionStore
-    private let photosIndexService: PhotosIndexService
-    private let filesImportService: FilesImportService
-    private let locationSnapshotService: LocationSnapshotService
 
     // Onboarding flag (sparas i UserDefaults)
     @AppStorage("onboardingComplete") private var onboardingComplete = false
@@ -33,46 +39,60 @@ struct HelperApp: App {
 
     init() {
         do {
-            // 1️⃣ Initiera MemoryService
+            // 1️⃣ Initiera MemoryService (root dependency)
             let service = try MemoryService()
             self.memoryService = service
 
-            // 2️⃣ Skapa ModelContext
+            // 2️⃣ Skapa ModelContext för SwiftUI environment
             let context = service.context()
             self.modelContext = context
-
-            // 3️⃣ Skapa DecisionLogger
-            let logger = DecisionLogger(
-                memoryService: service,
-                context: context
-            )
-            self.decisionLogger = logger
-
-            // 4️⃣ Skapa SuggestionCoordinator
-            let coordinator = SuggestionCoordinator(
-                decisionLogger: logger
-            )
-            self.suggestionCoordinator = coordinator
-
-            // 5️⃣ Skapa QueryPipeline
+            
+            // 3️⃣ Skapa Coordinators
+            let memCoord = MemoryCoordinator(memoryService: service)
+            self.memoryCoordinator = memCoord
+            
             let sourceConnectionStore = SourceConnectionStore.shared
             self.sourceConnectionStore = sourceConnectionStore
+            
+            let fileTextExtraction = FileTextExtractionService()
+            
+            let indexCoord = IndexingCoordinator(
+                memoryService: service,
+                sourceConnectionStore: sourceConnectionStore,
+                fileTextExtraction: fileTextExtraction
+            )
+            self.indexingCoordinator = indexCoord
+            
+            let queryDataCoord = QueryDataCoordinator(
+                memoryService: service,
+                sourceConnectionStore: sourceConnectionStore,
+                fileTextExtraction: fileTextExtraction
+            )
+            self.queryDataCoordinator = queryDataCoord
+            
+            let logger = DecisionLogger(memoryService: service)
+            self.decisionLogger = logger
+            
+            let safetyCoord = SafetyCoordinator(memoryService: service)
+            self.safetyCoordinator = safetyCoord
 
+            let coordinator = SuggestionCoordinator(decisionLogger: logger)
+            self.suggestionCoordinator = coordinator
+
+            // 4️⃣ Skapa QueryPipeline (needs refactoring, but keep for now)
             let access = QuerySourceAccess(sourceConnectionStore: sourceConnectionStore)
             let interpreter = QueryInterpreter()
-            let checkpointStore = Etapp2IngestCheckpointStore(memoryService: service)
-            let contactsCollector = ContactsCollectorService(memoryService: service)
+            let checkpointStore = Etapp2IngestCheckpointStore()
+            let contactsCollector = ContactsCollectorService()
             let photosIndexService = PhotosIndexService(
-                memoryService: service,
                 sourceConnectionStore: sourceConnectionStore
             )
             let filesImportService = FilesImportService(
-                memoryService: service,
+                textExtractionService: fileTextExtraction,
                 sourceConnectionStore: sourceConnectionStore
             )
-            let locationSnapshotService = LocationSnapshotService(memoryService: service)
+            let locationSnapshotService = LocationSnapshotService()
             let locationCollector = LocationCollectorService(
-                memoryService: service,
                 snapshotService: locationSnapshotService
             )
             let fetcher = QueryDataFetcher(
@@ -96,14 +116,16 @@ struct HelperApp: App {
                 checkpointStore: checkpointStore,
                 sourceConnectionStore: sourceConnectionStore
             )
-            self.photosIndexService = photosIndexService
-            self.filesImportService = filesImportService
-            self.locationSnapshotService = locationSnapshotService
+            
+            // 5️⃣ Other services
             let supportSettingsService = SupportSettingsAPIService.shared
             self.supportSettingsService = supportSettingsService
-            let notesStoreService = NotesStoreService(memoryService: service)
-            self.notesStoreService = notesStoreService
-            let shareImportService = ShareImportService(notesStore: notesStoreService)
+            
+            let notesStoreService = NotesStoreService()
+            let shareImportService = ShareImportService(
+                memoryService: service,
+                notesStore: notesStoreService
+            )
             self.shareImportService = shareImportService
 
             let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
@@ -130,9 +152,7 @@ struct HelperApp: App {
                         ChatView(
                             pipeline: queryPipeline,
                             sourceConnectionStore: sourceConnectionStore,
-                            photosIndexService: photosIndexService,
-                            filesImportService: filesImportService,
-                            locationSnapshotService: locationSnapshotService
+                            indexingCoordinator: indexingCoordinator
                         )
                     }
                 } else {
@@ -141,9 +161,7 @@ struct HelperApp: App {
                         PermissionOnboardingView(
                             pipeline: queryPipeline,
                             sourceConnectionStore: sourceConnectionStore,
-                            photosIndexService: photosIndexService,
-                            filesImportService: filesImportService,
-                            locationSnapshotService: locationSnapshotService
+                            indexingCoordinator: indexingCoordinator
                         )
                     }
                 }

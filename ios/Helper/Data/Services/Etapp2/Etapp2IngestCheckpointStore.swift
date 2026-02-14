@@ -2,33 +2,22 @@ import Foundation
 import SwiftData
 
 protocol Etapp2IngestCheckpointStoring: Sendable {
-    func lastCheckpoint(for source: QuerySource) throws -> Date?
-    func updateCheckpoint(for source: QuerySource, at date: Date) throws
+    func lastCheckpoint(for source: QuerySource, in context: ModelContext) throws -> Date?
+    func updateCheckpoint(for source: QuerySource, at date: Date, in context: ModelContext) throws
 }
 
 struct NoOpEtapp2IngestCheckpointStore: Etapp2IngestCheckpointStoring {
-    func lastCheckpoint(for source: QuerySource) throws -> Date? { nil }
-    func updateCheckpoint(for source: QuerySource, at date: Date) throws {}
+    func lastCheckpoint(for source: QuerySource, in context: ModelContext) throws -> Date? { nil }
+    func updateCheckpoint(for source: QuerySource, at date: Date, in context: ModelContext) throws {}
 }
 
 struct Etapp2IngestCheckpointStore: Etapp2IngestCheckpointStoring {
-    private let memoryService: MemoryService?
-    private let modelContext: ModelContext?
 
-    init(memoryService: MemoryService) {
-        self.memoryService = memoryService
-        self.modelContext = nil
-    }
+    init() {}
 
-    init(context: ModelContext) {
-        self.memoryService = nil
-        self.modelContext = context
-    }
-
-    func lastCheckpoint(for source: QuerySource) throws -> Date? {
+    func lastCheckpoint(for source: QuerySource, in context: ModelContext) throws -> Date? {
         guard source.isStage2Source else { return nil }
 
-        let context = context()
         let key = source.rawValue
         let descriptor = FetchDescriptor<Etapp2IngestCheckpoint>(
             predicate: #Predicate { $0.source == key }
@@ -36,10 +25,9 @@ struct Etapp2IngestCheckpointStore: Etapp2IngestCheckpointStoring {
         return try context.fetch(descriptor).first?.lastIngestAt
     }
 
-    func updateCheckpoint(for source: QuerySource, at date: Date) throws {
+    func updateCheckpoint(for source: QuerySource, at date: Date, in context: ModelContext) throws {
         guard source.isStage2Source else { return }
 
-        let context = context()
         let key = source.rawValue
         let descriptor = FetchDescriptor<Etapp2IngestCheckpoint>(
             predicate: #Predicate { $0.source == key }
@@ -53,15 +41,35 @@ struct Etapp2IngestCheckpointStore: Etapp2IngestCheckpointStoring {
 
         try context.save()
     }
-
-    private func context() -> ModelContext {
-        if let modelContext {
-            return modelContext
+    
+    // MARK: - String-based convenience methods
+    
+    func getLastIngestTimestamp(source: String, in context: ModelContext) throws -> Date? {
+        let descriptor = FetchDescriptor<Etapp2IngestCheckpoint>(
+            predicate: #Predicate { $0.source == source }
+        )
+        return try context.fetch(descriptor).first?.lastIngestAt
+    }
+    
+    func updateIngestCheckpoint(source: String, timestamp: Date, in context: ModelContext) throws {
+        let descriptor = FetchDescriptor<Etapp2IngestCheckpoint>(
+            predicate: #Predicate { $0.source == source }
+        )
+        
+        if let existing = try context.fetch(descriptor).first {
+            existing.lastIngestAt = timestamp
+        } else {
+            context.insert(Etapp2IngestCheckpoint(source: source, lastIngestAt: timestamp))
         }
-        if let memoryService {
-            return memoryService.context()
-        }
-        fatalError("Etapp2IngestCheckpointStore saknar ModelContext och MemoryService.")
+        
+        try context.save()
+    }
+    
+    func getAllCheckpoints(in context: ModelContext) throws -> [Etapp2IngestCheckpoint] {
+        let descriptor = FetchDescriptor<Etapp2IngestCheckpoint>(
+            sortBy: [SortDescriptor(\.lastIngestAt, order: .reverse)]
+        )
+        return try context.fetch(descriptor)
     }
 }
 

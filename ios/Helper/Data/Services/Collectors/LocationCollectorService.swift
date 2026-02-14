@@ -38,6 +38,34 @@ struct LocationCollectorService: LocationCollecting {
 
     // MARK: - Capture
 
+    // MARK: - Convenience Methods
+    
+    func captureCurrentLocation(in context: ModelContext) async throws -> IndexedLocationSnapshot {
+        let result = try await snapshotService.captureSnapshot(in: context)
+        return result.snapshot
+    }
+    
+    func fetchRecentLocations(limit: Int = 50, in context: ModelContext) throws -> [IndexedLocationSnapshot] {
+        var descriptor = FetchDescriptor<IndexedLocationSnapshot>(
+            sortBy: [SortDescriptor(\.observedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = limit
+        return try context.fetch(descriptor)
+    }
+    
+    func searchLocationsByName(_ searchText: String, in context: ModelContext) throws -> [IndexedLocationSnapshot] {
+        let lowercased = searchText.lowercased()
+        let descriptor = FetchDescriptor<IndexedLocationSnapshot>(
+            predicate: #Predicate { location in
+                location.placeLabel.localizedStandardContains(lowercased) ||
+                location.title.localizedStandardContains(lowercased) ||
+                location.bodySnippet.localizedStandardContains(lowercased)
+            },
+            sortBy: [SortDescriptor(\.observedAt, order: .reverse)]
+        )
+        return try context.fetch(descriptor)
+    }
+
     func captureAndIndex(
         in context: ModelContext
     ) async throws -> Int {

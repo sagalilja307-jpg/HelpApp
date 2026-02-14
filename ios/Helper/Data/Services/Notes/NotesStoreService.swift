@@ -83,6 +83,14 @@ struct NotesStoreService {
     // MARK: - Delete
 
     func deleteNote(
+        _ note: UserNote,
+        in context: ModelContext
+    ) throws {
+        context.delete(note)
+        try context.save()
+    }
+
+    func deleteNote(
         id: String,
         in context: ModelContext
     ) throws {
@@ -98,6 +106,23 @@ struct NotesStoreService {
 
         context.delete(note)
         try context.save()
+    }
+    
+    // MARK: - Search
+    
+    func searchNotesByKeyword(
+        _ keyword: String,
+        in context: ModelContext
+    ) throws -> [UserNote] {
+        let lowercased = keyword.lowercased()
+        let descriptor = FetchDescriptor<UserNote>(
+            predicate: #Predicate { note in
+                note.title.localizedStandardContains(lowercased) ||
+                note.body.localizedStandardContains(lowercased)
+            },
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        return try context.fetch(descriptor)
     }
 
     // MARK: - Export

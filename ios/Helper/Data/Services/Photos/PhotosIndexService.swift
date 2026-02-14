@@ -92,6 +92,39 @@ struct PhotosIndexService: PhotosIndexing {
 
         return count
     }
+    
+    // MARK: - Convenience Methods
+    
+    func indexAllPhotos(in context: ModelContext) async throws -> Int {
+        return try await fullScan(in: context)
+    }
+    
+    func indexRecentPhotos(since date: Date, in context: ModelContext) async throws -> Int {
+        return try await indexAssets(
+            modifiedAfter: date,
+            fetchLimit: 500,
+            in: context
+        )
+    }
+    
+    func fetchIndexedPhoto(localIdentifier: String, in context: ModelContext) throws -> IndexedPhotoAsset? {
+        let descriptor = FetchDescriptor<IndexedPhotoAsset>(
+            predicate: #Predicate { $0.localIdentifier == localIdentifier }
+        )
+        return try context.fetch(descriptor).first
+    }
+    
+    func searchPhotosByOCR(_ searchText: String, in context: ModelContext) throws -> [IndexedPhotoAsset] {
+        let lowercased = searchText.lowercased()
+        let descriptor = FetchDescriptor<IndexedPhotoAsset>(
+            predicate: #Predicate { photo in
+                photo.ocrText?.localizedStandardContains(lowercased) ?? false ||
+                photo.title.localizedStandardContains(lowercased)
+            },
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        return try context.fetch(descriptor)
+    }
 
     func collectDelta(
         since: Date?,

@@ -40,6 +40,57 @@ struct FilesImportService: FilesImporting {
 
     // MARK: - Import
 
+    func importFile(at url: URL, in context: ModelContext) async throws -> IndexedFileDocument {
+        _ = try await importDocuments(urls: [url], in: context)
+        
+        let values = try url.resourceValues(forKeys: [
+            .nameKey,
+            .contentTypeKey,
+            .fileSizeKey,
+            .contentModificationDateKey
+        ])
+        
+        let fileName = values.name ?? url.lastPathComponent
+        let size = max(0, values.fileSize ?? 0)
+        let modifiedAt = values.contentModificationDate ?? Date()
+        
+        let stableHash = Self.stableHash(
+            url: url,
+            fileName: fileName,
+            size: size,
+            modifiedAt: modifiedAt
+        )
+        
+        let descriptor = FetchDescriptor<IndexedFileDocument>(
+            predicate: #Predicate { $0.stableHash == stableHash }
+        )
+        
+        guard let doc = try context.fetch(descriptor).first else {
+            throw NSError(domain: "FilesImportService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to find imported file"])
+        }
+        
+        return doc
+    }
+    
+    func fetchIndexedFile(identifier: String, in context: ModelContext) throws -> IndexedFileDocument? {
+        let descriptor = FetchDescriptor<IndexedFileDocument>(
+            predicate: #Predicate { $0.id == identifier }
+        )
+        return try context.fetch(descriptor).first
+    }
+    
+    func searchFilesByContent(_ searchText: String, in context: ModelContext) throws -> [IndexedFileDocument] {
+        let lowercased = searchText.lowercased()
+        let descriptor = FetchDescriptor<IndexedFileDocument>(
+            predicate: #Predicate { file in
+                file.fileName.localizedStandardContains(lowercased) ||
+                file.bodySnippet.localizedStandardContains(lowercased)
+            },
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        return try context.fetch(descriptor)
+    }
+
     func importDocuments(
         urls: [URL],
         in context: ModelContext
