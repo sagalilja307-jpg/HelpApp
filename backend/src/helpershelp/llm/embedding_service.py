@@ -36,8 +36,8 @@ class EmbeddingService:
     │ Mental model: Advanced sorting algorithm, not intelligence  │
     │                                                             │
     │ Execution order:                                            │
-    │ GPT-SW3 (classify) → bge-m3 (rank) → system (filter/select)│
-    │                      → GPT-SW3 (formulate)                  │
+    │ Qwen2.5 (classify) → bge-m3 (rank) → system (filter/select)│
+    │                      → Qwen2.5 (formulate)                  │
     └─────────────────────────────────────────────────────────────┘
     """
 
@@ -248,7 +248,7 @@ class EmbeddingService:
         104 candidates → similarity_batch() → ranked list
         → system filters (threshold 0.6)
         → system limits (max 6 per source)
-        → 12 final items to GPT-SW3
+        → 12 final items to Qwen2.5
         ```
         
         Args:

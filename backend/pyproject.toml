@@ -15,7 +15,6 @@ dependencies = [
   "numpy",
   "transformers",
   "sentence-transformers",
-  "llama-cpp-python",
   "requests",
   "PyJWT",
   "python-dotenv",

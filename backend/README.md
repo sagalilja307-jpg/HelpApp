@@ -2,6 +2,12 @@
 
 FastAPI-backend i monorepot, paketerad som `helpershelp` med `src/`-layout.
 
+## Quick Links
+
+- 📋 **[Architecture Guide](docs/STRUCTURE.md)** - Complete backend structure and organization
+- 🔍 **[Model Verification](docs/MODEL_VERIFICATION.md)** - Test BGE-M3 and Ollama
+- 📚 **[API Documentation](http://localhost:8000/docs)** - Interactive API docs (when running)
+
 ## Struktur
 - `api.py` – uvicorn-entrypoint shim (`uvicorn api:app --reload`)
 - `src/helpershelp/` – all backendkod
@@ -12,8 +18,72 @@ FastAPI-backend i monorepot, paketerad som `helpershelp` med `src/`-layout.
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e .
 ```
+
+## Model Configuration
+
+### BGE-M3 Embedding Model
+
+The backend uses **BGE-M3** for semantic embeddings and similarity calculations.
+
+**First-time Setup:**
+```bash
+# Install dependencies (if not already done)
+pip install -e .
+
+# Test BGE-M3 (downloads model automatically on first run)
+python tools/test_bge_m3.py
+```
+
+**Configuration:**
+- Model is downloaded automatically from Hugging Face on first use
+- Default cache: `backend/.model_cache/`
+- Set `HELPERSHELP_OFFLINE=1` to use only cached models
+- Set `BGE_M3_LOCAL_PATH=/path/to/model` to use a specific model location
+
+**Requirements:**
+- ~2GB disk space for model
+- Works CPU-only (no GPU required)
+
+### Ollama Text Generation
+
+This backend uses **Ollama** with **Qwen2.5 7B** for text generation (replaced GPT-SW3).
+
+### Installation
+
+1. Install Ollama:
+   - macOS: `brew install ollama`
+   - Linux: `curl -fsSL https://ollama.com/install.sh | sh`
+   - Or download from [ollama.com](https://ollama.com/download)
+
+2. Start Ollama server:
+   ```bash
+   ollama serve
+   ```
+
+3. Pull the Qwen2.5 7B model:
+   ```bash
+   ollama pull qwen2.5:7b
+   ```
+
+### Configuration
+
+Environment variables:
+- `OLLAMA_HOST` - Ollama server URL (default: `http://localhost:11434`)
+- `OLLAMA_MODEL` - Model to use (default: `qwen2.5:7b`)
+
+### Hardware Requirements
+
+- **RAM**: Minimum 8GB, recommended 16GB for optimal performance
+- **CPU**: Multi-core processor recommended
+- **Disk**: ~4.7GB for the Qwen2.5 7B model
+
+### Notes
+
+- Ollama runs locally - no API keys required
+- First inference may be slow (model loading)
+- If Ollama is unavailable, the backend falls back to placeholder mode
 
 ## Kör API
 ```bash
@@ -24,6 +94,20 @@ uvicorn api:app --reload
 ```bash
 python -m unittest discover -s tests -p 'test*.py'
 ```
+
+## Verify Models
+
+To verify that BGE-M3 and Ollama are working correctly:
+
+```bash
+# Test BGE-M3 embedding model
+python tools/test_bge_m3.py
+
+# Test Ollama (requires ollama serve running)
+curl http://localhost:11434/api/tags
+```
+
+See [docs/MODEL_VERIFICATION.md](docs/MODEL_VERIFICATION.md) for detailed verification guide.
 
 ## Stödnivåer och adaptation
 - `assistant.support.level` (`0..3`) är grundintensitet (default `1`).
