@@ -1,14 +1,5 @@
-from __future__ import annotations
+"""Backward compatibility shim - imports from domain.value_objects.time_utils"""
+from helpershelp.domain.value_objects.time_utils import utcnow
 
-from datetime import datetime, timezone
-
-
-def utcnow() -> datetime:
-    """
-    Return a naive datetime representing current UTC time.
-
-    Python 3.14 deprecates `datetime.utcnow()`. This helper keeps the codebase
-    forward-compatible while still using naive UTC timestamps internally.
-    """
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+__all__ = ["utcnow"]
 

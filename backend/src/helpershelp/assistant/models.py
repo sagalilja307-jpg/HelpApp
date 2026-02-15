@@ -7,36 +7,19 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from helpershelp.assistant.time_utils import utcnow
+from helpershelp.domain.value_objects.time_utils import utcnow
+from helpershelp.domain.models import (
+    UnifiedItemType as DomainUnifiedItemType,
+    ProposalType as DomainProposalType,
+    ProposalStatus as DomainProposalStatus,
+    EdgeType as DomainEdgeType,
+)
 
-class UnifiedItemType(str, Enum):
-    email = "email"
-    event = "event"
-    task = "task"
-    reminder = "reminder"
-    note = "note"
-    contact = "contact"
-    photo = "photo"
-    file = "file"
-    location = "location"
-
-
-class ProposalType(str, Enum):
-    create_reminder = "create_reminder"
-    schedule_timeblock = "schedule_timeblock"
-    follow_up = "follow_up"
-
-
-class ProposalStatus(str, Enum):
-    pending = "pending"
-    accepted = "accepted"
-    dismissed = "dismissed"
-
-
-class EdgeType(str, Enum):
-    related_to = "related_to"
-    about_same = "about_same"
-    blocks_time_for = "blocks_time_for"
+# Re-export enums from domain for backward compatibility
+UnifiedItemType = DomainUnifiedItemType
+ProposalType = DomainProposalType
+ProposalStatus = DomainProposalStatus
+EdgeType = DomainEdgeType
 
 
 class Person(BaseModel):

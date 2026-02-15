@@ -3,13 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-from helpershelp.assistant.storage import SqliteStore, get_store
-from helpershelp.assistant.time_utils import utcnow
-from helpershelp.llm.embedding_service import get_embedding_service
-from helpershelp.llm.llm_service import get_query_service
-from helpershelp.llm.text_generation_service import get_text_generation_service
-from helpershelp.mail.mail_query_service import MailQueryService
-from helpershelp.mail.oauth_service import OAuthService
+from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore, get_store
+from helpershelp.domain.value_objects.time_utils import utcnow
+from helpershelp.infrastructure.llm.bge_m3_adapter import get_embedding_service
+from helpershelp.application.llm.llm_service import get_query_service
+from helpershelp.application.llm.text_generation_service import get_text_generation_service
+from helpershelp.application.mail.mail_query_service import MailQueryService
+from helpershelp.infrastructure.security.oauth_adapter import OAuthService
 from helpershelp.mail.provider import mail_provider
 from helpershelp.retrieval.content_object import ContentObject, MailSender
 
