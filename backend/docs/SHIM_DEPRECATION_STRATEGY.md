@@ -167,7 +167,7 @@ For each shim being removed:
 
 1. **Find all usages:**
    ```bash
-   grep -r "from helpershelp.assistant.scoring import" backend/
+   grep -r "from helpershelp.domain.rules.scoring import" backend/
    ```
 
 2. **Update imports:**
@@ -222,7 +222,7 @@ Add to CI/CD pipeline:
 
 | Old Import | New Import |
 |------------|------------|
-| `from helpershelp.assistant.scoring import ...` | `from helpershelp.domain.rules.scoring import ...` |
+| `from helpershelp.domain.rules.scoring import ...` | `from helpershelp.domain.rules.scoring import ...` |
 | `from helpershelp.assistant.support import ...` | `from helpershelp.application.assistant.support import ...` |
 | `from helpershelp.assistant.sync import ...` | `from helpershelp.application.assistant.sync import ...` |
 | `from helpershelp.assistant.crypto import ...` | `from helpershelp.infrastructure.security.crypto_utils import ...` |
@@ -242,7 +242,7 @@ Add to CI/CD pipeline:
 
 **Before:**
 ```python
-from helpershelp.assistant.scoring import score_item, build_dashboard_lists
+from helpershelp.domain.rules.scoring import score_item, build_dashboard_lists
 from helpershelp.domain.value_objects.time_utils import utcnow
 from helpershelp.assistant.storage import SqliteStore
 ```

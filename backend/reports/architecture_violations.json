@@ -26,7 +26,7 @@
   },
   {
     "importer_module": "helpershelp.api.routes.assistant",
-    "imported_module": "helpershelp.assistant.scoring",
+    "imported_module": "helpershelp.domain.rules.scoring",
     "file_path": "/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/assistant.py"
   },
   {

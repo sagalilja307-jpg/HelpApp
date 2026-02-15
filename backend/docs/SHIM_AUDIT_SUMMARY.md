@@ -14,7 +14,7 @@ Implemented comprehensive deprecation strategy for 15 backward compatibility shi
 ### Assistant Module Shims (9)
 | File | Old Path | New Path | Usage Count | Priority |
 |------|----------|----------|-------------|----------|
-| `scoring.py` | `helpershelp.assistant.scoring` | `helpershelp.domain.rules.scoring` | 2 | Medium |
+| `scoring.py` | `helpershelp.domain.rules.scoring` | `helpershelp.domain.rules.scoring` | 2 | Medium |
 | `support.py` | `helpershelp.assistant.support` | `helpershelp.application.assistant.support` | 2 | Medium |
 | `sync.py` | `helpershelp.assistant.sync` | `helpershelp.application.assistant.sync` | 1 | Low |
 | `crypto.py` | `helpershelp.assistant.crypto` | `helpershelp.infrastructure.security.crypto_utils` | 0 | **High** |
@@ -185,7 +185,7 @@ Example output when importing deprecated shim:
 ================================================================================
 DEPRECATION WARNING
 ================================================================================
-Module 'helpershelp.assistant.scoring' is deprecated and will be removed in version 2.0.0.
+Module 'helpershelp.domain.rules.scoring' is the new location for scoring logic.
 Please update your imports to use:
   from helpershelp.domain.rules.scoring import ...
 ================================================================================
@@ -235,7 +235,7 @@ echo "Mail shims: $(grep -r 'from helpershelp.mail\.' backend/src/ | wc -l)"
 ### Quick Reference Table
 | Old Import | New Import |
 |------------|------------|
-| `from helpershelp.assistant.scoring import ...` | `from helpershelp.domain.rules.scoring import ...` |
+| `from helpershelp.domain.rules.scoring import ...` | `from helpershelp.domain.rules.scoring import ...` |
 | `from helpershelp.domain.value_objects.time_utils import utcnow` | `from helpershelp.domain.value_objects.time_utils import utcnow` |
 | `from helpershelp.assistant.storage import SqliteStore` | `from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore` |
 | `from helpershelp.llm.embedding_service import ...` | `from helpershelp.infrastructure.llm.bge_m3_adapter import ...` |

@@ -69,7 +69,7 @@ Rationale: proposals are application logic, surface via application package.
 
 6) Violation
 From: helpershelp.api.routes.assistant
-Imports: helpershelp.assistant.scoring
+Imports: helpershelp.domain.rules.scoring
 File: src/helpershelp/api/routes/assistant.py
 Proposed Fix: import from `helpershelp.domain.rules.scoring`.
 Category: Mechanical

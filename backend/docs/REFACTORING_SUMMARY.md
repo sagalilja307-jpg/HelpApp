@@ -155,7 +155,7 @@ Benefits:
 **Old Import Style (still works):**
 ```python
 from helpershelp.assistant.models import UnifiedItem
-from helpershelp.assistant.scoring import score_item
+from helpershelp.domain.rules.scoring import score_item
 from helpershelp.assistant.storage import SqliteStore
 ```
 

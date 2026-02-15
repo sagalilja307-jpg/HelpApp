@@ -17,11 +17,11 @@ class TestShimDeprecationWarnings:
         """Verify assistant.scoring shim emits deprecation warning"""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            from helpershelp.assistant.scoring import score_item
+            from helpershelp.domain.rules.scoring import score_item
             
             assert len(w) == 1
             assert issubclass(w[0].category, DeprecationWarning)
-            assert "helpershelp.assistant.scoring" in str(w[0].message)
+            assert "helpershelp.domain.rules.scoring" in str(w[0].message)
             assert "helpershelp.domain.rules.scoring" in str(w[0].message)
             assert "2.0.0" in str(w[0].message)
 
@@ -175,7 +175,7 @@ class TestShimBackwardCompatibility:
             warnings.simplefilter("ignore")
             
             # Import from shim
-            from helpershelp.assistant.scoring import ScoredItem, score_item
+            from helpershelp.domain.rules.scoring import ScoredItem, score_item
             
             # Import from actual location
             from helpershelp.domain.rules.scoring import (

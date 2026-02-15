@@ -9,7 +9,7 @@ def deprecated_module(old_path: str, new_path: str, removal_version: str = "2.0.
     Emit a deprecation warning for module imports.
     
     Args:
-        old_path: The deprecated import path (e.g., "helpershelp.assistant.scoring")
+        old_path: The deprecated import path (e.g., "helpershelp.domain.rules.scoring")
         new_path: The new import path (e.g., "helpershelp.domain.rules.scoring")
         removal_version: Version when the deprecated path will be removed
     """

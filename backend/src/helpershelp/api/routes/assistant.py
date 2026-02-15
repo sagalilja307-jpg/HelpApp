@@ -26,7 +26,7 @@ from helpershelp.assistant.proposals import (
     generate_proposals,
     maybe_adjust_followup_days_on_feedback,
 )
-from helpershelp.assistant.scoring import build_dashboard_lists
+from helpershelp.domain.rules.scoring import build_dashboard_lists
 from helpershelp.assistant.support import (
     SUPPORT_ADAPTATION_ENABLED_KEY,
     SUPPORT_DAILY_CAPS_KEY,
