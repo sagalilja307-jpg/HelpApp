@@ -101,6 +101,7 @@ This document outlines the strategy for deprecating and removing backward compat
 - ✅ Warnings displayed in logs and console
 - Document migration paths in README
 - Send team notification about deprecations
+ - CI enforcement: tests run with DeprecationWarnings visible and shim-import scan
 
 ### Phase 2: Migration (May - July 2026)
 **Duration:** 3 months  
