@@ -10,12 +10,13 @@ deprecated_module(
 from helpershelp.application.assistant.support import (
     SupportPolicy,
     resolve_support_policy,
-    filter_proposals_by_policy,
     adaptation_allowed,
     clamp_follow_up_days,
-    record_learning_event,
-    reset_learning_data,
+    filter_proposals_for_policy,
 )
+
+# Backwards-compatible alias: older name was `filter_proposals_by_policy`
+filter_proposals_by_policy = filter_proposals_for_policy
 
 __all__ = [
     "SupportPolicy",
@@ -23,6 +24,4 @@ __all__ = [
     "filter_proposals_by_policy",
     "adaptation_allowed",
     "clamp_follow_up_days",
-    "record_learning_event",
-    "reset_learning_data",
 ]
