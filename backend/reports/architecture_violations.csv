@@ -3,7 +3,7 @@ helpershelp.api.app,helpershelp.assistant.sync,/Users/sagalilja/Library/Mobile D
 helpershelp.api.deps,helpershelp.mail.provider,/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/deps.py
 helpershelp.api.routes.assistant,helpershelp.assistant.language_guardrails,/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/assistant.py
 helpershelp.api.routes.assistant,helpershelp.assistant.models,/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/assistant.py
-helpershelp.api.routes.assistant,helpershelp.assistant.proposals,/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/assistant.py
+helpershelp.api.routes.assistant,helpershelp.application.assistant.proposals,/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/assistant.py
 helpershelp.api.routes.assistant,helpershelp.domain.rules.scoring,/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/assistant.py
 helpershelp.api.routes.assistant,helpershelp.assistant.support,/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/assistant.py
 helpershelp.api.routes.auth,helpershelp.assistant.tokens,/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/auth.py

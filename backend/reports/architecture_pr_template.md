@@ -61,7 +61,7 @@ Rationale: domain models are the canonical source for shared types.
 
 5) Violation
 From: helpershelp.api.routes.assistant
-Imports: helpershelp.assistant.proposals
+Imports: helpershelp.application.assistant.proposals
 File: src/helpershelp/api/routes/assistant.py
 Proposed Fix: import from `helpershelp.application.assistant.proposals` (use application-level API).
 Category: Mechanical

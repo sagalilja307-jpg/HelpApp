@@ -89,11 +89,11 @@ class TestShimDeprecationWarnings:
         """Verify assistant.proposals shim emits deprecation warning"""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            from helpershelp.assistant.proposals import generate_proposals
+            from helpershelp.application.assistant.proposals import generate_proposals
             
             assert len(w) == 1
             assert issubclass(w[0].category, DeprecationWarning)
-            assert "helpershelp.assistant.proposals" in str(w[0].message)
+            assert "helpershelp.application.assistant.proposals" in str(w[0].message)
 
     def test_assistant_scheduling_shim_warns(self):
         """Verify assistant.scheduling shim emits deprecation warning"""

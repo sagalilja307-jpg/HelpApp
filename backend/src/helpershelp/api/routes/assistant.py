@@ -22,9 +22,10 @@ from helpershelp.assistant.models import (
     SupportSettingsUpdateRequest,
 )
 from helpershelp.assistant.language_guardrails import enforce_neutral_language
-from helpershelp.assistant.proposals import (
+from helpershelp.application.assistant.proposals import (
+    ProposalConfig,
+    get_proposal_config,
     generate_proposals,
-    maybe_adjust_followup_days_on_feedback,
 )
 from helpershelp.domain.rules.scoring import build_dashboard_lists
 from helpershelp.assistant.support import (
