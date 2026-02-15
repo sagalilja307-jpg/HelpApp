@@ -99,11 +99,11 @@ class TestShimDeprecationWarnings:
         """Verify assistant.scheduling shim emits deprecation warning"""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            from helpershelp.assistant.scheduling import TimeSlot
+            from helpershelp.domain.rules.scheduling import TimeSlot
             
             assert len(w) == 1
             assert issubclass(w[0].category, DeprecationWarning)
-            assert "helpershelp.assistant.scheduling" in str(w[0].message)
+            assert "helpershelp.domain.rules.scheduling" in str(w[0].message)
 
     def test_llm_llm_service_shim_warns(self):
         """Verify llm.llm_service shim emits deprecation warning"""

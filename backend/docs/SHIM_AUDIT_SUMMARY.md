@@ -22,7 +22,7 @@ Implemented comprehensive deprecation strategy for 15 backward compatibility shi
 | `time_utils.py` | `helpershelp.domain.value_objects.time_utils` | `helpershelp.domain.value_objects.time_utils` | 10+ | Low |
 | `tokens.py` | `helpershelp.assistant.tokens` | `helpershelp.infrastructure.security.token_manager` | 2 | Medium |
 | `proposals.py` | `helpershelp.assistant.proposals` | `helpershelp.application.assistant.proposals` | 2 | Medium |
-| `scheduling.py` | `helpershelp.assistant.scheduling` | `helpershelp.domain.rules.scheduling` | 0 | **High** |
+| `scheduling.py` | `helpershelp.domain.rules.scheduling` | `helpershelp.domain.rules.scheduling` | 0 | **High** |
 
 ### LLM Module Shims (4)
 | File | Old Path | New Path | Usage Count | Priority |
