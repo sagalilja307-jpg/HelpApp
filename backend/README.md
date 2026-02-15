@@ -15,7 +15,32 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-## Ollama Setup (Required for Text Generation)
+## Model Configuration
+
+### BGE-M3 Embedding Model
+
+The backend uses **BGE-M3** for semantic embeddings and similarity calculations.
+
+**First-time Setup:**
+```bash
+# Install dependencies (if not already done)
+pip install -e .
+
+# Test BGE-M3 (downloads model automatically on first run)
+python tools/test_bge_m3.py
+```
+
+**Configuration:**
+- Model is downloaded automatically from Hugging Face on first use
+- Default cache: `backend/.model_cache/`
+- Set `HELPERSHELP_OFFLINE=1` to use only cached models
+- Set `BGE_M3_LOCAL_PATH=/path/to/model` to use a specific model location
+
+**Requirements:**
+- ~2GB disk space for model
+- Works CPU-only (no GPU required)
+
+### Ollama Text Generation
 
 This backend uses **Ollama** with **Qwen2.5 7B** for text generation (replaced GPT-SW3).
 
@@ -63,6 +88,20 @@ uvicorn api:app --reload
 ```bash
 python -m unittest discover -s tests -p 'test*.py'
 ```
+
+## Verify Models
+
+To verify that BGE-M3 and Ollama are working correctly:
+
+```bash
+# Test BGE-M3 embedding model
+python tools/test_bge_m3.py
+
+# Test Ollama (requires ollama serve running)
+curl http://localhost:11434/api/tags
+```
+
+See [docs/MODEL_VERIFICATION.md](docs/MODEL_VERIFICATION.md) for detailed verification guide.
 
 ## Stödnivåer och adaptation
 - `assistant.support.level` (`0..3`) är grundintensitet (default `1`).
