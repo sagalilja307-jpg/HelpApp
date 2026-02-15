@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="HelperAPI - Mail Backend",
-    description="Privacy-focused mail filtering with GPT-SW3 + BGE-M3",
+    description="Privacy-focused mail filtering with Ollama Qwen2.5 + BGE-M3",
     lifespan=lifespan,
 )
 

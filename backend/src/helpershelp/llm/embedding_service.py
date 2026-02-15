@@ -248,7 +248,7 @@ class EmbeddingService:
         104 candidates → similarity_batch() → ranked list
         → system filters (threshold 0.6)
         → system limits (max 6 per source)
-        → 12 final items to GPT-SW3
+        → 12 final items to Qwen2.5
         ```
         
         Args:
