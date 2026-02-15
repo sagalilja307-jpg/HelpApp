@@ -1,31 +1,84 @@
+# =========================
 # macOS
+# =========================
 .DS_Store
 ._*
 .AppleDouble
+.LSOverride
 
-# Editors
+# =========================
+# Editors / IDE
+# =========================
 .vscode/
 .idea/
+*.swp
+*.swo
 
+# =========================
 # Python
-**/__pycache__/
-**/*.py[cod]
-**/*.egg-info/
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Compiled extensions
+*.so
+
+# Packaging
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Test / typecheck / lint caches
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
-# Virtual environments
-**/.venv/
-**/venv/
+# =========================
+# Virtual Environments
+# =========================
+.venv/
+venv/
+ENV/
+env/
 
+# =========================
 # Backend runtime / local state
+# =========================
 backend/.model_cache/
 backend/data/
-backend/*.db
-backend/.env
 
+# SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# Environment variables
+.env
+backend/.env
+*.env.local
+
+# Logs
+*.log
+
+# =========================
 # iOS / Xcode
-**/DerivedData/
-**/build/
-**/xcuserdata/
-**/*.xcuserstate
+# =========================
+DerivedData/
+build/
+*.xcworkspace/xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# =========================
+# OS / Misc
+# =========================
+Thumbs.db
