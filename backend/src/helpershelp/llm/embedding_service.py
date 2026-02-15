@@ -36,8 +36,8 @@ class EmbeddingService:
     │ Mental model: Advanced sorting algorithm, not intelligence  │
     │                                                             │
     │ Execution order:                                            │
-    │ GPT-SW3 (classify) → bge-m3 (rank) → system (filter/select)│
-    │                      → GPT-SW3 (formulate)                  │
+    │ Qwen2.5 (classify) → bge-m3 (rank) → system (filter/select)│
+    │                      → Qwen2.5 (formulate)                  │
     └─────────────────────────────────────────────────────────────┘
     """
 

@@ -30,6 +30,6 @@ def health_details():
         "sync_loop_enabled": os.getenv("HELPERSHELP_ENABLE_SYNC_LOOP", "0") == "1",
         "model": {
             "embedding": "bge-m3",
-            "generation": "gpt-sw3",
+            "generation": "qwen2.5:7b (Ollama)",
         },
     }

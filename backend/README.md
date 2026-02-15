@@ -12,8 +12,47 @@ FastAPI-backend i monorepot, paketerad som `helpershelp` med `src/`-layout.
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e .
 ```
+
+## Ollama Setup (Required for Text Generation)
+
+This backend uses **Ollama** with **Qwen2.5 7B** for text generation (replaced GPT-SW3).
+
+### Installation
+
+1. Install Ollama:
+   - macOS: `brew install ollama`
+   - Linux: `curl -fsSL https://ollama.com/install.sh | sh`
+   - Or download from [ollama.com](https://ollama.com/download)
+
+2. Start Ollama server:
+   ```bash
+   ollama serve
+   ```
+
+3. Pull the Qwen2.5 7B model:
+   ```bash
+   ollama pull qwen2.5:7b
+   ```
+
+### Configuration
+
+Environment variables:
+- `OLLAMA_HOST` - Ollama server URL (default: `http://localhost:11434`)
+- `OLLAMA_MODEL` - Model to use (default: `qwen2.5:7b`)
+
+### Hardware Requirements
+
+- **RAM**: Minimum 8GB, recommended 16GB for optimal performance
+- **CPU**: Multi-core processor recommended
+- **Disk**: ~4.7GB for the Qwen2.5 7B model
+
+### Notes
+
+- Ollama runs locally - no API keys required
+- First inference may be slow (model loading)
+- If Ollama is unavailable, the backend falls back to placeholder mode
 
 ## Kör API
 ```bash
