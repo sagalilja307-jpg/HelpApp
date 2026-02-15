@@ -15,7 +15,10 @@ from helpershelp.domain.models import (
     EdgeType as DomainEdgeType,
 )
 
-# Re-export enums from domain for backward compatibility
+# BACKWARD COMPATIBILITY: Re-export enums from domain
+# NOTE: Pydantic models in this file are DEPRECATED for internal use.
+# New code should use domain dataclasses from helpershelp.domain.models
+# These Pydantic models remain only for API serialization/deserialization
 UnifiedItemType = DomainUnifiedItemType
 ProposalType = DomainProposalType
 ProposalStatus = DomainProposalStatus

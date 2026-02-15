@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from helpershelp.domain.models import ItemEdge, Proposal, UnifiedItem
 
@@ -74,11 +74,11 @@ class StoragePort(ABC):
         pass
 
     @abstractmethod
-    def get_settings(self) -> Dict[str, any]:
+    def get_settings(self) -> Dict[str, Any]:
         """Get all settings"""
         pass
 
     @abstractmethod
-    def set_setting(self, key: str, value: any) -> None:
+    def set_setting(self, key: str, value: Any) -> None:
         """Set a single setting"""
         pass
