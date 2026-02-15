@@ -2,9 +2,15 @@
 
 FastAPI-backend i monorepot, paketerad som `helpershelp` med `src/`-layout.
 
+> ⚠️ **DEPRECATION NOTICE:** This project has been refactored to Clean Architecture.  
+> Legacy import paths are deprecated and will be removed in **version 2.0.0 (August 2026)**.  
+> See [Shim Deprecation Strategy](docs/SHIM_DEPRECATION_STRATEGY.md) for migration guide.
+
 ## Quick Links
 
 - 📋 **[Architecture Guide](docs/STRUCTURE.md)** - Complete backend structure and organization
+- 🏗️ **[Clean Architecture](docs/CLEAN_ARCHITECTURE.md)** - Architecture principles and patterns
+- 🔄 **[Shim Deprecation Strategy](docs/SHIM_DEPRECATION_STRATEGY.md)** - Migration guide for legacy imports
 - 🔍 **[Model Verification](docs/MODEL_VERIFICATION.md)** - Test BGE-M3 and Ollama
 - 📚 **[API Documentation](http://localhost:8000/docs)** - Interactive API docs (when running)
 

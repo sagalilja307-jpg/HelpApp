@@ -16,8 +16,10 @@
 - **New Application Files:** 6 (use cases)
 - **New Port Interfaces:** 5 (abstract contracts)
 - **New Infrastructure Files:** 6 (adapters)
-- **Backward Compatibility Shims:** 17
-- **Documentation:** 2 files
+- **Backward Compatibility Shims:** 15 (with runtime deprecation warnings)
+- **Deprecation Utilities:** 1 (_deprecation.py)
+- **Documentation:** 4 files (including SHIM_DEPRECATION_STRATEGY.md)
+- **Test Suites:** 1 (test_shim_deprecation.py)
 
 ### Total Lines Changed
 - **Added:** ~4,500 lines
