@@ -2,6 +2,12 @@
 
 FastAPI-backend i monorepot, paketerad som `helpershelp` med `src/`-layout.
 
+## Quick Links
+
+- 📋 **[Architecture Guide](docs/STRUCTURE.md)** - Complete backend structure and organization
+- 🔍 **[Model Verification](docs/MODEL_VERIFICATION.md)** - Test BGE-M3 and Ollama
+- 📚 **[API Documentation](http://localhost:8000/docs)** - Interactive API docs (when running)
+
 ## Struktur
 - `api.py` – uvicorn-entrypoint shim (`uvicorn api:app --reload`)
 - `src/helpershelp/` – all backendkod

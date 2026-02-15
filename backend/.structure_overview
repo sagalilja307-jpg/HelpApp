@@ -1,0 +1,47 @@
+backend/
+│
+├── 📄 Configuration
+│   ├── pyproject.toml        → Dependencies
+│   ├── .env.example          → Environment template
+│   └── api.py                → Entry point
+│
+├── 📚 Documentation
+│   └── docs/
+│       ├── README.md         → Documentation index
+│       ├── STRUCTURE.md      → Architecture guide
+│       └── MODEL_VERIFICATION.md → Model testing
+│
+├── 🧠 Source Code
+│   └── src/helpershelp/
+│       ├── api/              → HTTP layer
+│       │   ├── app.py
+│       │   ├── routes/       → Endpoints
+│       │   └── models.py     → Request/Response schemas
+│       │
+│       ├── llm/              → AI models
+│       │   ├── ollama_service.py      → Qwen2.5 text generation
+│       │   ├── embedding_service.py   → BGE-M3 embeddings
+│       │   └── llm_service.py         → Query interpretation
+│       │
+│       ├── assistant/        → Core logic
+│       │   ├── storage.py    → Database
+│       │   ├── proposals.py  → Suggestions
+│       │   ├── scoring.py    → Priority
+│       │   └── support.py    → Adaptive support
+│       │
+│       ├── mail/             → Email integration
+│       │   ├── oauth_service.py
+│       │   └── mail_query_service.py
+│       │
+│       └── retrieval/        → Multi-source retrieval
+│           └── retrieval_coordinator.py
+│
+├── 🧪 Tests
+│   └── tests/
+│       ├── test_api_*.py
+│       ├── test_assistant_*.py
+│       └── test_*.py
+│
+└── 🛠️ Tools
+    └── tools/
+        └── test_bge_m3.py    → BGE-M3 verification
