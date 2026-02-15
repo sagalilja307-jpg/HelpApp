@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
 
 from helpershelp.api.deps import get_assistant_store
-from helpershelp.assistant.time_utils import utcnow
+from helpershelp.domain.value_objects.time_utils import utcnow
 from helpershelp.assistant.tokens import store_oauth_token
 from helpershelp.mail.oauth_models import OAuthToken
 

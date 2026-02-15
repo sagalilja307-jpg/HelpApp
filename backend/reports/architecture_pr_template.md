@@ -85,7 +85,7 @@ Rationale: support policy resolution is application-level.
 
 8) Violation
 From: helpershelp.api.routes.assistant
-Imports: helpershelp.assistant.time_utils
+Imports: helpershelp.domain.value_objects.time_utils
 File: src/helpershelp/api/routes/assistant.py
 Proposed Fix: import from `helpershelp.domain.value_objects.time_utils`.
 Category: Mechanical
@@ -109,21 +109,21 @@ Rationale: OAuth models are cross-cutting; decide canonical package first.
 
 11) Violation
 From: helpershelp.api.routes.health
-Imports: helpershelp.assistant.time_utils
+Imports: helpershelp.domain.value_objects.time_utils
 File: src/helpershelp/api/routes/health.py
 Proposed Fix: import `helpershelp.domain.value_objects.time_utils`.
 Category: Mechanical
 
 12) Violation
 From: helpershelp.api.routes.llm
-Imports: helpershelp.assistant.time_utils
+Imports: helpershelp.domain.value_objects.time_utils
 File: src/helpershelp/api/routes/llm.py
 Proposed Fix: import `helpershelp.domain.value_objects.time_utils`.
 Category: Mechanical
 
 13) Violation
 From: helpershelp.api.routes.oauth_gmail
-Imports: helpershelp.assistant.time_utils
+Imports: helpershelp.domain.value_objects.time_utils
 File: src/helpershelp/api/routes/oauth_gmail.py
 Proposed Fix: import `helpershelp.domain.value_objects.time_utils`.
 Category: Mechanical
@@ -144,7 +144,7 @@ Category: Design
 
 16) Violation
 From: helpershelp.api.routes.query
-Imports: helpershelp.assistant.time_utils
+Imports: helpershelp.domain.value_objects.time_utils
 File: src/helpershelp/api/routes/query.py
 Proposed Fix: import `helpershelp.domain.value_objects.time_utils`.
 Category: Mechanical
@@ -179,7 +179,7 @@ Category: Design
 
 21) Violation
 From: helpershelp.api.routes.sync
-Imports: helpershelp.assistant.time_utils
+Imports: helpershelp.domain.value_objects.time_utils
 File: src/helpershelp/api/routes/sync.py
 Proposed Fix: import `helpershelp.domain.value_objects.time_utils`.
 Category: Mechanical

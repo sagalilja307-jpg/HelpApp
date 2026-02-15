@@ -40,7 +40,7 @@ from helpershelp.assistant.support import (
     split_dashboard_items_by_policy,
     start_of_day_utc,
 )
-from helpershelp.assistant.time_utils import utcnow
+from helpershelp.domain.value_objects.time_utils import utcnow
 
 router = APIRouter()
 

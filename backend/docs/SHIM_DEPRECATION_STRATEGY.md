@@ -227,7 +227,7 @@ Add to CI/CD pipeline:
 | `from helpershelp.assistant.sync import ...` | `from helpershelp.application.assistant.sync import ...` |
 | `from helpershelp.assistant.crypto import ...` | `from helpershelp.infrastructure.security.crypto_utils import ...` |
 | `from helpershelp.assistant.storage import ...` | `from helpershelp.infrastructure.persistence.sqlite_storage import ...` |
-| `from helpershelp.assistant.time_utils import ...` | `from helpershelp.domain.value_objects.time_utils import ...` |
+| `from helpershelp.domain.value_objects.time_utils import ...` | `from helpershelp.domain.value_objects.time_utils import ...` |
 | `from helpershelp.assistant.tokens import ...` | `from helpershelp.infrastructure.security.token_manager import ...` |
 | `from helpershelp.assistant.proposals import ...` | `from helpershelp.application.assistant.proposals import ...` |
 | `from helpershelp.assistant.scheduling import ...` | `from helpershelp.domain.rules.scheduling import ...` |
@@ -243,7 +243,7 @@ Add to CI/CD pipeline:
 **Before:**
 ```python
 from helpershelp.assistant.scoring import score_item, build_dashboard_lists
-from helpershelp.assistant.time_utils import utcnow
+from helpershelp.domain.value_objects.time_utils import utcnow
 from helpershelp.assistant.storage import SqliteStore
 ```
 

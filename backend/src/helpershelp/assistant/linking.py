@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 
 from helpershelp.assistant.models import EdgeType, ItemEdge, UnifiedItem, UnifiedItemType
-from helpershelp.assistant.time_utils import utcnow
+from helpershelp.domain.value_objects.time_utils import utcnow
 
 
 def _tokenize(text: str) -> set[str]:

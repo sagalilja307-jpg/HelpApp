@@ -7,7 +7,7 @@ from helpershelp.assistant.models import ExternalRef, Person, UnifiedItem, Unifi
 from helpershelp.assistant.proposals import generate_proposals
 from helpershelp.assistant.scoring import score_item
 from helpershelp.assistant.storage import SqliteStore, StoreConfig
-from helpershelp.assistant.time_utils import utcnow
+from helpershelp.domain.value_objects.time_utils import utcnow
 
 
 class AssistantCoreTests(unittest.TestCase):

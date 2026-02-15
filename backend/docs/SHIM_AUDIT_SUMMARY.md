@@ -19,7 +19,7 @@ Implemented comprehensive deprecation strategy for 15 backward compatibility shi
 | `sync.py` | `helpershelp.assistant.sync` | `helpershelp.application.assistant.sync` | 1 | Low |
 | `crypto.py` | `helpershelp.assistant.crypto` | `helpershelp.infrastructure.security.crypto_utils` | 0 | **High** |
 | `storage.py` | `helpershelp.assistant.storage` | `helpershelp.infrastructure.persistence.sqlite_storage` | 2 | Medium |
-| `time_utils.py` | `helpershelp.assistant.time_utils` | `helpershelp.domain.value_objects.time_utils` | 10+ | Low |
+| `time_utils.py` | `helpershelp.domain.value_objects.time_utils` | `helpershelp.domain.value_objects.time_utils` | 10+ | Low |
 | `tokens.py` | `helpershelp.assistant.tokens` | `helpershelp.infrastructure.security.token_manager` | 2 | Medium |
 | `proposals.py` | `helpershelp.assistant.proposals` | `helpershelp.application.assistant.proposals` | 2 | Medium |
 | `scheduling.py` | `helpershelp.assistant.scheduling` | `helpershelp.domain.rules.scheduling` | 0 | **High** |
@@ -138,7 +138,7 @@ These shims have **zero usage** and can be removed immediately:
 - **Command:**
   ```bash
   find backend/ -name "*.py" -exec sed -i '' \
-    's/from helpershelp.assistant.time_utils/from helpershelp.domain.value_objects.time_utils/g' {} \;
+    's/from helpershelp.domain.value_objects.time_utils/from helpershelp.domain.value_objects.time_utils/g' {} \;
   ```
 
 ### Medium Impact
@@ -236,7 +236,7 @@ echo "Mail shims: $(grep -r 'from helpershelp.mail\.' backend/src/ | wc -l)"
 | Old Import | New Import |
 |------------|------------|
 | `from helpershelp.assistant.scoring import ...` | `from helpershelp.domain.rules.scoring import ...` |
-| `from helpershelp.assistant.time_utils import utcnow` | `from helpershelp.domain.value_objects.time_utils import utcnow` |
+| `from helpershelp.domain.value_objects.time_utils import utcnow` | `from helpershelp.domain.value_objects.time_utils import utcnow` |
 | `from helpershelp.assistant.storage import SqliteStore` | `from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore` |
 | `from helpershelp.llm.embedding_service import ...` | `from helpershelp.infrastructure.llm.bge_m3_adapter import ...` |
 

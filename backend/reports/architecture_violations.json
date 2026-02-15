@@ -36,7 +36,7 @@
   },
   {
     "importer_module": "helpershelp.api.routes.assistant",
-    "imported_module": "helpershelp.assistant.time_utils",
+    "imported_module": "",
     "file_path": "/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/assistant.py"
   },
   {
@@ -51,7 +51,7 @@
   },
   {
     "importer_module": "helpershelp.api.routes.health",
-    "imported_module": "helpershelp.assistant.time_utils",
+    "imported_module": "helpershelp.domain.value_objects.time_utils",
     "file_path": "/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/health.py"
   },
   {

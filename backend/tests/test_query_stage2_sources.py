@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from helpershelp.assistant.storage import SqliteStore, StoreConfig
-from helpershelp.assistant.time_utils import utcnow
+from helpershelp.domain.value_objects.time_utils import utcnow
 
 
 class QueryStage2SourcesTests(unittest.TestCase):

@@ -69,7 +69,7 @@ class TestShimDeprecationWarnings:
         """Verify assistant.time_utils shim emits deprecation warning"""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            from helpershelp.assistant.time_utils import utcnow
+            from helpershelp.domain.value_objects.time_utils import utcnow
             
             assert len(w) == 1
             assert issubclass(w[0].category, DeprecationWarning)
@@ -192,7 +192,7 @@ class TestShimBackwardCompatibility:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             
-            from helpershelp.assistant.time_utils import utcnow
+            from helpershelp.domain.value_objects.time_utils import utcnow
             from helpershelp.domain.value_objects.time_utils import utcnow as actual_utcnow
             
             assert utcnow is actual_utcnow
