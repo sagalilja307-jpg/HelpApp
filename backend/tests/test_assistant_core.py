@@ -6,7 +6,7 @@ from pathlib import Path
 from helpershelp.assistant.models import ExternalRef, Person, UnifiedItem, UnifiedItemType
 from helpershelp.application.assistant.proposals import generate_proposals
 from helpershelp.domain.rules.scoring import score_item
-from helpershelp.assistant.storage import SqliteStore, StoreConfig
+from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore, StoreConfig
 from helpershelp.domain.value_objects.time_utils import utcnow
 
 

@@ -156,7 +156,7 @@ Benefits:
 ```python
 from helpershelp.assistant.models import UnifiedItem
 from helpershelp.domain.rules.scoring import score_item
-from helpershelp.assistant.storage import SqliteStore
+from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore
 ```
 
 **New Import Style (recommended):**

@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from helpershelp.api.deps import get_assistant_store
 from helpershelp.domain.value_objects.time_utils import utcnow
-from helpershelp.assistant.tokens import store_oauth_token
+from helpershelp.infrastructure.security.token_manager import store_oauth_token
 from helpershelp.mail.oauth_models import OAuthToken
 
 router = APIRouter()

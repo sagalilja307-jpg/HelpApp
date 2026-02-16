@@ -6,10 +6,10 @@ helpershelp.api.routes.assistant,helpershelp.assistant.models,/Users/sagalilja/L
 helpershelp.api.routes.assistant,helpershelp.application.assistant.proposals,/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/assistant.py
 helpershelp.api.routes.assistant,helpershelp.domain.rules.scoring,/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/assistant.py
 helpershelp.api.routes.assistant,helpershelp.assistant.support,/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/assistant.py
-helpershelp.api.routes.auth,helpershelp.assistant.tokens,/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/auth.py
+helpershelp.api.routes.auth,helpershelp.infrastructure.security.token_manager,/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/auth.py
 helpershelp.api.routes.auth,helpershelp.mail.oauth_models,/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/auth.py
 helpershelp.api.routes.llm,helpershelp.domain.value_objects.time_utils,/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/llm.py
-helpershelp.api.routes.oauth_gmail,helpershelp.assistant.tokens,/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/oauth_gmail.py
+helpershelp.api.routes.oauth_gmail,helpershelp.infrastructure.security.token_manager,/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/oauth_gmail.py
 helpershelp.api.routes.oauth_gmail,helpershelp.mail.oauth_models,/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/oauth_gmail.py
 helpershelp.api.routes.sync,helpershelp.assistant.linking,/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/sync.py
 helpershelp.api.routes.sync,helpershelp.assistant.models,/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/sync.py

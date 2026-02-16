@@ -8,18 +8,13 @@ Instructions for reviewer:
 - For non-trivial items (architectural discussion), leave a comment and do not auto-apply.
 
 ---
-
 Project: HelpersHelp
 Author: automated-report
 Generated: (auto)
 
 Summary:
-- Violations detected: 31
-- Files: `backend/reports/architecture_violations.json`
+ Imports: helpershelp.infrastructure.persistence.sqlite_storage
 
----
-
-Guidance on categories:
 - `Mechanical`: trivial rename of import to new path (safe to patch automatically after review)
 - `Design`: requires architectural discussion; do not auto-apply
 - `High`: API-layer importing low-level infra; requires careful fix
@@ -93,7 +88,7 @@ Rationale: time utilities belong to domain value objects.
 
 9) Violation
 From: helpershelp.api.routes.auth
-Imports: helpershelp.assistant.tokens
+Imports: helpershelp.infrastructure.security.token_manager
 File: src/helpershelp/api/routes/auth.py
 Proposed Fix: use `helpershelp.infrastructure.security.token_manager` or an application facade for token storage (avoid direct assistant.tokens import).
 Category: Mechanical / Review
@@ -130,7 +125,7 @@ Category: Mechanical
 
 14) Violation
 From: helpershelp.api.routes.oauth_gmail
-Imports: helpershelp.assistant.tokens
+Imports: helpershelp.infrastructure.security.token_manager
 File: src/helpershelp/api/routes/oauth_gmail.py
 Proposed Fix: use `helpershelp.infrastructure.security.token_manager` or application-level token API.
 Category: Mechanical / Review

@@ -80,7 +80,7 @@ All old import paths still work via shim files:
 # Old way (still works):
 from helpershelp.assistant.models import UnifiedItem
 from helpershelp.domain.rules.scoring import score_item
-from helpershelp.assistant.storage import SqliteStore
+from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore
 
 # New way:
 from helpershelp.domain.models import UnifiedItem

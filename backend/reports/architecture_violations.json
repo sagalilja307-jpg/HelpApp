@@ -41,7 +41,7 @@
   },
   {
     "importer_module": "helpershelp.api.routes.auth",
-    "imported_module": "helpershelp.assistant.tokens",
+    "imported_module": "helpershelp.infrastructure.security.token_manager",
     "file_path": "/Users/sagalilja/Library/Mobile Documents/com~apple~CloudDocs/Helper/backend/src/helpershelp/api/routes/auth.py"
   },
   {

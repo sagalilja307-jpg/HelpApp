@@ -59,11 +59,11 @@ class TestShimDeprecationWarnings:
         """Verify assistant.storage shim emits deprecation warning"""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            from helpershelp.assistant.storage import SqliteStore
+            from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore
             
             assert len(w) == 1
             assert issubclass(w[0].category, DeprecationWarning)
-            assert "helpershelp.assistant.storage" in str(w[0].message)
+            assert "helpershelp.infrastructure.persistence.sqlite_storage" in str(w[0].message)
 
     def test_assistant_time_utils_shim_warns(self):
         """Verify assistant.time_utils shim emits deprecation warning"""
@@ -79,11 +79,11 @@ class TestShimDeprecationWarnings:
         """Verify assistant.tokens shim emits deprecation warning"""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            from helpershelp.assistant.tokens import store_oauth_token
+            from helpershelp.infrastructure.security.token_manager import store_oauth_token
             
             assert len(w) == 1
             assert issubclass(w[0].category, DeprecationWarning)
-            assert "helpershelp.assistant.tokens" in str(w[0].message)
+            assert "helpershelp.infrastructure.security.token_manager" in str(w[0].message)
 
     def test_assistant_proposals_shim_warns(self):
         """Verify assistant.proposals shim emits deprecation warning"""
@@ -202,7 +202,7 @@ class TestShimBackwardCompatibility:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             
-            from helpershelp.assistant.storage import SqliteStore, StoreConfig
+            from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore, StoreConfig
             from helpershelp.infrastructure.persistence.sqlite_storage import (
                 SqliteStore as ActualSqliteStore,
                 StoreConfig as ActualStoreConfig
