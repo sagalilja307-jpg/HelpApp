@@ -17,7 +17,7 @@ Implemented comprehensive deprecation strategy for 15 backward compatibility shi
 | `scoring.py` | `helpershelp.domain.rules.scoring` | `helpershelp.domain.rules.scoring` | 2 | Medium |
 | `support.py` | `helpershelp.assistant.support` | `helpershelp.application.assistant.support` | 2 | Medium |
 | `sync.py` | `helpershelp.assistant.sync` | `helpershelp.application.assistant.sync` | 1 | Low |
-| `crypto.py` | `helpershelp.assistant.crypto` | `helpershelp.infrastructure.security.crypto_utils` | 0 | **High** |
+| `crypto.py` | `helpershelp.infrastructure.security.crypto_utils` | `helpershelp.infrastructure.security.crypto_utils` | 0 | **High** |
 | `storage.py` | `helpershelp.infrastructure.persistence.sqlite_storage` | `helpershelp.infrastructure.persistence.sqlite_storage` | 2 | Medium |
 | `time_utils.py` | `helpershelp.domain.value_objects.time_utils` | `helpershelp.domain.value_objects.time_utils` | 10+ | Low |
 | `tokens.py` | `helpershelp.infrastructure.security.token_manager` | `helpershelp.infrastructure.security.token_manager` | 2 | Medium |

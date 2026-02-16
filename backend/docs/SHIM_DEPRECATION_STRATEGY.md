@@ -225,7 +225,7 @@ Add to CI/CD pipeline:
 | `from helpershelp.domain.rules.scoring import ...` | `from helpershelp.domain.rules.scoring import ...` |
 | `from helpershelp.assistant.support import ...` | `from helpershelp.application.assistant.support import ...` |
 | `from helpershelp.assistant.sync import ...` | `from helpershelp.application.assistant.sync import ...` |
-| `from helpershelp.assistant.crypto import ...` | `from helpershelp.infrastructure.security.crypto_utils import ...` |
+| `from helpershelp.infrastructure.security.crypto_utils import ...` | `from helpershelp.infrastructure.security.crypto_utils import ...` |
 | `from helpershelp.infrastructure.persistence.sqlite_storage import ...` | `from helpershelp.infrastructure.persistence.sqlite_storage import ...` |
 | `from helpershelp.domain.value_objects.time_utils import ...` | `from helpershelp.domain.value_objects.time_utils import ...` |
 | `from helpershelp.infrastructure.security.token_manager import ...` | `from helpershelp.infrastructure.security.token_manager import ...` |

@@ -49,11 +49,11 @@ class TestShimDeprecationWarnings:
         """Verify assistant.crypto shim emits deprecation warning"""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            from helpershelp.assistant.crypto import get_fernet
+            from helpershelp.infrastructure.security.crypto_utils import get_fernet
             
             assert len(w) == 1
             assert issubclass(w[0].category, DeprecationWarning)
-            assert "helpershelp.assistant.crypto" in str(w[0].message)
+            assert "helpershelp.infrastructure.security.crypto_utils" in str(w[0].message)
 
     def test_assistant_storage_shim_warns(self):
         """Verify assistant.storage shim emits deprecation warning"""
