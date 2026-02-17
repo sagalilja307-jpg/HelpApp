@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, status
@@ -18,8 +19,16 @@ from helpershelp.api.routes.oauth_gmail import router as oauth_gmail_router
 from helpershelp.api.routes.query import router as query_router
 from helpershelp.api.routes.sync import router as sync_router
 from helpershelp.assistant.sync import start_sync_loop
+from helpershelp.infrastructure.config.settings import load_settings
 
 logger = logging.getLogger(__name__)
+
+# Load settings and apply runtime policy
+settings = load_settings()
+
+if settings.offline:
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
 
 @asynccontextmanager

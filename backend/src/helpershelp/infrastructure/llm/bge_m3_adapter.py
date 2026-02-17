@@ -6,9 +6,12 @@ from pathlib import Path
 from sentence_transformers import SentenceTransformer, util
 import torch
 
-from helpershelp.config import HELPERSHELP_OFFLINE, MODEL_CACHE_DIR
+from helpershelp.infrastructure.config.settings import load_settings
 
 logger = logging.getLogger(__name__)
+
+# Load settings once at module level
+_settings = load_settings()
 
 
 class EmbeddingService:
@@ -51,7 +54,7 @@ class EmbeddingService:
         try:
             logger.info("[EmbeddingService] Loading BGE-M3 model (local-only)...")
 
-            base_cache = MODEL_CACHE_DIR
+            base_cache = _settings.model_cache_dir
             hub_snapshots = base_cache / "hub" / "models--BAAI--bge-m3" / "snapshots"
             default_local = base_cache / "models--MoritzLaurer--bge-m3-zeroshot-v2.0"
 
@@ -78,7 +81,7 @@ class EmbeddingService:
             self.model = SentenceTransformer(
                 str(model_path),
                 trust_remote_code=True,
-                local_files_only=HELPERSHELP_OFFLINE
+                local_files_only=_settings.offline
             )
 
             logger.info("✅ BGE-M3 model loaded successfully")

@@ -5,7 +5,7 @@ import os
 from fastapi import APIRouter
 
 from helpershelp.domain.value_objects.time_utils import utcnow
-from helpershelp.config import DEFAULT_DB_PATH
+from helpershelp.infrastructure.config.settings import load_settings
 
 router = APIRouter()
 
@@ -22,7 +22,8 @@ def health_check_extended():
 
 @router.get("/health/details", tags=["system"])
 def health_details():
-    db_path = os.getenv("HELPERSHELP_DB_PATH", str(DEFAULT_DB_PATH))
+    settings = load_settings()
+    db_path = os.getenv("HELPERSHELP_DB_PATH", str(settings.db_path))
     return {
         "status": "ok",
         "timestamp": utcnow().isoformat(),
