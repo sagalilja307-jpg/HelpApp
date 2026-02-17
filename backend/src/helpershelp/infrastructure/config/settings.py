@@ -24,8 +24,9 @@ def load_settings() -> Settings:
     if base_dir_env:
         base_dir = Path(base_dir_env).expanduser().resolve()
     else:
-        # Default: assume we're in helpershelp/infrastructure/config/settings.py
-        # and go up 3 levels to reach the backend/src directory
+        # Default: navigate from this file's location to backend/src
+        # Path: backend/src/helpershelp/infrastructure/config/settings.py
+        # Going up 3 levels: config -> infrastructure -> helpershelp -> src
         base_dir = Path(__file__).resolve().parents[3]
 
     model_cache_dir = Path(

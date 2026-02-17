@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, status
@@ -25,7 +26,6 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Apply runtime policy for offline mode
-    import os
     from helpershelp.infrastructure.config.settings import get_settings
     
     settings = get_settings()
