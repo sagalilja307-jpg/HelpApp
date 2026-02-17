@@ -12,10 +12,13 @@ from helpershelp.application.analytics.intent_parser import (
     IntentParser,
 )
 from helpershelp.application.analytics.temporal.resolver import TemporalResolver, TimeWindow
-from helpershelp.domain.models import UnifiedItem
 from helpershelp.domain.value_objects.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
+
+REASON_CALENDAR_DATA_MISSING = "calendar_data_missing"
+REASON_CALENDAR_DATA_STALE = "calendar_data_stale"
+REASON_CALENDAR_COVERAGE_GAP = "calendar_coverage_gap"
 
 
 @dataclass(frozen=True)
@@ -30,7 +33,7 @@ class AnalysisResult:
 
 
 class AnalysisService:
-    """Analytics-only path for deterministic structured answers (Fas 0.5)."""
+    """Analytics-only path driven by calendar feature-store snapshots."""
 
     def __init__(
         self,
@@ -38,10 +41,12 @@ class AnalysisService:
         intent_parser: Optional[IntentParser] = None,
         temporal_resolver: Optional[TemporalResolver] = None,
         text_service=None,
+        calendar_ttl_hours: int = 24,
     ):
         self.intent_parser = intent_parser or IntentParser()
         self.temporal_resolver = temporal_resolver or TemporalResolver()
         self.text_service = text_service
+        self.calendar_ttl_hours = max(1, int(calendar_ttl_hours))
 
     def parse_intent(self, query: str):
         return self.intent_parser.parse(query)
@@ -58,27 +63,89 @@ class AnalysisService:
             now=resolved_now,
         )
 
-        items = store.list_items(
-            since=self._to_naive_utc(time_window.start),
-            limit=5000,
+        readiness = self._evaluate_calendar_readiness(
+            store=store,
+            time_window=time_window,
+            now=resolved_now,
+        )
+        if not readiness["ready"]:
+            limitations = self._limitations_for_reasons(readiness["reason_codes"])
+            analysis = AnalysisResult(
+                intent_id=parsed.intent_id,
+                time_window=time_window,
+                insights=[],
+                patterns=[],
+                limitations=limitations,
+                confidence=None,
+                evidence_items=[],
+            )
+            return self._build_response(
+                query=query,
+                language=language,
+                analysis=analysis,
+                analysis_ready=False,
+                requires_sources=["calendar"],
+                reason_codes=readiness["reason_codes"],
+                required_time_window=time_window,
+                use_llm=False,
+            )
+
+        events = store.list_calendar_feature_events(
+            start=self._to_aware_utc(time_window.start),
+            end=self._to_aware_utc(time_window.end),
+            limit=10000,
         )
 
         if parsed.intent_id == CALENDAR_SPECIFIC_DAY_INTENT:
-            analysis = self._calculate_calendar_specific_day(items=items, window=time_window)
+            analysis = self._calculate_calendar_specific_day(events=events, window=time_window)
         elif parsed.intent_id == CALENDAR_LEAST_LOADED_DAY_INTENT:
-            analysis = self._calculate_calendar_least_loaded_day(items=items, window=time_window)
+            analysis = self._calculate_calendar_least_loaded_day(events=events, window=time_window)
         else:
             analysis = AnalysisResult(
                 intent_id=parsed.intent_id,
                 time_window=time_window,
                 insights=[],
                 patterns=[],
-                limitations=["Intent stöds inte i Fas 0.5."],
+                limitations=["Intent stöds inte i Fas 1."],
                 confidence=0.0,
                 evidence_items=[],
             )
 
-        content = self._render_narrative(query=query, language=language, analysis=analysis)
+        return self._build_response(
+            query=query,
+            language=language,
+            analysis=analysis,
+            analysis_ready=True,
+            requires_sources=[],
+            reason_codes=[],
+            required_time_window=None,
+            use_llm=True,
+        )
+
+    def _build_response(
+        self,
+        *,
+        query: str,
+        language: str,
+        analysis: AnalysisResult,
+        analysis_ready: bool,
+        requires_sources: List[str],
+        reason_codes: List[str],
+        required_time_window: Optional[TimeWindow],
+        use_llm: bool,
+    ) -> Dict:
+        if use_llm:
+            content = self._render_narrative(query=query, language=language, analysis=analysis)
+        else:
+            content = self._missing_data_narrative(reason_codes=reason_codes, limitations=analysis.limitations)
+
+        required_window_payload = None
+        if required_time_window:
+            required_window_payload = {
+                "start": self._to_naive_utc(required_time_window.start),
+                "end": self._to_naive_utc(required_time_window.end),
+                "granularity": required_time_window.granularity,
+            }
 
         return {
             "content": content,
@@ -89,9 +156,9 @@ class AnalysisService:
                 for row in analysis.evidence_items[:8]
             ],
             "time_range": {
-                "start": self._to_naive_utc(time_window.start),
-                "end": self._to_naive_utc(time_window.end),
-                "days": max(1, (time_window.end.date() - time_window.start.date()).days + 1),
+                "start": self._to_naive_utc(analysis.time_window.start),
+                "end": self._to_naive_utc(analysis.time_window.end),
+                "days": max(1, (analysis.time_window.end.date() - analysis.time_window.start.date()).days + 1),
             },
             "analysis": {
                 "intent_id": analysis.intent_id,
@@ -105,11 +172,59 @@ class AnalysisService:
                 "limitations": analysis.limitations,
                 "confidence": analysis.confidence,
             },
+            "analysis_ready": analysis_ready,
+            "requires_sources": requires_sources,
+            "requirement_reason_codes": reason_codes,
+            "required_time_window": required_window_payload,
         }
 
-    def _calculate_calendar_specific_day(self, *, items: Sequence[UnifiedItem], window: TimeWindow) -> AnalysisResult:
-        event_rows, limitations = self._collect_calendar_events(items=items, window=window)
+    def _evaluate_calendar_readiness(
+        self,
+        *,
+        store,
+        time_window: TimeWindow,
+        now: datetime,
+    ) -> Dict[str, object]:
+        status = store.get_calendar_feature_status(
+            now=self._to_naive_utc(now),
+            ttl_hours=self.calendar_ttl_hours,
+        )
+        reason_codes: List[str] = []
 
+        available = bool(status.get("available"))
+        if not available:
+            reason_codes.append(REASON_CALENDAR_DATA_MISSING)
+        elif not bool(status.get("fresh")):
+            reason_codes.append(REASON_CALENDAR_DATA_STALE)
+
+        coverage_start = status.get("coverage_start")
+        coverage_end = status.get("coverage_end")
+        if coverage_start and coverage_end:
+            coverage_start_utc = self._to_aware_utc(coverage_start)
+            coverage_end_utc = self._to_aware_utc(coverage_end)
+            window_start_utc = self._to_aware_utc(time_window.start)
+            window_end_utc = self._to_aware_utc(time_window.end)
+            # Feature-store coverage is event-based (sparse), not continuous.
+            # Treat as gap only when requested window is fully outside known bounds.
+            if window_end_utc < coverage_start_utc or window_start_utc > coverage_end_utc:
+                reason_codes.append(REASON_CALENDAR_COVERAGE_GAP)
+        elif available:
+            reason_codes.append(REASON_CALENDAR_COVERAGE_GAP)
+
+        reason_codes = list(dict.fromkeys(reason_codes))
+        return {
+            "ready": len(reason_codes) == 0,
+            "reason_codes": reason_codes,
+            "status": status,
+        }
+
+    def _calculate_calendar_specific_day(
+        self,
+        *,
+        events: Sequence[Dict[str, object]],
+        window: TimeWindow,
+    ) -> AnalysisResult:
+        event_rows, limitations = self._collect_calendar_events(events=events, window=window)
         insights = [
             {
                 "metric": "event_count",
@@ -117,9 +232,7 @@ class AnalysisService:
                 "label": "Antal kalenderhändelser",
             }
         ]
-
-        confidence = 0.95 if event_rows else 0.75
-
+        confidence = 0.95 if event_rows else 0.85
         return AnalysisResult(
             intent_id=CALENDAR_SPECIFIC_DAY_INTENT,
             time_window=window,
@@ -127,29 +240,25 @@ class AnalysisService:
             patterns=[],
             limitations=limitations,
             confidence=confidence,
-            evidence_items=[self._to_evidence_item(item, dt) for item, dt in event_rows],
+            evidence_items=[self._to_evidence_item(event, dt) for event, dt in event_rows],
         )
 
-    def _calculate_calendar_least_loaded_day(self, *, items: Sequence[UnifiedItem], window: TimeWindow) -> AnalysisResult:
-        event_rows, limitations = self._collect_calendar_events(items=items, window=window)
+    def _calculate_calendar_least_loaded_day(
+        self,
+        *,
+        events: Sequence[Dict[str, object]],
+        window: TimeWindow,
+    ) -> AnalysisResult:
+        event_rows, limitations = self._collect_calendar_events(events=events, window=window)
+        day_counts = self._seed_day_counts(window)
 
-        day_cursor = window.start.date()
-        day_counts: Dict[str, int] = {}
-        while day_cursor <= window.end.date():
-            day_counts[day_cursor.isoformat()] = 0
-            day_cursor = day_cursor + timedelta(days=1)
-
-        for _item, dt in event_rows:
+        for _event, dt in event_rows:
             key = dt.date().isoformat()
             if key in day_counts:
                 day_counts[key] += 1
 
-        if day_counts:
-            ranked = sorted(day_counts.items(), key=lambda row: (row[1], row[0]))
-            best_day, best_count = ranked[0]
-        else:
-            best_day = window.start.date().isoformat()
-            best_count = 0
+        ranked = sorted(day_counts.items(), key=lambda row: (row[1], row[0]))
+        best_day, best_count = ranked[0] if ranked else (window.start.date().isoformat(), 0)
 
         insights = [
             {
@@ -161,15 +270,10 @@ class AnalysisService:
         patterns = [
             {
                 "metric": "daily_event_counts",
-                "values": [
-                    {"day": day, "event_count": count}
-                    for day, count in sorted(day_counts.items())
-                ],
+                "values": [{"day": day, "event_count": count} for day, count in sorted(day_counts.items())],
             }
         ]
-
-        confidence = 0.9 if day_counts else 0.7
-
+        confidence = 0.9 if ranked else 0.8
         return AnalysisResult(
             intent_id=CALENDAR_LEAST_LOADED_DAY_INTENT,
             time_window=window,
@@ -177,72 +281,112 @@ class AnalysisService:
             patterns=patterns,
             limitations=limitations,
             confidence=confidence,
-            evidence_items=[self._to_evidence_item(item, dt) for item, dt in event_rows][:8],
+            evidence_items=[self._to_evidence_item(event, dt) for event, dt in event_rows][:8],
         )
 
     def _collect_calendar_events(
         self,
         *,
-        items: Sequence[UnifiedItem],
+        events: Sequence[Dict[str, object]],
         window: TimeWindow,
-    ) -> tuple[List[tuple[UnifiedItem, datetime]], List[str]]:
-        rows: List[tuple[UnifiedItem, datetime]] = []
+    ) -> tuple[List[tuple[Dict[str, object], datetime]], List[str]]:
+        rows: List[tuple[Dict[str, object], datetime]] = []
         limitations: List[str] = []
 
-        for item in items:
-            if not self._is_calendar_event(item):
-                continue
+        window_start = self._to_local(window.start)
+        window_end = self._to_local(window.end)
 
-            event_time = self._normalized_event_time(item)
-            if event_time is None:
+        for event in events:
+            start_at = self._normalized_event_start(event)
+            end_at = self._normalized_event_end(event, start_at=start_at)
+            if start_at is None:
                 limitations.append("Vissa kalenderobjekt saknar tidsfält och kunde inte tolkas.")
-                logger.warning("calendar analytics: missing timestamp for item id=%s source=%s", item.id, item.source)
+                logger.warning("calendar analytics: missing timestamp for event id=%s", event.get("id"))
                 continue
 
-            if item.end_at and item.start_at and item.end_at < item.start_at:
+            if end_at < start_at:
                 limitations.append("Vissa kalenderobjekt har inkonsistent start/slut-tid.")
-                logger.warning("calendar analytics: inconsistent event interval id=%s", item.id)
+                logger.warning("calendar analytics: inconsistent event interval id=%s", event.get("id"))
+                continue
 
-            if window.start <= event_time <= window.end:
-                rows.append((item, event_time))
+            if start_at <= window_end and end_at >= window_start:
+                rows.append((event, start_at))
 
-        rows.sort(key=lambda row: (row[1], row[0].title or ""))
-        limitations = list(dict.fromkeys(limitations))
-        return rows, limitations
+        rows.sort(key=lambda row: (row[1], str(row[0].get("title") or "")))
+        return rows, list(dict.fromkeys(limitations))
 
-    @staticmethod
-    def _is_calendar_event(item: UnifiedItem) -> bool:
-        item_type = getattr(getattr(item, "type", None), "value", None) or str(getattr(item, "type", "") or "")
-        source = (item.source or "").strip().lower()
-        return item_type == "event" or source in {"calendar", "gcal"}
-
-    def _normalized_event_time(self, item: UnifiedItem) -> Optional[datetime]:
-        dt = item.start_at or item.updated_at or item.created_at
-        if not dt:
+    def _normalized_event_start(self, event: Dict[str, object]) -> Optional[datetime]:
+        dt = (
+            event.get("start_at")
+            or event.get("updated_at")
+            or event.get("ingested_at")
+            or event.get("last_modified_at")
+        )
+        if not isinstance(dt, datetime):
             return None
+        return self._to_local(dt)
 
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(self.temporal_resolver.timezone)
-
-    @staticmethod
-    def _to_naive_utc(dt: datetime) -> datetime:
-        if dt.tzinfo is None:
-            return dt
-        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    def _normalized_event_end(self, event: Dict[str, object], *, start_at: Optional[datetime]) -> datetime:
+        dt = event.get("end_at")
+        if isinstance(dt, datetime):
+            return self._to_local(dt)
+        return start_at or self._to_local(utcnow())
 
     @staticmethod
-    def _to_evidence_item(item: UnifiedItem, dt: datetime) -> dict:
-        body = (item.body or "").strip()
+    def _seed_day_counts(window: TimeWindow) -> Dict[str, int]:
+        cursor = window.start.date()
+        end_date = window.end.date()
+        day_counts: Dict[str, int] = {}
+        while cursor <= end_date:
+            day_counts[cursor.isoformat()] = 0
+            cursor = cursor + timedelta(days=1)
+        return day_counts
+
+    @staticmethod
+    def _limitations_for_reasons(reason_codes: Sequence[str]) -> List[str]:
+        mapping = {
+            REASON_CALENDAR_DATA_MISSING: "Kalenderdata saknas för perioden.",
+            REASON_CALENDAR_DATA_STALE: "Kalenderdata är äldre än 24 timmar.",
+            REASON_CALENDAR_COVERAGE_GAP: "Kalenderdata täcker inte hela den efterfrågade perioden.",
+        }
+        limitations = [mapping[code] for code in reason_codes if code in mapping]
+        if not limitations:
+            limitations.append("Kalenderdata saknas eller är otillräcklig för analys.")
+        return limitations
+
+    @staticmethod
+    def _missing_data_narrative(*, reason_codes: Sequence[str], limitations: Sequence[str]) -> str:
+        messages: List[str] = []
+        if REASON_CALENDAR_DATA_MISSING in reason_codes:
+            messages.append("Jag saknar kalenderdata för att kunna analysera frågan.")
+        if REASON_CALENDAR_DATA_STALE in reason_codes:
+            messages.append("Den kalenderdata som finns är äldre än 24 timmar.")
+        if REASON_CALENDAR_COVERAGE_GAP in reason_codes:
+            messages.append("Kalenderdata täcker inte hela den period du frågar om.")
+
+        if not messages:
+            messages.append("Jag behöver mer kalenderdata innan jag kan ge ett säkert analyssvar.")
+
+        if limitations:
+            return " ".join(messages) + "\n\nBegränsningar: " + "; ".join(limitations)
+        return " ".join(messages)
+
+    @staticmethod
+    def _to_evidence_item(event: Dict[str, object], start_dt: datetime) -> dict:
+        notes = str(event.get("notes") or "").strip()
+        location = str(event.get("location") or "").strip()
+        body_parts = [part for part in [notes, location] if part]
+        body = "\n".join(body_parts).strip()
         if len(body) > 280:
             body = body[:279].rstrip() + "…"
+
         return {
-            "id": str(item.id),
+            "id": str(event.get("id") or ""),
             "source": "calendar",
             "type": "event",
-            "title": (item.title or "(Utan titel)").strip() or "(Utan titel)",
+            "title": str(event.get("title") or "(Utan titel)").strip() or "(Utan titel)",
             "body": body,
-            "date": AnalysisService._to_naive_utc(dt),
+            "date": AnalysisService._to_naive_utc(start_dt),
             "url": None,
         }
 
@@ -272,11 +416,10 @@ class AnalysisService:
         if self.text_service is not None:
             try:
                 generated = self.text_service.generate_text(prompt, max_length=250, language=language)
-                if isinstance(generated, dict):
-                    if "error" not in generated:
-                        text = (generated.get("generated_text") or "").strip()
-                        if text:
-                            return text
+                if isinstance(generated, dict) and "error" not in generated:
+                    text = str(generated.get("generated_text") or "").strip()
+                    if text:
+                        return text
             except Exception as exc:
                 logger.warning("analytics narrative generation failed, using fallback: %s", exc)
 
@@ -303,3 +446,18 @@ class AnalysisService:
             return f"Minst belastade dag är {day} med {count} händelser." + limitations_suffix
 
         return "Jag kunde inte sammanställa ett analytiskt svar för frågan." + limitations_suffix
+
+    def _to_local(self, dt: datetime) -> datetime:
+        return self._to_aware_utc(dt).astimezone(self.temporal_resolver.timezone)
+
+    @staticmethod
+    def _to_aware_utc(dt: datetime) -> datetime:
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+
+    @staticmethod
+    def _to_naive_utc(dt: datetime) -> datetime:
+        if dt.tzinfo is None:
+            return dt
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)

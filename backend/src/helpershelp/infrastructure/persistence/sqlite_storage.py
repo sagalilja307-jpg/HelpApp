@@ -5,7 +5,7 @@ import os
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from uuid import uuid4
@@ -28,6 +28,14 @@ def _dt(value: Optional[str]) -> Optional[datetime]:
         return None
 
 
+def _naive_utc(value: Optional[datetime]) -> Optional[datetime]:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 def _dump_model(obj: Any) -> Dict[str, Any]:
     if obj is None:
         return {}
@@ -48,6 +56,12 @@ def _dump_model(obj: Any) -> Dict[str, Any]:
     if isinstance(obj, dict):
         return obj
     raise TypeError(f"Unsupported model type: {type(obj)}")
+
+
+def _json_default(value: Any):
+    if isinstance(value, datetime):
+        return value.isoformat()
+    raise TypeError(f"Unsupported JSON type: {type(value)}")
 
 
 @dataclass(frozen=True)
@@ -166,6 +180,29 @@ class SqliteStore:
                     cursor TEXT,
                     updated_at TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS calendar_feature_events (
+                    id TEXT PRIMARY KEY,
+                    event_identifier TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    notes TEXT,
+                    location TEXT,
+                    start_at TEXT NOT NULL,
+                    end_at TEXT NOT NULL,
+                    is_all_day INTEGER NOT NULL,
+                    calendar_title TEXT,
+                    last_modified_at TEXT,
+                    snapshot_hash TEXT NOT NULL,
+                    ingested_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    payload_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_calendar_feature_events_start_at
+                    ON calendar_feature_events(start_at);
+                CREATE INDEX IF NOT EXISTS idx_calendar_feature_events_updated_at
+                    ON calendar_feature_events(updated_at);
+                CREATE INDEX IF NOT EXISTS idx_calendar_feature_events_event_identifier
+                    ON calendar_feature_events(event_identifier);
                 """
             )
 
@@ -398,6 +435,182 @@ class SqliteStore:
         with self._conn() as conn:
             row = conn.execute("SELECT * FROM unified_items WHERE id=?", (item_id,)).fetchone()
         return self._row_to_item(row) if row else None
+
+    def upsert_calendar_feature_events(self, events: Iterable[Dict[str, Any]]) -> Tuple[int, int]:
+        inserted = 0
+        updated = 0
+        now_iso = utcnow().isoformat()
+
+        with self._conn() as conn:
+            for event in events:
+                row_id = str(event.get("id") or "")
+                snapshot_hash = str(event.get("snapshot_hash") or "")
+                if not row_id or not snapshot_hash:
+                    continue
+
+                existing = conn.execute(
+                    "SELECT snapshot_hash FROM calendar_feature_events WHERE id=?",
+                    (row_id,),
+                ).fetchone()
+                if existing and existing["snapshot_hash"] == snapshot_hash:
+                    continue
+
+                payload = json.dumps(event, ensure_ascii=False, default=_json_default)
+                row_payload = (
+                    row_id,
+                    str(event.get("event_identifier") or ""),
+                    str(event.get("title") or ""),
+                    event.get("notes"),
+                    event.get("location"),
+                    _iso(event.get("start_at")) if isinstance(event.get("start_at"), datetime) else str(event.get("start_at") or ""),
+                    _iso(event.get("end_at")) if isinstance(event.get("end_at"), datetime) else str(event.get("end_at") or ""),
+                    1 if bool(event.get("is_all_day")) else 0,
+                    event.get("calendar_title"),
+                    _iso(event.get("last_modified_at")) if isinstance(event.get("last_modified_at"), datetime) else event.get("last_modified_at"),
+                    snapshot_hash,
+                    now_iso,
+                    now_iso,
+                    payload,
+                )
+
+                if existing:
+                    conn.execute(
+                        """
+                        UPDATE calendar_feature_events SET
+                            event_identifier=?,
+                            title=?,
+                            notes=?,
+                            location=?,
+                            start_at=?,
+                            end_at=?,
+                            is_all_day=?,
+                            calendar_title=?,
+                            last_modified_at=?,
+                            snapshot_hash=?,
+                            updated_at=?,
+                            payload_json=?
+                        WHERE id=?
+                        """,
+                        (
+                            row_payload[1],
+                            row_payload[2],
+                            row_payload[3],
+                            row_payload[4],
+                            row_payload[5],
+                            row_payload[6],
+                            row_payload[7],
+                            row_payload[8],
+                            row_payload[9],
+                            row_payload[10],
+                            row_payload[12],
+                            row_payload[13],
+                            row_payload[0],
+                        ),
+                    )
+                    updated += 1
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO calendar_feature_events (
+                            id,
+                            event_identifier,
+                            title,
+                            notes,
+                            location,
+                            start_at,
+                            end_at,
+                            is_all_day,
+                            calendar_title,
+                            last_modified_at,
+                            snapshot_hash,
+                            ingested_at,
+                            updated_at,
+                            payload_json
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        row_payload,
+                    )
+                    inserted += 1
+        return inserted, updated
+
+    def list_calendar_feature_events(
+        self,
+        *,
+        start: datetime,
+        end: datetime,
+        limit: int = 10000,
+    ) -> List[Dict[str, Any]]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM calendar_feature_events
+                WHERE start_at <= ? AND end_at >= ?
+                ORDER BY start_at ASC
+                LIMIT ?
+                """,
+                (end.isoformat(), start.isoformat(), int(limit)),
+            ).fetchall()
+
+        out: List[Dict[str, Any]] = []
+        for row in rows:
+            out.append(
+                {
+                    "id": row["id"],
+                    "event_identifier": row["event_identifier"],
+                    "title": row["title"],
+                    "notes": row["notes"],
+                    "location": row["location"],
+                    "start_at": _dt(row["start_at"]),
+                    "end_at": _dt(row["end_at"]),
+                    "is_all_day": bool(row["is_all_day"]),
+                    "calendar_title": row["calendar_title"],
+                    "last_modified_at": _dt(row["last_modified_at"]),
+                    "snapshot_hash": row["snapshot_hash"],
+                    "ingested_at": _dt(row["ingested_at"]),
+                    "updated_at": _dt(row["updated_at"]),
+                }
+            )
+        return out
+
+    def get_calendar_feature_status(self, now: datetime, ttl_hours: int = 24) -> Dict[str, Any]:
+        with self._conn() as conn:
+            row = conn.execute(
+                """
+                SELECT
+                    COUNT(*) AS snapshot_count,
+                    MIN(start_at) AS coverage_start,
+                    MAX(end_at) AS coverage_end,
+                    MAX(updated_at) AS last_updated
+                FROM calendar_feature_events
+                """
+            ).fetchone()
+
+        snapshot_count = int((row["snapshot_count"] if row else 0) or 0)
+        coverage_start = _naive_utc(_dt(row["coverage_start"])) if row else None
+        coverage_end = _naive_utc(_dt(row["coverage_end"])) if row else None
+        last_updated = _naive_utc(_dt(row["last_updated"])) if row else None
+
+        now_utc = _naive_utc(now) or utcnow()
+
+        coverage_days = None
+        if coverage_start and coverage_end:
+            coverage_days = max(1, (coverage_end.date() - coverage_start.date()).days + 1)
+
+        fresh = False
+        if last_updated:
+            fresh = (now_utc - last_updated).total_seconds() <= max(0, int(ttl_hours)) * 3600
+
+        return {
+            "available": snapshot_count > 0,
+            "last_updated": last_updated,
+            "coverage_start": coverage_start,
+            "coverage_end": coverage_end,
+            "coverage_days": coverage_days,
+            "snapshot_count": snapshot_count,
+            "fresh": fresh,
+            "freshness_ttl_hours": int(ttl_hours),
+        }
 
     def upsert_edges(self, edges: Iterable[ItemEdge]) -> Tuple[int, int]:
         inserted = 0

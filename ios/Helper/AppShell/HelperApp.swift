@@ -109,6 +109,8 @@ struct HelperApp: App {
             )
             let ingestService = AssistantIngestAPIService.shared
             let backendQueryService = BackendQueryAPIService.shared
+            let featureStatusService = FeatureStatusAPIService.shared
+            let calendarFeatureBuilder = CalendarFeatureBuilder()
 
             self.queryPipeline = QueryPipeline(
                 interpreter: interpreter,
@@ -118,7 +120,9 @@ struct HelperApp: App {
                 backendQueryService: backendQueryService,
                 checkpointStore: checkpointStore,
                 sourceConnectionStore: sourceConnectionStore,
-                memoryService: service
+                memoryService: service,
+                featureStatusService: featureStatusService,
+                calendarFeatureBuilder: calendarFeatureBuilder
             )
             
             // 5️⃣ Other services

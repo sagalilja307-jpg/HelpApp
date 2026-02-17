@@ -26,6 +26,7 @@ final class ChatViewModel {
     var extraContext: String = ""
     var isSending = false
     var error: String? = nil
+    var lastBackendAnalyticsIntent: String? = nil
 
     // MARK: - Pipeline
 
@@ -68,7 +69,13 @@ final class ChatViewModel {
                 text: fullPrompt,
                 source: .userTyped
             )
-            let result = try await pipeline.run(uq)
+            let result = try await pipeline.run(
+                uq,
+                lastBackendAnalyticsIntent: lastBackendAnalyticsIntent
+            )
+            if let intent = result.backendAnalyticsIntent {
+                lastBackendAnalyticsIntent = intent
+            }
             let responseText = result.answer ?? "(Inget svar från modellen)"
             messages.append(.init(role: .assistant, text: responseText))
         } catch {

@@ -1,13 +1,12 @@
 import os
 import tempfile
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from helpershelp.assistant.models import UnifiedItem, UnifiedItemType
-from helpershelp.domain.value_objects.time_utils import utcnow
 from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore, StoreConfig
 from helpershelp.testing.embedding_test_utils import install_deterministic_embedding_stubs
 
@@ -36,19 +35,24 @@ class QueryAnalyticsDispatchTests(unittest.TestCase):
 
     def test_specific_day_query_uses_analytics_path(self):
         store = self._get_store()
-        now = utcnow()
-
-        event = UnifiedItem(
-            source="calendar",
-            type=UnifiedItemType.event,
-            title="Team standup",
-            body="Daily sync",
-            created_at=now,
-            updated_at=now,
-            start_at=now,
-            end_at=now + timedelta(minutes=30),
+        now = datetime.now(timezone.utc)
+        store.upsert_calendar_feature_events(
+            [
+                {
+                    "id": "calendar:evt-standup",
+                    "event_identifier": "evt-standup",
+                    "title": "Team standup",
+                    "notes": "Daily sync",
+                    "location": "Office",
+                    "start_at": now,
+                    "end_at": now + timedelta(minutes=30),
+                    "is_all_day": False,
+                    "calendar_title": "Work",
+                    "last_modified_at": now,
+                    "snapshot_hash": "sha256:standup-v1",
+                }
+            ]
         )
-        store.upsert_items([event])
 
         client = TestClient(self.app)
         resp = client.post(
@@ -62,6 +66,8 @@ class QueryAnalyticsDispatchTests(unittest.TestCase):
         analysis = payload.get("analysis")
         self.assertIsInstance(analysis, dict)
         self.assertEqual(analysis.get("intent_id"), "calendar.specific_day_query")
+        self.assertTrue(payload.get("analysis_ready"))
+        self.assertEqual(payload.get("requires_sources"), [])
 
         insights = analysis.get("insights") or []
         self.assertGreaterEqual(len(insights), 1)
@@ -70,17 +76,20 @@ class QueryAnalyticsDispatchTests(unittest.TestCase):
 
     def test_non_analytics_query_falls_back_to_retrieval(self):
         store = self._get_store()
-        now = utcnow()
-
-        note = UnifiedItem(
-            source="notes",
-            type=UnifiedItemType.note,
-            title="Träning",
-            body="Löpning 5 km",
-            created_at=now,
-            updated_at=now,
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        store.upsert_items(
+            [
+                UnifiedItem(
+                    id="note:training-1",
+                    source="notes",
+                    type=UnifiedItemType.note,
+                    title="Träning",
+                    body="Löpning 5 km",
+                    created_at=now,
+                    updated_at=now,
+                )
+            ]
         )
-        store.upsert_items([note])
 
         client = TestClient(self.app)
         resp = client.post(
@@ -94,48 +103,59 @@ class QueryAnalyticsDispatchTests(unittest.TestCase):
         analysis = payload.get("analysis")
         self.assertTrue(analysis is None or analysis == {})
         self.assertIn("content", payload)
+        self.assertTrue(payload.get("analysis_ready"))
+        self.assertEqual(payload.get("requires_sources"), [])
 
     def test_least_loaded_day_is_deterministic(self):
         store = self._get_store()
-        now = utcnow()
+        now = datetime.now(timezone.utc)
 
         week_start = now - timedelta(days=now.weekday())
-        monday = datetime(week_start.year, week_start.month, week_start.day, 9, 0, 0)
+        monday = datetime(week_start.year, week_start.month, week_start.day, 9, 0, 0, tzinfo=timezone.utc)
         tuesday = monday + timedelta(days=1)
 
-        items = [
-            UnifiedItem(
-                source="calendar",
-                type=UnifiedItemType.event,
-                title="Monday 1",
-                body="",
-                created_at=monday,
-                updated_at=monday,
-                start_at=monday,
-                end_at=monday + timedelta(hours=1),
-            ),
-            UnifiedItem(
-                source="calendar",
-                type=UnifiedItemType.event,
-                title="Monday 2",
-                body="",
-                created_at=monday,
-                updated_at=monday,
-                start_at=monday + timedelta(hours=2),
-                end_at=monday + timedelta(hours=3),
-            ),
-            UnifiedItem(
-                source="calendar",
-                type=UnifiedItemType.event,
-                title="Tuesday 1",
-                body="",
-                created_at=tuesday,
-                updated_at=tuesday,
-                start_at=tuesday,
-                end_at=tuesday + timedelta(hours=1),
-            ),
+        events = [
+            {
+                "id": "calendar:evt-mon-1",
+                "event_identifier": "evt-mon-1",
+                "title": "Monday 1",
+                "notes": "",
+                "location": None,
+                "start_at": monday,
+                "end_at": monday + timedelta(hours=1),
+                "is_all_day": False,
+                "calendar_title": "Work",
+                "last_modified_at": monday,
+                "snapshot_hash": "sha256:evt-mon-1-v1",
+            },
+            {
+                "id": "calendar:evt-mon-2",
+                "event_identifier": "evt-mon-2",
+                "title": "Monday 2",
+                "notes": "",
+                "location": None,
+                "start_at": monday + timedelta(hours=2),
+                "end_at": monday + timedelta(hours=3),
+                "is_all_day": False,
+                "calendar_title": "Work",
+                "last_modified_at": monday + timedelta(hours=2),
+                "snapshot_hash": "sha256:evt-mon-2-v1",
+            },
+            {
+                "id": "calendar:evt-tue-1",
+                "event_identifier": "evt-tue-1",
+                "title": "Tuesday 1",
+                "notes": "",
+                "location": None,
+                "start_at": tuesday,
+                "end_at": tuesday + timedelta(hours=1),
+                "is_all_day": False,
+                "calendar_title": "Work",
+                "last_modified_at": tuesday,
+                "snapshot_hash": "sha256:evt-tue-1-v1",
+            },
         ]
-        store.upsert_items(items)
+        store.upsert_calendar_feature_events(events)
 
         client = TestClient(self.app)
         resp = client.post(
@@ -153,6 +173,7 @@ class QueryAnalyticsDispatchTests(unittest.TestCase):
         analysis = payload.get("analysis")
         self.assertIsInstance(analysis, dict)
         self.assertEqual(analysis.get("intent_id"), "calendar.least_loaded_day")
+        self.assertTrue(payload.get("analysis_ready"))
 
         insights = analysis.get("insights") or []
         self.assertTrue(any(row.get("metric") == "least_loaded_day" for row in insights))

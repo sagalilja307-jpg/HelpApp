@@ -98,8 +98,27 @@ class DashboardResponse(BaseModel):
     proposals: List[Proposal]
 
 
+class CalendarFeatureEvent(BaseModel):
+    id: str
+    event_identifier: str
+    title: str = ""
+    notes: Optional[str] = None
+    location: Optional[str] = None
+    start_at: datetime
+    end_at: datetime
+    is_all_day: bool = False
+    calendar_title: Optional[str] = None
+    last_modified_at: Optional[datetime] = None
+    snapshot_hash: str
+
+
+class FeatureIngestPayload(BaseModel):
+    calendar_events: List[CalendarFeatureEvent] = Field(default_factory=list)
+
+
 class IngestRequest(BaseModel):
-    items: List[UnifiedItem]
+    items: List[UnifiedItem] = Field(default_factory=list)
+    features: Optional[FeatureIngestPayload] = None
 
 
 class SyncGmailRequest(BaseModel):

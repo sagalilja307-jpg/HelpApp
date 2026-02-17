@@ -4,6 +4,94 @@ import XCTest
 @MainActor
 final class BackendQueryPipelineTests: XCTestCase {
 
+    func testBackendResponseDecodesNaiveDatesAndAnalysis() throws {
+        let json = """
+        {
+          "content": "Jag hittade 1 kalenderhändelse i den perioden.",
+          "confidence": 0.95,
+          "analysis_ready": true,
+          "requires_sources": [],
+          "requirement_reason_codes": [],
+          "required_time_window": null,
+          "evidence_items": [
+            {
+              "id": "evt-1",
+              "source": "calendar",
+              "type": "event",
+              "title": "Team standup",
+              "body": "Daily sync",
+              "date": "2026-02-17T09:00:00",
+              "url": null
+            }
+          ],
+          "time_range": {
+            "start": "2026-02-17T00:00:00",
+            "end": "2026-02-17T23:59:59",
+            "days": 1
+          },
+          "analysis": {
+            "intent_id": "calendar.specific_day_query",
+            "time_window": {
+              "start": "2026-02-17T00:00:00",
+              "end": "2026-02-17T23:59:59",
+              "granularity": "day"
+            },
+            "insights": [
+              { "metric": "event_count", "value": 1 }
+            ],
+            "patterns": [],
+            "limitations": [],
+            "confidence": 0.95
+          }
+        }
+        """
+        let data = try XCTUnwrap(json.data(using: .utf8))
+
+        let decoded = try BackendQueryAPIService.decoder.decode(BackendLLMResponseDTO.self, from: data)
+
+        XCTAssertEqual(decoded.content, "Jag hittade 1 kalenderhändelse i den perioden.")
+        XCTAssertEqual(decoded.timeRange?.days, 1)
+        XCTAssertEqual(decoded.analysis?.intentId, "calendar.specific_day_query")
+        XCTAssertEqual(decoded.analysis?.timeWindow.granularity, "day")
+        XCTAssertEqual(decoded.analysisReady, true)
+        XCTAssertEqual(decoded.requiresSources, [])
+        XCTAssertEqual(decoded.requirementReasonCodes, [])
+        XCTAssertEqual(decoded.evidenceItems?.first?.title, "Team standup")
+    }
+
+    func testBackendResponseDecodesWhenSourceGatingFieldsAreMissing() throws {
+        let json = """
+        {
+          "content": "Hej"
+        }
+        """
+        let data = try XCTUnwrap(json.data(using: .utf8))
+        let decoded = try BackendQueryAPIService.decoder.decode(BackendLLMResponseDTO.self, from: data)
+
+        XCTAssertEqual(decoded.content, "Hej")
+        XCTAssertNil(decoded.analysisReady)
+        XCTAssertNil(decoded.requiresSources)
+        XCTAssertNil(decoded.requirementReasonCodes)
+        XCTAssertNil(decoded.requiredTimeWindow)
+    }
+
+    func testBackendQueryRequestEncodesQueryAndQuestion() throws {
+        let request = BackendQueryRequestDTO(
+            query: "Vad gjorde jag igår?",
+            question: "Vad gjorde jag igår?",
+            language: "sv",
+            sources: ["assistant_store"],
+            days: 7,
+            dataFilter: nil
+        )
+        let data = try BackendQueryAPIService.encoder.encode(request)
+        let jsonObject = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        XCTAssertEqual(jsonObject["query"] as? String, "Vad gjorde jag igår?")
+        XCTAssertEqual(jsonObject["question"] as? String, "Vad gjorde jag igår?")
+        XCTAssertEqual(jsonObject["language"] as? String, "sv")
+    }
+
     func testPipelineRunsCollectIngestQueryInOrder() async throws {
         let recorder = CallRecorder()
 
@@ -371,6 +459,230 @@ final class BackendQueryPipelineTests: XCTestCase {
         ])
         XCTAssertEqual(checkpointStore.updatedSources, [.contacts, .photos])
     }
+
+    func testCalendarRequirementTriggersSingleAutoRetry() async throws {
+        let recorder = CallRecorder()
+        let backend = SequenceMockBackendQueryService(
+            recorder: recorder,
+            responses: [
+                BackendLLMResponseDTO(
+                    content: "Need calendar",
+                    confidence: nil,
+                    sourceDocuments: nil,
+                    evidenceItems: nil,
+                    usedSources: nil,
+                    timeRange: nil,
+                    analysis: nil,
+                    analysisReady: false,
+                    requiresSources: ["calendar"],
+                    requirementReasonCodes: ["calendar_data_missing"],
+                    requiredTimeWindow: BackendRequiredTimeWindowDTO(
+                        start: Date(timeIntervalSince1970: 1000),
+                        end: Date(timeIntervalSince1970: 2000),
+                        granularity: "day"
+                    )
+                ),
+                BackendLLMResponseDTO(
+                    content: "Ready after ingest",
+                    confidence: nil,
+                    sourceDocuments: nil,
+                    evidenceItems: nil,
+                    usedSources: nil,
+                    timeRange: nil,
+                    analysis: nil,
+                    analysisReady: true,
+                    requiresSources: [],
+                    requirementReasonCodes: [],
+                    requiredTimeWindow: nil
+                ),
+            ]
+        )
+
+        let pipeline = QueryPipeline(
+            interpreter: MockInterpreter(result: QueryInterpretation(
+                intent: .summary,
+                requiredSources: [.memory],
+                timeRange: nil,
+                confidence: nil
+            )),
+            access: MockAccess(),
+            fetcher: MockFetcher(
+                recorder: recorder,
+                result: QueryCollectedData(
+                    timeRange: DateInterval(start: Date(), end: Date()),
+                    items: [],
+                    entries: [],
+                    missingAccess: []
+                )
+            ),
+            ingestService: MockIngestService(recorder: recorder),
+            backendQueryService: backend,
+            calendarFeatureBuilder: MockCalendarFeatureBuilder(
+                events: [
+                    CalendarFeatureEventIngestDTO(
+                        id: "calendar:evt-1",
+                        eventIdentifier: "evt-1",
+                        title: "Mote",
+                        notes: nil,
+                        location: nil,
+                        startAt: Date(),
+                        endAt: Date().addingTimeInterval(3600),
+                        isAllDay: false,
+                        calendarTitle: "Work",
+                        lastModifiedAt: Date(),
+                        snapshotHash: "sha256:test"
+                    )
+                ]
+            )
+        )
+
+        let result = try await pipeline.run(UserQuery(text: "Vad gjorde jag idag?", source: .userTyped))
+
+        XCTAssertEqual(recorder.calls, ["collect", "query", "ingest_features", "query"])
+        XCTAssertEqual(backend.callCount, 2)
+        XCTAssertEqual(result.answer, "Ready after ingest")
+    }
+
+    func testNoRetryLoopWhenCalendarPermissionIsDenied() async throws {
+        let recorder = CallRecorder()
+        let backend = SequenceMockBackendQueryService(
+            recorder: recorder,
+            responses: [
+                BackendLLMResponseDTO(
+                    content: "Need calendar",
+                    confidence: nil,
+                    sourceDocuments: nil,
+                    evidenceItems: nil,
+                    usedSources: nil,
+                    timeRange: nil,
+                    analysis: nil,
+                    analysisReady: false,
+                    requiresSources: ["calendar"],
+                    requirementReasonCodes: ["calendar_data_missing"],
+                    requiredTimeWindow: nil
+                )
+            ]
+        )
+
+        let pipeline = QueryPipeline(
+            interpreter: MockInterpreter(result: QueryInterpretation(
+                intent: .summary,
+                requiredSources: [.memory],
+                timeRange: nil,
+                confidence: nil
+            )),
+            access: MockAccessWithCalendarDenied(),
+            fetcher: MockFetcher(
+                recorder: recorder,
+                result: QueryCollectedData(
+                    timeRange: DateInterval(start: Date(), end: Date()),
+                    items: [],
+                    entries: [],
+                    missingAccess: []
+                )
+            ),
+            ingestService: MockIngestService(recorder: recorder),
+            backendQueryService: backend
+        )
+
+        let result = try await pipeline.run(UserQuery(text: "Vad gjorde jag idag?", source: .userTyped))
+
+        XCTAssertEqual(recorder.calls, ["collect", "query"])
+        XCTAssertEqual(backend.callCount, 1)
+        XCTAssertTrue(result.answer?.contains("Kalenderåtkomst saknas") == true)
+    }
+
+    func testHybridPreflightUsesFeatureStatusWhenLastIntentIsCalendar() async throws {
+        let recorder = CallRecorder()
+        let backend = SequenceMockBackendQueryService(
+            recorder: recorder,
+            responses: [
+                BackendLLMResponseDTO(
+                    content: "Calendar analytics ready",
+                    confidence: nil,
+                    sourceDocuments: nil,
+                    evidenceItems: nil,
+                    usedSources: nil,
+                    timeRange: nil,
+                    analysis: BackendAnalysisDTO(
+                        intentId: "calendar.specific_day_query",
+                        timeWindow: BackendAnalysisTimeWindowDTO(
+                            start: Date(),
+                            end: Date(),
+                            granularity: "day"
+                        ),
+                        insights: [],
+                        patterns: [],
+                        limitations: [],
+                        confidence: nil
+                    ),
+                    analysisReady: true,
+                    requiresSources: [],
+                    requirementReasonCodes: [],
+                    requiredTimeWindow: nil
+                )
+            ]
+        )
+
+        let pipeline = QueryPipeline(
+            interpreter: MockInterpreter(result: QueryInterpretation(
+                intent: .summary,
+                requiredSources: [.memory],
+                timeRange: nil,
+                confidence: nil
+            )),
+            access: MockAccess(),
+            fetcher: MockFetcher(
+                recorder: recorder,
+                result: QueryCollectedData(
+                    timeRange: DateInterval(start: Date(), end: Date()),
+                    items: [],
+                    entries: [],
+                    missingAccess: []
+                )
+            ),
+            ingestService: MockIngestService(recorder: recorder),
+            backendQueryService: backend,
+            featureStatusService: MockFeatureStatusService(
+                status: BackendFeatureStatusDTO(
+                    calendar: BackendCalendarFeatureStatusDTO(
+                        available: false,
+                        lastUpdated: nil,
+                        coverageStart: nil,
+                        coverageEnd: nil,
+                        coverageDays: nil,
+                        snapshotCount: 0,
+                        fresh: false,
+                        freshnessTTLHours: 24
+                    )
+                )
+            ),
+            calendarFeatureBuilder: MockCalendarFeatureBuilder(
+                events: [
+                    CalendarFeatureEventIngestDTO(
+                        id: "calendar:evt-2",
+                        eventIdentifier: "evt-2",
+                        title: "Mote",
+                        notes: nil,
+                        location: nil,
+                        startAt: Date(),
+                        endAt: Date().addingTimeInterval(1800),
+                        isAllDay: false,
+                        calendarTitle: "Work",
+                        lastModifiedAt: Date(),
+                        snapshotHash: "sha256:test-2"
+                    )
+                ]
+            )
+        )
+
+        _ = try await pipeline.run(
+            UserQuery(text: "Vad gjorde jag igår?", source: .userTyped),
+            lastBackendAnalyticsIntent: "calendar.specific_day_query"
+        )
+
+        XCTAssertEqual(recorder.calls, ["ingest_features", "collect", "query"])
+    }
 }
 
 private enum MockPipelineError: Error {
@@ -393,6 +705,14 @@ private struct MockAccess: QuerySourceAccessing {
     func isAllowed(_ source: QuerySource) -> Bool { true }
     func assertAllowed(_ source: QuerySource) throws {}
     func deniedReason(for source: QuerySource) -> String { "" }
+}
+
+private struct MockAccessWithCalendarDenied: QuerySourceAccessing {
+    func isAllowed(_ source: QuerySource) -> Bool {
+        source != .calendar
+    }
+    func assertAllowed(_ source: QuerySource) throws {}
+    func deniedReason(for source: QuerySource) -> String { "Calendar denied" }
 }
 
 private final class MockFetcher: QueryDataFetching {
@@ -450,8 +770,12 @@ private final class MockIngestService: AssistantIngesting {
         self.error = error
     }
 
-    func ingest(items: [UnifiedItemDTO]) async throws {
-        recorder.calls.append("ingest")
+    func ingest(items: [UnifiedItemDTO], features: IngestFeaturesDTO?) async throws {
+        if features != nil, items.isEmpty {
+            recorder.calls.append("ingest_features")
+        } else {
+            recorder.calls.append("ingest")
+        }
         if let error {
             throw error
         }
@@ -480,6 +804,68 @@ private final class MockBackendQueryService: BackendQuerying {
         lastDays = days
         lastSources = sources
         return response
+    }
+}
+
+private final class SequenceMockBackendQueryService: BackendQuerying {
+    private let recorder: CallRecorder
+    private var responses: [BackendLLMResponseDTO]
+    private(set) var callCount = 0
+
+    init(recorder: CallRecorder, responses: [BackendLLMResponseDTO]) {
+        self.recorder = recorder
+        self.responses = responses
+    }
+
+    func query(
+        text: String,
+        days: Int,
+        sources: [String],
+        dataFilter: [String : AnyCodable]?
+    ) async throws -> BackendLLMResponseDTO {
+        _ = text
+        _ = days
+        _ = sources
+        _ = dataFilter
+        recorder.calls.append("query")
+        callCount += 1
+        guard !responses.isEmpty else {
+            return BackendLLMResponseDTO(
+                content: "fallback",
+                confidence: nil,
+                sourceDocuments: nil,
+                evidenceItems: nil,
+                usedSources: nil,
+                timeRange: nil
+            )
+        }
+        return responses.removeFirst()
+    }
+}
+
+private struct MockFeatureStatusService: FeatureStatusFetching {
+    let status: BackendFeatureStatusDTO
+    let error: Error?
+
+    init(status: BackendFeatureStatusDTO, error: Error? = nil) {
+        self.status = status
+        self.error = error
+    }
+
+    func fetchFeatureStatus() async throws -> BackendFeatureStatusDTO {
+        if let error {
+            throw error
+        }
+        return status
+    }
+}
+
+private struct MockCalendarFeatureBuilder: CalendarFeatureBuilding {
+    let events: [CalendarFeatureEventIngestDTO]
+
+    func buildFeatures(in interval: DateInterval) async throws -> [CalendarFeatureEventIngestDTO] {
+        _ = interval
+        return events
     }
 }
 

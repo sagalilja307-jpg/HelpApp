@@ -31,9 +31,17 @@ struct QueryCollectedData {
 
 struct QueryCollectionOptions: Sendable {
     let shouldCaptureLocation: Bool
+    let includeCalendar: Bool
+    let includeReminders: Bool
     
-    init(shouldCaptureLocation: Bool = false) {
+    init(
+        shouldCaptureLocation: Bool = false,
+        includeCalendar: Bool = true,
+        includeReminders: Bool = true
+    ) {
         self.shouldCaptureLocation = shouldCaptureLocation
+        self.includeCalendar = includeCalendar
+        self.includeReminders = includeReminders
     }
     
     static let `default` = QueryCollectionOptions()
@@ -154,20 +162,24 @@ final class QueryDataFetcher: QueryDataFetching {
             missingAccess.append(.memory)
         }
 
-        if access.isAllowed(.calendar) {
-            let result = fetchCalendar(in: range)
-            allItems += result.items
-            allEntries += result.entries
-        } else {
-            missingAccess.append(.calendar)
+        if options.includeCalendar {
+            if access.isAllowed(.calendar) {
+                let result = fetchCalendar(in: range)
+                allItems += result.items
+                allEntries += result.entries
+            } else {
+                missingAccess.append(.calendar)
+            }
         }
 
-        if access.isAllowed(.reminders) {
-            let result = try await fetchReminders(in: range)
-            allItems += result.items
-            allEntries += result.entries
-        } else {
-            missingAccess.append(.reminders)
+        if options.includeReminders {
+            if access.isAllowed(.reminders) {
+                let result = try await fetchReminders(in: range)
+                allItems += result.items
+                allEntries += result.entries
+            } else {
+                missingAccess.append(.reminders)
+            }
         }
 
         if sourceConnectionStore.isEnabled(.contacts) {

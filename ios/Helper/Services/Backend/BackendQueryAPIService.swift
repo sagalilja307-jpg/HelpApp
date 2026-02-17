@@ -46,6 +46,7 @@ final class BackendQueryAPIService: BackendQuerying {
     ) async throws -> BackendLLMResponseDTO {
         let payload = BackendQueryRequestDTO(
             query: text,
+            question: text,
             language: "sv",
             sources: sources,
             days: days,
@@ -96,15 +97,25 @@ final class BackendQueryAPIService: BackendQuerying {
         return data
     }
 
-    private static var encoder: JSONEncoder {
+    static var encoder: JSONEncoder {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         return encoder
     }
 
-    private static var decoder: JSONDecoder {
+    static var decoder: JSONDecoder {
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let rawValue = try container.decode(String.self)
+            if let date = parseDate(rawValue) {
+                return date
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unsupported date format: \(rawValue)"
+            )
+        }
         return decoder
     }
 
@@ -115,13 +126,84 @@ final class BackendQueryAPIService: BackendQuerying {
     private static func parseErrorMessage(from data: Data) -> String? {
         guard
             let object = try? JSONSerialization.jsonObject(with: data, options: []),
-            let dict = object as? [String: Any],
-            let errorDict = dict["error"] as? [String: Any],
-            let message = errorDict["message"] as? String
+            let dict = object as? [String: Any]
         else {
             return nil
         }
 
-        return message
+        if let detail = dict["detail"] as? String {
+            return detail
+        }
+
+        if let detailEntries = dict["detail"] as? [[String: Any]] {
+            let messages = detailEntries.compactMap { $0["msg"] as? String }
+            if !messages.isEmpty {
+                return messages.joined(separator: ", ")
+            }
+        }
+
+        if let errorDict = dict["error"] as? [String: Any],
+           let message = errorDict["message"] as? String {
+            return message
+        }
+
+        if let error = dict["error"] as? String {
+            return error
+        }
+
+        if let message = dict["message"] as? String {
+            return message
+        }
+
+        return nil
     }
+
+    private static func parseDate(_ rawValue: String) -> Date? {
+        for formatter in iso8601Formatters {
+            if let date = formatter.date(from: rawValue) {
+                return date
+            }
+        }
+
+        for formatter in fallbackDateFormatters {
+            if let date = formatter.date(from: rawValue) {
+                return date
+            }
+        }
+
+        return nil
+    }
+
+    private static let iso8601Formatters: [ISO8601DateFormatter] = {
+        let withFractional = ISO8601DateFormatter()
+        withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        withFractional.timeZone = TimeZone(secondsFromGMT: 0)
+
+        let standard = ISO8601DateFormatter()
+        standard.formatOptions = [.withInternetDateTime]
+        standard.timeZone = TimeZone(secondsFromGMT: 0)
+
+        return [withFractional, standard]
+    }()
+
+    private static let fallbackDateFormatters: [DateFormatter] = {
+        let formats = [
+            "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX",
+            "yyyy-MM-dd'T'HH:mm:ssXXXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
+            "yyyy-MM-dd'T'HH:mm:ss.SSS",
+            "yyyy-MM-dd'T'HH:mm:ss",
+            "yyyy-MM-dd",
+        ]
+
+        return formats.map { format in
+            let formatter = DateFormatter()
+            formatter.calendar = Calendar(identifier: .gregorian)
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            formatter.dateFormat = format
+            return formatter
+        }
+    }()
 }

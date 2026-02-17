@@ -88,6 +88,26 @@ curl -X POST http://localhost:8000/query \
   }'
 ```
 
+## 6. Source-gating smoke test (calendar)
+
+Analytics-fraga utan features ska signalera databehov:
+
+```bash
+curl -X POST http://localhost:8000/query \
+  -H "Content-Type: application/json" \
+  -d '{"query":"Vad gjorde jag igår?","language":"sv"}'
+```
+
+Verifiera i svaret:
+- `analysis_ready=false`
+- `requires_sources` innehaller `calendar`
+
+Kontrollera backendens feature-status:
+
+```bash
+curl http://localhost:8000/assistant/feature-status
+```
+
 ## Environment Variables
 
 ```bash

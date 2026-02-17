@@ -1,7 +1,13 @@
 import Foundation
 
 protocol AssistantIngesting {
-    func ingest(items: [UnifiedItemDTO]) async throws
+    func ingest(items: [UnifiedItemDTO], features: IngestFeaturesDTO?) async throws
+}
+
+extension AssistantIngesting {
+    func ingest(items: [UnifiedItemDTO]) async throws {
+        try await ingest(items: items, features: nil)
+    }
 }
 
 enum AssistantIngestAPIError: LocalizedError {
@@ -30,10 +36,10 @@ final class AssistantIngestAPIService: AssistantIngesting {
         self.session = session
     }
 
-    func ingest(items: [UnifiedItemDTO]) async throws {
-        guard !items.isEmpty else { return }
+    func ingest(items: [UnifiedItemDTO], features: IngestFeaturesDTO? = nil) async throws {
+        guard !items.isEmpty || features != nil else { return }
 
-        let payload = IngestRequestDTO(items: items)
+        let payload = IngestRequestDTO(items: items, features: features)
         let body = try Self.encoder.encode(payload)
         let data = try await performRequest(path: "/ingest", method: "POST", body: body)
 
@@ -85,13 +91,18 @@ final class AssistantIngestAPIService: AssistantIngesting {
     private static func parseErrorMessage(from data: Data) -> String? {
         guard
             let object = try? JSONSerialization.jsonObject(with: data, options: []),
-            let dict = object as? [String: Any],
-            let errorDict = dict["error"] as? [String: Any],
-            let message = errorDict["message"] as? String
+            let dict = object as? [String: Any]
         else {
             return nil
         }
 
-        return message
+        if let detail = dict["detail"] as? String {
+            return detail
+        }
+        if let errorDict = dict["error"] as? [String: Any],
+           let message = errorDict["message"] as? String {
+            return message
+        }
+        return nil
     }
 }

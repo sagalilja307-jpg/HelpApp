@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Callable, Dict, List, Optional
 
 from fastapi import HTTPException, status
@@ -57,19 +57,31 @@ class QueryOrchestrator:
 
         if parsed_intent:
             self._audit_dispatch(path="analytics", intent_id=parsed_intent.intent_id)
-            return self.analysis_service.handle(
+            payload = self.analysis_service.handle(
                 query=user_query,
                 language=language,
                 store=self._get_store(),
             )
+            payload = self._with_source_signals(payload)
+            self._audit_feature_requirement_if_needed(payload=payload, intent_id=parsed_intent.intent_id)
+            return payload
 
         self._audit_dispatch(path="retrieval", intent_id=None)
-        return self._handle_retrieval(
+        retrieval_payload = self._handle_retrieval(
             user_query=user_query,
             language=language,
             sources=sources,
             days=days,
             data_filter=data_filter,
+        )
+        return self._with_source_signals(
+            retrieval_payload,
+            defaults={
+                "analysis_ready": True,
+                "requires_sources": [],
+                "requirement_reason_codes": [],
+                "required_time_window": None,
+            },
         )
 
     def _handle_retrieval(
@@ -264,6 +276,48 @@ class QueryOrchestrator:
                 "days": requested_days,
             },
         }
+
+    @staticmethod
+    def _with_source_signals(payload: Dict, defaults: Optional[Dict] = None) -> Dict:
+        out = dict(payload)
+        default_values = {
+            "analysis_ready": True,
+            "requires_sources": [],
+            "requirement_reason_codes": [],
+            "required_time_window": None,
+        }
+        if defaults:
+            default_values.update(defaults)
+        for key, value in default_values.items():
+            out.setdefault(key, value)
+        return out
+
+    def _audit_feature_requirement_if_needed(self, *, payload: Dict, intent_id: Optional[str]) -> None:
+        requires_sources = payload.get("requires_sources") or []
+        if not isinstance(requires_sources, list) or not requires_sources:
+            return
+        if bool(payload.get("analysis_ready", True)):
+            return
+
+        required_window = payload.get("required_time_window")
+        if isinstance(required_window, dict):
+            required_window = {
+                key: (value.isoformat() if isinstance(value, datetime) else value)
+                for key, value in required_window.items()
+            }
+
+        try:
+            self._get_store().audit(
+                "feature_requirement_emitted",
+                {
+                    "intent_id": intent_id,
+                    "requires_sources": requires_sources,
+                    "reason_codes": payload.get("requirement_reason_codes") or [],
+                    "required_time_window": required_window,
+                },
+            )
+        except Exception as exc:
+            logger.warning("failed to audit feature requirement emission: %s", exc)
 
     def _audit_dispatch(self, *, path: str, intent_id: Optional[str]) -> None:
         try:

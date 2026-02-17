@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -44,6 +44,24 @@ from helpershelp.domain.rules.scoring import build_dashboard_lists
 from helpershelp.domain.value_objects.time_utils import utcnow
 
 router = APIRouter()
+
+FEATURE_STATUS_TTL_HOURS = 24
+
+
+def _serialize_optional_datetime(value: Any) -> Any:
+    if isinstance(value, datetime):
+        dt = value
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    return value
+
+
+def _serialize_feature_status(payload: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(payload)
+    for key in ("last_updated", "coverage_start", "coverage_end"):
+        out[key] = _serialize_optional_datetime(out.get(key))
+    return out
 
 
 def _ensure_support_defaults(store) -> Dict[str, Any]:
@@ -168,15 +186,16 @@ def dashboard(days: int = Query(default=90, ge=1, le=365)):
 @router.post("/ingest", tags=["assistant"])
 def ingest(request: IngestRequest):
     store = get_assistant_store()
-    inserted, updated = store.upsert_items(request.items)
+    items = list(request.items or [])
+    inserted, updated = store.upsert_items(items) if items else (0, 0)
     notes_count = sum(
         1
-        for item in request.items
+        for item in items
         if str(getattr(item, "source", "")).lower() == "notes"
     )
     stage2_counts = {"contacts": 0, "photos": 0, "files": 0}
     location_count = 0
-    for item in request.items:
+    for item in items:
         source = str(getattr(item, "source", "")).strip().lower()
         item_type = str(getattr(getattr(item, "type", None), "value", "")).strip().lower()
 
@@ -197,7 +216,7 @@ def ingest(request: IngestRequest):
 
     store.audit(
         "ingest",
-        {"inserted": inserted, "updated": updated, "count": len(request.items)},
+        {"inserted": inserted, "updated": updated, "count": len(items)},
     )
     if notes_count > 0:
         store.audit("notes_imported", {"count": notes_count})
@@ -221,7 +240,50 @@ def ingest(request: IngestRequest):
                 "updated": updated,
             },
         )
-    return {"status": "ok", "inserted": inserted, "updated": updated}
+
+    feature_inserted = 0
+    feature_updated = 0
+    calendar_events = request.features.calendar_events if request.features else []
+    if calendar_events:
+        feature_inserted, feature_updated = store.upsert_calendar_feature_events(
+            [event.model_dump() for event in calendar_events]
+        )
+        store.audit(
+            "feature_ingest_calendar",
+            {
+                "inserted": feature_inserted,
+                "updated": feature_updated,
+                "count": len(calendar_events),
+            },
+        )
+
+    return {
+        "status": "ok",
+        "inserted": inserted,
+        "updated": updated,
+        "feature_inserted": feature_inserted,
+        "feature_updated": feature_updated,
+    }
+
+
+@router.get("/assistant/feature-status", tags=["assistant"])
+def feature_status():
+    store = get_assistant_store()
+    status_payload = store.get_calendar_feature_status(
+        now=utcnow(),
+        ttl_hours=FEATURE_STATUS_TTL_HOURS,
+    )
+    serialized = {"calendar": _serialize_feature_status(status_payload)}
+    store.audit(
+        "feature_status_requested",
+        {
+            "sources": ["calendar"],
+            "calendar_available": bool(status_payload.get("available")),
+            "calendar_fresh": bool(status_payload.get("fresh")),
+            "snapshot_count": int(status_payload.get("snapshot_count") or 0),
+        },
+    )
+    return serialized
 
 
 @router.post("/proposals/{proposal_id}/accept", tags=["assistant"])

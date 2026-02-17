@@ -9,6 +9,9 @@ FastAPI-backend i monorepot, paketerad som `helpershelp` med `src/`-layout.
 
 - 📋 **[Architecture Guide](docs/STRUCTURE.md)** - Complete backend structure and organization
 - 🏗️ **[Clean Architecture](docs/CLEAN_ARCHITECTURE.md)** - Architecture principles and patterns
+- 🧠 **[Insight Query Architecture](docs/INSIGHT_QUERY_ARCHITECTURE.md)** - Mental model and lifecycle for insight queries
+- 📜 **[Source Gating Contract](docs/SOURCE_GATING_CONTRACT.md)** - Normative API contract for source requirements
+- 🧩 **[Adding New Source](docs/ADDING_NEW_SOURCE.md)** - Playbook for extending insight sources
 - 🔄 **[Shim Deprecation Strategy](docs/SHIM_DEPRECATION_STRATEGY.md)** - Migration guide for legacy imports
 - 🔍 **[Model Verification](docs/MODEL_VERIFICATION.md)** - Test Ollama generation + embeddings
 - 📚 **[API Documentation](http://localhost:8000/docs)** - Interactive API docs (when running)
@@ -69,6 +72,68 @@ Environment variables:
 - Ollama runs locally - no API keys required
 - First inference may be slow (model loading)
 - Embedding-dependent endpoints return `503` when Ollama embeddings are unavailable
+
+## Fas 1: Backend-driven Source Gating (Calendar)
+
+Backend styr nu exakt nar kalendersnapshots behovs for analytics-fragor.
+
+### `/query` (response-signaler, bakatkompatibelt)
+
+Alla svar inkluderar nu:
+- `analysis_ready: bool`
+- `requires_sources: string[]`
+- `requirement_reason_codes: string[]`
+- `required_time_window: {start,end,granularity} | null`
+
+Regler:
+- Analytics med komplett data: `analysis_ready=true`, `requires_sources=[]`
+- Analytics med saknad/stale/gap-data: `analysis_ready=false`, `requires_sources=["calendar"]`
+- Retrieval-svar: `analysis_ready=true` (oforandrat felkontrakt, fortsatt strict `503` vid embedding-nertid)
+
+### Ny endpoint: `GET /assistant/feature-status`
+
+Returnerar kalender-featurestatus:
+- `available`
+- `last_updated`
+- `coverage_start`
+- `coverage_end`
+- `coverage_days`
+- `snapshot_count`
+- `fresh`
+- `freshness_ttl_hours` (24h i Fas 1)
+
+### Utokad ingest: `POST /ingest`
+
+Utokning ar bakatkompatibel:
+- `items` fungerar som tidigare
+- ny optional payload: `features.calendar_events`
+
+Exempel:
+```json
+{
+  "items": [],
+  "features": {
+    "calendar_events": [
+      {
+        "id": "calendar:evt_123:2026-03-19T09:00:00Z",
+        "event_identifier": "evt_123",
+        "title": "Mote",
+        "start_at": "2026-03-19T09:00:00Z",
+        "end_at": "2026-03-19T10:00:00Z",
+        "is_all_day": false,
+        "snapshot_hash": "sha256:..."
+      }
+    ]
+  }
+}
+```
+
+### Apple-compliance note
+
+Fas 1 ar designad for user-driven access:
+- ingen massiv bakgrundssync av EventKit
+- iOS ingestar kalenderfeatures endast nar backend signalerar behov
+- en auto-retry per fraga (ingen loop)
 
 ## Kör API
 ```bash

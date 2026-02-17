@@ -13,7 +13,10 @@ backend/
 │
 ├── docs/                    # Documentation
 │   ├── STRUCTURE.md         # This file (architecture overview)
-│   └── MODEL_VERIFICATION.md # Model testing guide
+│   ├── MODEL_VERIFICATION.md # Model testing guide
+│   ├── INSIGHT_QUERY_ARCHITECTURE.md # Insight lifecycle and invariants
+│   ├── SOURCE_GATING_CONTRACT.md # Query source-gating API contract
+│   └── ADDING_NEW_SOURCE.md # Playbook for new insight sources
 │
 ├── src/helpershelp/         # Main application package
 │   ├── config.py            # Global configuration
@@ -162,22 +165,35 @@ backend/
 ```
 1. HTTP Request
    ↓
-2. API Layer (routes/query.py)
+2. QueryOrchestrator (application/query/query_orchestrator.py)
    ↓
-3. Query Interpretation (LLM layer)
-   - Intent classification
-   - Topic extraction
+3a. Analytics path (deterministic intent match)
+   - Temporal resolve
+   - Calendar feature-store readiness check
+   - Structured calculator
+   - Optional narrative render
    ↓
-4. Content Retrieval (Retrieval layer)
-   - Fetch from sources (mail, assistant_store)
-   - Semantic ranking (Ollama bge-m3 embeddings)
-   - Apply filters and limits
+3b. Retrieval path (fallback)
+   - Query interpretation (embeddings)
+   - Multi-source retrieval + ranking
+   - Text formulation
    ↓
-5. Text Generation (LLM layer)
-   - Formulate response (Ollama qwen2.5:7b)
-   ↓
-6. HTTP Response
+4. HTTP Response (+ source gating signals)
 ```
+
+### Source Gating Contract (Fas 1)
+
+`POST /query` svarar alltid med:
+- `analysis_ready`
+- `requires_sources`
+- `requirement_reason_codes`
+- `required_time_window`
+
+`GET /assistant/feature-status` exponerar per-kalla status (Fas 1: `calendar`).
+
+`POST /ingest` accepterar nu bade:
+- `items` (legacy)
+- `features.calendar_events` (calendar feature snapshots)
 
 ### Background Sync Flow
 
@@ -209,6 +225,7 @@ See `.env.example` for full list. Key variables:
 
 **Features:**
 - `HELPERSHELP_ENABLE_SYNC_LOOP`: Background sync enabled
+- `calendar` analytics freshness TTL: 24h (Fas 1)
 
 ### Configuration Loading
 
@@ -319,10 +336,17 @@ LOG_LEVEL=DEBUG uvicorn api:app
 
 ### Adding a New Data Source
 
+For retrieval sources:
 1. Create fetcher function in appropriate module
 2. Register with `RetrievalCoordinator`
 3. Map to `ContentObject` format
 4. Add tests
+
+For insight/analytics sources:
+1. Follow `ADDING_NEW_SOURCE.md`
+2. Implement feature-store + reason codes
+3. Integrate source-gating (`/query`, `/assistant/feature-status`, `/ingest`)
+4. Keep analytics path independent from embeddings
 
 ### Adding a New Model
 

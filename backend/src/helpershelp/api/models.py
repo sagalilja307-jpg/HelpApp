@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class QueryEvidenceItem(BaseModel):
@@ -45,6 +45,10 @@ class LLMResponse(BaseModel):
     used_sources: Optional[List[str]] = None
     time_range: Optional[TimeRange] = None
     analysis: Optional[AnalysisResponse] = None
+    analysis_ready: bool = True
+    requires_sources: List[str] = Field(default_factory=list)
+    requirement_reason_codes: List[str] = Field(default_factory=list)
+    required_time_window: Optional[AnalysisTimeWindow] = None
 
 
 class QueryInterpretationRequest(BaseModel):
