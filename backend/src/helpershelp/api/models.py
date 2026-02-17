@@ -22,6 +22,21 @@ class TimeRange(BaseModel):
     days: int
 
 
+class AnalysisTimeWindow(BaseModel):
+    start: datetime
+    end: datetime
+    granularity: str
+
+
+class AnalysisResponse(BaseModel):
+    intent_id: str
+    time_window: AnalysisTimeWindow
+    insights: List[dict]
+    patterns: List[dict]
+    limitations: List[str]
+    confidence: Optional[float] = None
+
+
 class LLMResponse(BaseModel):
     content: str
     confidence: Optional[float] = None
@@ -29,6 +44,7 @@ class LLMResponse(BaseModel):
     evidence_items: Optional[List[QueryEvidenceItem]] = None
     used_sources: Optional[List[str]] = None
     time_range: Optional[TimeRange] = None
+    analysis: Optional[AnalysisResponse] = None
 
 
 class QueryInterpretationRequest(BaseModel):

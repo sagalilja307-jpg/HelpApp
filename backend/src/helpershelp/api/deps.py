@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import List, Optional
 
+from helpershelp.application.analytics.analysis_service import AnalysisService
 from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore, get_store
+from helpershelp.application.query.query_orchestrator import QueryOrchestrator
 from helpershelp.domain.value_objects.time_utils import utcnow
 from helpershelp.infrastructure.llm.bge_m3_adapter import get_embedding_service
 from helpershelp.application.llm.llm_service import get_query_service
@@ -194,3 +196,15 @@ def parse_optional_datetime(value: Optional[str]) -> Optional[datetime]:
         except ValueError:
             return None
     return None
+
+
+def get_query_orchestrator() -> QueryOrchestrator:
+    analysis_service = AnalysisService(text_service=text_service)
+    return QueryOrchestrator(
+        query_service=query_service,
+        text_service=text_service,
+        analysis_service=analysis_service,
+        assistant_store_getter=get_assistant_store,
+        assistant_store_fetcher=assistant_store_fetch,
+        mail_fetcher=mail_queries.fetch,
+    )

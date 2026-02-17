@@ -113,6 +113,15 @@ class EmbeddingUnavailableErrorTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 503)
 
+    def test_analytics_query_returns_200_when_embedding_backend_unavailable(self):
+        response = self.client.post(
+            "/query",
+            json={"query": "Vad gjorde jag igår?", "language": "sv", "days": 7},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("analysis", {}).get("intent_id"), "calendar.specific_day_query")
+
 
 if __name__ == "__main__":
     unittest.main()
