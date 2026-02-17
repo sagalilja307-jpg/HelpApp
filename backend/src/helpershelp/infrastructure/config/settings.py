@@ -29,11 +29,11 @@ def load_settings() -> Settings:
         base_dir = Path(__file__).resolve().parents[3]
 
     model_cache_dir = Path(
-        os.getenv("HELPERSHELP_MODEL_CACHE_DIR", base_dir / ".model_cache")
+        os.getenv("HELPERSHELP_MODEL_CACHE_DIR", str(base_dir / ".model_cache"))
     ).expanduser()
 
     db_path = Path(
-        os.getenv("HELPERSHELP_DB_PATH", base_dir / "data" / "helpershelp.db")
+        os.getenv("HELPERSHELP_DB_PATH", str(base_dir / "data" / "helpershelp.db"))
     ).expanduser()
 
     offline = os.getenv("HELPERSHELP_OFFLINE", "0") == "1"
