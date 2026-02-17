@@ -27,8 +27,7 @@ from helpershelp.application.assistant.proposals import (
     get_proposal_config,
     generate_proposals,
 )
-from helpershelp.domain.rules.scoring import build_dashboard_lists
-from helpershelp.assistant.support import (
+from helpershelp.application.assistant.support import (
     SUPPORT_ADAPTATION_ENABLED_KEY,
     SUPPORT_DAILY_CAPS_KEY,
     SUPPORT_LEVEL_KEY,
@@ -41,6 +40,7 @@ from helpershelp.assistant.support import (
     split_dashboard_items_by_policy,
     start_of_day_utc,
 )
+from helpershelp.domain.rules.scoring import build_dashboard_lists
 from helpershelp.domain.value_objects.time_utils import utcnow
 
 router = APIRouter()

@@ -49,7 +49,7 @@ def test_embedding_service():
     print("=" * 60)
     
     try:
-        from helpershelp.llm.embedding_service import EmbeddingService
+        from helpershelp.infrastructure.llm.bge_m3_adapter import EmbeddingService
         print("✓ EmbeddingService imported successfully")
     except ImportError as e:
         print(f"✗ Failed to import EmbeddingService: {e}")
@@ -201,7 +201,7 @@ def main():
         sys.exit(1)
     
     # Get the service for functionality tests
-    from helpershelp.llm.embedding_service import get_embedding_service
+    from helpershelp.infrastructure.llm.bge_m3_adapter import get_embedding_service
     service = get_embedding_service()
     
     if not test_embedding_functionality(service):

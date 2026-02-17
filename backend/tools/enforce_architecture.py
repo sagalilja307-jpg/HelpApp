@@ -1,76 +1,78 @@
 #!/usr/bin/env python3
-"""Simple architecture enforcement: detect imports into deprecated shim packages.
+"""Architecture enforcement: block imports of removed shim modules.
 
-Usage: run from repository root (or from backend) e.g.
+Usage (from backend/):
+  python3 tools/enforce_architecture.py
 
-  python3 backend/tools/enforce_architecture.py
-
-It scans `src/helpershelp` and reports any module that imports `helpershelp.assistant`
-unless the importer itself lives under `helpershelp.assistant` (allow shims to import
-the application modules).
+This script only treats explicitly listed shim modules as violations.
+It does not blanket-block entire namespaces like helpershelp.assistant.*.
 """
+
+from __future__ import annotations
+
 import ast
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]  # repo root -> backend/..
-SRC = ROOT / "backend" / "src" / "helpershelp"
+from shim_policy import canonical_for, is_shim_module
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src" / "helpershelp"
 
 if not SRC.exists():
-    print("Error: expected path backend/src/helpershelp to exist", file=sys.stderr)
-    sys.exit(2)
+    print("Error: expected path src/helpershelp to exist", file=sys.stderr)
+    raise SystemExit(2)
 
 
 def iter_py_files(base: Path):
-    for p in base.rglob("*.py"):
-        yield p
+    for path in sorted(base.rglob("*.py")):
+        yield path
 
 
 def module_name_from_path(path: Path) -> str:
-    rel = path.relative_to(ROOT / "backend" / "src")
+    rel = path.relative_to(ROOT / "src")
     return ".".join(rel.with_suffix("").parts)
 
 
 def collect_imports(path: Path):
     text = path.read_text(encoding="utf-8")
-    tree = ast.parse(text)
-    imports = set()
+    tree = ast.parse(text, filename=str(path))
+    imports: list[tuple[int, str]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                imports.add(alias.name)
-        elif isinstance(node, ast.ImportFrom):
-            if node.module:
-                # package or module imported from
-                imports.add(node.module)
+                imports.append((node.lineno, alias.name))
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imports.append((node.lineno, node.module))
+            for alias in node.names:
+                if alias.name == "*":
+                    continue
+                imports.append((node.lineno, f"{node.module}.{alias.name}"))
     return imports
 
 
 def main() -> int:
-    violations = []
+    violations: list[tuple[str, int, str, str, Path]] = []
     for py in iter_py_files(SRC):
-        mod = module_name_from_path(py)
-        imported = collect_imports(py)
-        for imp in imported:
-            if not imp.startswith("helpershelp."):
+        importer = module_name_from_path(py)
+        for lineno, imported in collect_imports(py):
+            if not imported.startswith("helpershelp."):
                 continue
-            # If importer is not a shim module, it must not import shim packages
-            if not mod.startswith("helpershelp.assistant") and imp.startswith("helpershelp.assistant"):
-                violations.append((mod, imp, py))
-            # Also treat legacy top-level names (llm, mail) as shims
-            if not mod.startswith("helpershelp.llm") and imp.startswith("helpershelp.llm"):
-                violations.append((mod, imp, py))
-            if not mod.startswith("helpershelp.mail") and imp.startswith("helpershelp.mail"):
-                violations.append((mod, imp, py))
+            if not is_shim_module(imported):
+                continue
+            suggestion = canonical_for(imported) or "no replacement"
+            violations.append((importer, lineno, imported, suggestion, py))
 
     if not violations:
         print("No architecture violations found.")
         return 0
 
     print("Architecture violations:")
-    for mod, imp, path in violations:
-        print(f" - {mod} imports {imp}  ({path})")
-
+    for importer, lineno, imported, suggestion, path in violations:
+        print(
+            f" - {importer}:{lineno} imports {imported} "
+            f"(use {suggestion}) ({path})"
+        )
     print(f"Found {len(violations)} violations.")
     return 1
 

@@ -30,16 +30,15 @@ jobs:
     needs: test-with-warnings
     steps:
       - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install minimal tooling deps
+        run: python -m pip install --upgrade pip
       - name: Scan for forbidden shim imports
         run: |
-          set -e
-          echo "Scanning repository for forbidden shim imports..."
-          # Find lines importing deprecated shim prefixes, but allow the shim test file
-          # Search in .py files under src/ and tests/
-          matches=$(git grep -n "from helpershelp\.assistant\.|from helpershelp\.llm\.|from helpershelp\.mail\." -- ':!tests/test_shim_deprecation.py' || true)
-          if [ -n "$matches" ]; then
-            echo "Forbidden shim imports found:" >&2
-            echo "$matches" >&2
-            exit 1
-          fi
-          echo "No forbidden shim imports found."
+          python tools/check_shim_imports.py
+      - name: Enforce architecture (no removed shim imports)
+        run: |
+          python tools/enforce_architecture.py

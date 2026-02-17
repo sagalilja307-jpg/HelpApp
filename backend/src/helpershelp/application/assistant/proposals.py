@@ -5,8 +5,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from helpershelp.assistant.language_guardrails import enforce_neutral_language
+from helpershelp.application.assistant.support import adaptation_allowed, clamp_follow_up_days, resolve_support_policy
 from helpershelp.domain.models import Proposal, ProposalType, UnifiedItem, UnifiedItemType
-from helpershelp.assistant.support import adaptation_allowed, clamp_follow_up_days, resolve_support_policy
 from helpershelp.assistant.date_extract import extract_due_at
 from helpershelp.domain.rules.scheduling import suggest_free_slots
 from helpershelp.domain.value_objects.time_utils import utcnow

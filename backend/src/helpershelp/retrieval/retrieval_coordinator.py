@@ -2,7 +2,7 @@ import logging
 from typing import List, Dict, Optional, Callable
 from dataclasses import dataclass
 from helpershelp.retrieval.content_object import ContentObject
-from helpershelp.llm.embedding_service import get_embedding_service
+from helpershelp.infrastructure.llm.bge_m3_adapter import get_embedding_service
 
 logger = logging.getLogger(__name__)
 

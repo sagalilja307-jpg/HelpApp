@@ -18,3 +18,6 @@ jobs:
       - name: Run local shim import checker
         run: |
           python tools/check_shim_imports.py
+      - name: Run architecture enforcement
+        run: |
+          python tools/enforce_architecture.py
