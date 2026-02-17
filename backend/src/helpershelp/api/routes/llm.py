@@ -22,7 +22,7 @@ from helpershelp.api.models import (
     SimilarityBatchRequest,
     SimilarityRequest,
 )
-from helpershelp.assistant.time_utils import utcnow
+from helpershelp.domain.value_objects.time_utils import utcnow
 from helpershelp.retrieval.content_object import ContentObject, MailSender
 
 logger = logging.getLogger(__name__)

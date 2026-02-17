@@ -1,6 +1,6 @@
 import unittest
 
-from helpershelp.assistant.time_utils import utcnow
+from helpershelp.domain.value_objects.time_utils import utcnow
 from helpershelp.retrieval.content_object import ContentObject, MailSender
 from helpershelp.retrieval.retrieval_coordinator import RetrievalConfig, RetrievalCoordinator
 

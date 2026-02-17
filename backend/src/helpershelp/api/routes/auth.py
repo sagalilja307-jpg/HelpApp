@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query, status
 
 from helpershelp.api.deps import get_assistant_store, oauth_service
-from helpershelp.assistant.tokens import store_oauth_token
+from helpershelp.infrastructure.security.token_manager import store_oauth_token
 from helpershelp.mail.oauth_models import (
     OAuthToken,
     TokenRefreshRequest,

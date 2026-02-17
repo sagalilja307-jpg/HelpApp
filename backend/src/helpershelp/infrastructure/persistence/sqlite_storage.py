@@ -12,7 +12,7 @@ from uuid import uuid4
 
 from helpershelp.domain.models import ItemEdge, Proposal, ProposalStatus, UnifiedItem
 from helpershelp.domain.value_objects.time_utils import utcnow
-from helpershelp.config import DEFAULT_DB_PATH
+from helpershelp.infrastructure.config.settings import get_settings
 
 
 def _iso(dt: Optional[datetime]) -> Optional[str]:
@@ -660,7 +660,9 @@ class SqliteStore:
 
 
 def get_store() -> SqliteStore:
-    db_path = Path(os.getenv("HELPERSHELP_DB_PATH", str(DEFAULT_DB_PATH))).expanduser().resolve()
+    settings = get_settings()
+    # Use settings.db_path directly - it already incorporates HELPERSHELP_DB_PATH env var
+    db_path = settings.db_path.expanduser().resolve()
     store = SqliteStore(StoreConfig(db_path=db_path))
     store.init()
     return store

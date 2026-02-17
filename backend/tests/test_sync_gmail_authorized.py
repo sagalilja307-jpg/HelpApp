@@ -8,8 +8,8 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from helpershelp.assistant.models import UnifiedItem, UnifiedItemType
-from helpershelp.assistant.storage import SqliteStore, StoreConfig
-from helpershelp.assistant.time_utils import utcnow
+from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore, StoreConfig
+from helpershelp.domain.value_objects.time_utils import utcnow
 
 
 class SyncGmailAuthorizedTests(unittest.TestCase):

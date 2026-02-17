@@ -22,11 +22,12 @@ from helpershelp.assistant.models import (
     SupportSettingsUpdateRequest,
 )
 from helpershelp.assistant.language_guardrails import enforce_neutral_language
-from helpershelp.assistant.proposals import (
+from helpershelp.application.assistant.proposals import (
+    ProposalConfig,
+    get_proposal_config,
     generate_proposals,
-    maybe_adjust_followup_days_on_feedback,
 )
-from helpershelp.assistant.scoring import build_dashboard_lists
+from helpershelp.domain.rules.scoring import build_dashboard_lists
 from helpershelp.assistant.support import (
     SUPPORT_ADAPTATION_ENABLED_KEY,
     SUPPORT_DAILY_CAPS_KEY,
@@ -40,7 +41,7 @@ from helpershelp.assistant.support import (
     split_dashboard_items_by_policy,
     start_of_day_utc,
 )
-from helpershelp.assistant.time_utils import utcnow
+from helpershelp.domain.value_objects.time_utils import utcnow
 
 router = APIRouter()
 

@@ -17,11 +17,11 @@ class TestShimDeprecationWarnings:
         """Verify assistant.scoring shim emits deprecation warning"""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            from helpershelp.assistant.scoring import score_item
+            from helpershelp.domain.rules.scoring import score_item
             
             assert len(w) == 1
             assert issubclass(w[0].category, DeprecationWarning)
-            assert "helpershelp.assistant.scoring" in str(w[0].message)
+            assert "helpershelp.domain.rules.scoring" in str(w[0].message)
             assert "helpershelp.domain.rules.scoring" in str(w[0].message)
             assert "2.0.0" in str(w[0].message)
 
@@ -49,27 +49,27 @@ class TestShimDeprecationWarnings:
         """Verify assistant.crypto shim emits deprecation warning"""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            from helpershelp.assistant.crypto import get_fernet
+            from helpershelp.infrastructure.security.crypto_utils import get_fernet
             
             assert len(w) == 1
             assert issubclass(w[0].category, DeprecationWarning)
-            assert "helpershelp.assistant.crypto" in str(w[0].message)
+            assert "helpershelp.infrastructure.security.crypto_utils" in str(w[0].message)
 
     def test_assistant_storage_shim_warns(self):
         """Verify assistant.storage shim emits deprecation warning"""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            from helpershelp.assistant.storage import SqliteStore
+            from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore
             
             assert len(w) == 1
             assert issubclass(w[0].category, DeprecationWarning)
-            assert "helpershelp.assistant.storage" in str(w[0].message)
+            assert "helpershelp.infrastructure.persistence.sqlite_storage" in str(w[0].message)
 
     def test_assistant_time_utils_shim_warns(self):
         """Verify assistant.time_utils shim emits deprecation warning"""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            from helpershelp.assistant.time_utils import utcnow
+            from helpershelp.domain.value_objects.time_utils import utcnow
             
             assert len(w) == 1
             assert issubclass(w[0].category, DeprecationWarning)
@@ -79,31 +79,31 @@ class TestShimDeprecationWarnings:
         """Verify assistant.tokens shim emits deprecation warning"""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            from helpershelp.assistant.tokens import store_oauth_token
+            from helpershelp.infrastructure.security.token_manager import store_oauth_token
             
             assert len(w) == 1
             assert issubclass(w[0].category, DeprecationWarning)
-            assert "helpershelp.assistant.tokens" in str(w[0].message)
+            assert "helpershelp.infrastructure.security.token_manager" in str(w[0].message)
 
     def test_assistant_proposals_shim_warns(self):
         """Verify assistant.proposals shim emits deprecation warning"""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            from helpershelp.assistant.proposals import generate_proposals
+            from helpershelp.application.assistant.proposals import generate_proposals
             
             assert len(w) == 1
             assert issubclass(w[0].category, DeprecationWarning)
-            assert "helpershelp.assistant.proposals" in str(w[0].message)
+            assert "helpershelp.application.assistant.proposals" in str(w[0].message)
 
     def test_assistant_scheduling_shim_warns(self):
         """Verify assistant.scheduling shim emits deprecation warning"""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            from helpershelp.assistant.scheduling import TimeSlot
+            from helpershelp.domain.rules.scheduling import TimeSlot
             
             assert len(w) == 1
             assert issubclass(w[0].category, DeprecationWarning)
-            assert "helpershelp.assistant.scheduling" in str(w[0].message)
+            assert "helpershelp.domain.rules.scheduling" in str(w[0].message)
 
     def test_llm_llm_service_shim_warns(self):
         """Verify llm.llm_service shim emits deprecation warning"""
@@ -175,7 +175,7 @@ class TestShimBackwardCompatibility:
             warnings.simplefilter("ignore")
             
             # Import from shim
-            from helpershelp.assistant.scoring import ScoredItem, score_item
+            from helpershelp.domain.rules.scoring import ScoredItem, score_item
             
             # Import from actual location
             from helpershelp.domain.rules.scoring import (
@@ -192,7 +192,7 @@ class TestShimBackwardCompatibility:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             
-            from helpershelp.assistant.time_utils import utcnow
+            from helpershelp.domain.value_objects.time_utils import utcnow
             from helpershelp.domain.value_objects.time_utils import utcnow as actual_utcnow
             
             assert utcnow is actual_utcnow
@@ -202,7 +202,7 @@ class TestShimBackwardCompatibility:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             
-            from helpershelp.assistant.storage import SqliteStore, StoreConfig
+            from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore, StoreConfig
             from helpershelp.infrastructure.persistence.sqlite_storage import (
                 SqliteStore as ActualSqliteStore,
                 StoreConfig as ActualStoreConfig

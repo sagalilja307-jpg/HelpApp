@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 
 from helpershelp.assistant.models import ExternalRef, Person, Provenance, UnifiedItem, UnifiedItemType
-from helpershelp.assistant.time_utils import utcnow
+from helpershelp.domain.value_objects.time_utils import utcnow
 
 
 def _parse_email_address(raw: str) -> Tuple[Optional[str], str]:

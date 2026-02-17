@@ -6,7 +6,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 from helpershelp.assistant.models import UnifiedItem, UnifiedItemType
-from helpershelp.assistant.time_utils import utcnow
+from helpershelp.domain.value_objects.time_utils import utcnow
 
 
 class TestLocationIngest:

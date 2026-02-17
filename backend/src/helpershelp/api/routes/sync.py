@@ -10,7 +10,7 @@ from helpershelp.assistant.linking import link_emails_to_events
 from helpershelp.assistant.models import SyncGCalRequest, SyncGmailRequest
 from helpershelp.assistant.sources.gcal import GCalAdapter
 from helpershelp.assistant.sources.gmail import GmailAdapter
-from helpershelp.assistant.time_utils import utcnow
+from helpershelp.domain.value_objects.time_utils import utcnow
 
 router = APIRouter()
 

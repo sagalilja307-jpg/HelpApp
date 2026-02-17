@@ -14,7 +14,7 @@ from helpershelp.api.deps import (
     text_service,
 )
 from helpershelp.api.models import LLMResponse, QueryEvidenceItem, TimeRange, UnifiedQueryRequest
-from helpershelp.assistant.time_utils import utcnow
+from helpershelp.domain.value_objects.time_utils import utcnow
 from helpershelp.retrieval.retrieval_coordinator import (
     RetrievalInterpretation,
     get_retrieval_coordinator,

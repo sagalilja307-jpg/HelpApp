@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from helpershelp.assistant.storage import SqliteStore, StoreConfig
+from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore, StoreConfig
 
 
 class _MockResponse:

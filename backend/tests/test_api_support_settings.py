@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from helpershelp.assistant.models import UnifiedItem, UnifiedItemType
-from helpershelp.assistant.time_utils import utcnow
+from helpershelp.domain.value_objects.time_utils import utcnow
 
 
 class APISupportSettingsTests(unittest.TestCase):
