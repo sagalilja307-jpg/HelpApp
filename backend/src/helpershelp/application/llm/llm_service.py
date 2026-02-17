@@ -1,9 +1,13 @@
 import logging
+import math
 from typing import Dict, Optional, List
 
-from sentence_transformers import util
-
-from helpershelp.infrastructure.llm.bge_m3_adapter import EmbeddingService, get_embedding_service
+from helpershelp.infrastructure.llm.bge_m3_adapter import (
+    EMBEDDING_BACKEND_UNAVAILABLE,
+    EmbeddingBackendUnavailableError,
+    EmbeddingService,
+    get_embedding_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,12 +66,32 @@ class QueryInterpretationService:
         self.embedding_service = embedding_service or get_embedding_service()
 
         self._intent_labels: Optional[List[str]] = None
-        self._intent_embeddings = None
+        self._intent_embeddings: Optional[List[List[float]]] = None
         self._topic_labels: Optional[List[str]] = None
-        self._topic_embeddings = None
+        self._topic_embeddings: Optional[List[List[float]]] = None
 
     def _ready(self) -> bool:
-        return bool(self.embedding_service and self.embedding_service.model)
+        return bool(self.embedding_service and self.embedding_service.is_available())
+
+    @staticmethod
+    def _cosine_similarity(vec_a: List[float], vec_b: List[float]) -> float:
+        if not vec_a or not vec_b:
+            return 0.0
+
+        dot_product = sum(a * b for a, b in zip(vec_a, vec_b))
+        norm_a = math.sqrt(sum(a * a for a in vec_a))
+        norm_b = math.sqrt(sum(b * b for b in vec_b))
+
+        if norm_a == 0.0 or norm_b == 0.0:
+            return 0.0
+        return dot_product / (norm_a * norm_b)
+
+    @staticmethod
+    def _raise_embedding_error(result: Dict, context: str) -> None:
+        message = result.get("error") or f"{context} failed"
+        if result.get("error_code") == EMBEDDING_BACKEND_UNAVAILABLE:
+            raise EmbeddingBackendUnavailableError(message)
+        raise RuntimeError(message)
 
     @staticmethod
     def _to_confidence(score: float) -> float:
@@ -82,10 +106,18 @@ class QueryInterpretationService:
         label_texts = [self._INTENT_LABEL_TEXT.get(label, label) for label in labels]
 
         self._intent_labels = labels
-        self._intent_embeddings = self.embedding_service.model.encode(
-            label_texts,
-            convert_to_tensor=True,
-        )
+        result = self.embedding_service.embed_batch(label_texts)
+        if "error" in result:
+            self._raise_embedding_error(result, "Intent cache embedding")
+        self._intent_embeddings = [
+            row.get("embedding", [])
+            for row in result.get("embeddings", [])
+        ]
+        if len(self._intent_embeddings) != len(labels):
+            raise RuntimeError(
+                "Intent cache embedding count mismatch "
+                f"(expected {len(labels)}, got {len(self._intent_embeddings)})"
+            )
 
     def _ensure_topic_cache(self) -> None:
         if self._topic_embeddings is not None:
@@ -94,30 +126,50 @@ class QueryInterpretationService:
         label_texts = [self._TOPIC_LABEL_TEXT.get(label, label) for label in labels]
 
         self._topic_labels = labels
-        self._topic_embeddings = self.embedding_service.model.encode(
-            label_texts,
-            convert_to_tensor=True,
-        )
+        result = self.embedding_service.embed_batch(label_texts)
+        if "error" in result:
+            self._raise_embedding_error(result, "Topic cache embedding")
+        self._topic_embeddings = [
+            row.get("embedding", [])
+            for row in result.get("embeddings", [])
+        ]
+        if len(self._topic_embeddings) != len(labels):
+            raise RuntimeError(
+                "Topic cache embedding count mismatch "
+                f"(expected {len(labels)}, got {len(self._topic_embeddings)})"
+            )
 
     def _classify_with_similarity(
         self,
         text: str,
         labels: List[str],
-        label_embeddings,
+        label_embeddings: List[List[float]],
         threshold: float,
         output_key: str,
         fallback_label: str,
     ) -> Dict:
-        query_emb = self.embedding_service.model.encode(text, convert_to_tensor=True)
-        sims = util.pytorch_cos_sim(query_emb, label_embeddings)[0]
+        query_result = self.embedding_service.embed_text(text)
+        if "error" in query_result:
+            self._raise_embedding_error(query_result, "Query embedding")
 
-        best_idx = int(sims.argmax().item())
+        query_embedding = query_result.get("embedding", [])
+        if not query_embedding:
+            raise RuntimeError("Query embedding is empty")
+
+        sims = [
+            self._cosine_similarity(query_embedding, label_embedding)
+            for label_embedding in label_embeddings
+        ]
+        if not sims:
+            raise RuntimeError("No label embeddings available for classification")
+
+        best_idx = max(range(len(sims)), key=lambda idx: sims[idx])
         best_label = labels[best_idx]
-        best_score = float(sims[best_idx].item())
+        best_score = float(sims[best_idx])
         best_conf = self._to_confidence(best_score)
 
         all_scores = {
-            label: self._to_confidence(float(sims[i].item()))
+            label: self._to_confidence(float(sims[i]))
             for i, label in enumerate(labels)
         }
 
@@ -156,9 +208,8 @@ class QueryInterpretationService:
         if not self._ready():
             return {
                 "text": text,
-                "intent": "unknown",
-                "confidence": 0.0,
-                "reason": "Embedding model not loaded",
+                "error": "Embedding backend unavailable",
+                "error_code": EMBEDDING_BACKEND_UNAVAILABLE,
             }
 
         try:
@@ -171,6 +222,13 @@ class QueryInterpretationService:
                 output_key="intent",
                 fallback_label="unknown",
             )
+        except EmbeddingBackendUnavailableError as e:
+            logger.error("Intent classification backend unavailable: %s", e)
+            return {
+                "text": text,
+                "error": str(e),
+                "error_code": EMBEDDING_BACKEND_UNAVAILABLE,
+            }
         except Exception as e:
             logger.error("Intent classification failed: %s", e)
             return {
@@ -192,9 +250,8 @@ class QueryInterpretationService:
         if not self._ready():
             return {
                 "text": text,
-                "topic": "övrigt",
-                "confidence": 0.0,
-                "reason": "Embedding model not loaded",
+                "error": "Embedding backend unavailable",
+                "error_code": EMBEDDING_BACKEND_UNAVAILABLE,
             }
 
         try:
@@ -207,6 +264,13 @@ class QueryInterpretationService:
                 output_key="topic",
                 fallback_label="övrigt",
             )
+        except EmbeddingBackendUnavailableError as e:
+            logger.error("Topic classification backend unavailable: %s", e)
+            return {
+                "text": text,
+                "error": str(e),
+                "error_code": EMBEDDING_BACKEND_UNAVAILABLE,
+            }
         except Exception as e:
             logger.error("Topic classification failed: %s", e)
             return {
@@ -221,7 +285,26 @@ class QueryInterpretationService:
             return {"error": "Empty query"}
 
         intent_result = self.classify_intent(query)
+        if "error" in intent_result:
+            return {
+                "error": intent_result["error"],
+                **(
+                    {"error_code": intent_result["error_code"]}
+                    if "error_code" in intent_result
+                    else {}
+                ),
+            }
+
         topic_result = self.classify_topic(query)
+        if "error" in topic_result:
+            return {
+                "error": topic_result["error"],
+                **(
+                    {"error_code": topic_result["error_code"]}
+                    if "error_code" in topic_result
+                    else {}
+                ),
+            }
 
         return {
             "query": query,

@@ -21,7 +21,7 @@ Complete guide to the backend structure including:
 **AI Model Testing and Verification**
 
 Step-by-step guides for verifying both AI models:
-- **BGE-M3 Embedding Model**: Semantic similarity and ranking
+- **Ollama BGE-M3**: Semantic embeddings and ranking
 - **Ollama Qwen2.5 7B**: Text generation and summarization
 
 Includes:
@@ -32,6 +32,7 @@ Includes:
 - Performance benchmarks
 
 **Use this** to verify your AI models are working correctly.
+Ollama krävs för både generation och embeddings.
 
 ## Quick Links
 
@@ -39,6 +40,23 @@ Includes:
 1. [Backend README](../README.md) - Quick start and setup
 2. [STRUCTURE.md](STRUCTURE.md) - Architecture overview
 3. [MODEL_VERIFICATION.md](MODEL_VERIFICATION.md) - Verify models work
+
+### Start Backend (canonical flow)
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -e .
+uvicorn api:app --reload
+```
+
+### Run Tests
+```bash
+cd backend
+source .venv/bin/activate
+pytest
+```
 
 ### Configuration
 - [.env.example](../.env.example) - Environment variable template

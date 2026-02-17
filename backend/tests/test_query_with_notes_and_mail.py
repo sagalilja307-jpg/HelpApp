@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from helpershelp.testing.embedding_test_utils import install_deterministic_embedding_stubs
 from helpershelp.assistant.models import UnifiedItem, UnifiedItemType
 from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore, StoreConfig
 from helpershelp.domain.value_objects.time_utils import utcnow
@@ -25,6 +26,7 @@ class QueryWithNotesAndMailTests(unittest.TestCase):
         self.app = app
         reset_assistant_store()
         self._get_store = get_assistant_store
+        install_deterministic_embedding_stubs()
 
         store = SqliteStore(StoreConfig(db_path=self.db_path))
         store.init()

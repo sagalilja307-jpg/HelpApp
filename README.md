@@ -22,14 +22,16 @@ Monorepot innehåller iOS-appen, backend och dokumentation i en tydlig struktur.
 ## Snabbstart: backend
 ```bash
 cd backend
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+pip install -e .
 uvicorn api:app --reload
 ```
 
 ## Test: backend
 ```bash
 cd backend
-python -m unittest discover -s tests -p 'test*.py'
+source .venv/bin/activate
+pytest
 ```

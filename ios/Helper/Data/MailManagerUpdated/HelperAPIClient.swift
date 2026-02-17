@@ -62,10 +62,9 @@ final class HelperAPIClient {
     }
 
     private static func backendBaseURL() -> String {
-        if let override = UserDefaults.standard.string(forKey: AppIntegrationConfig.backendBaseURLDefaultsKey),
-           URL(string: override)?.scheme != nil {
-            return override.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let baseURL = AppIntegrationConfig.resolvedBackendBaseURL() else {
+            return AppIntegrationConfig.defaultBackendBaseURL
         }
-        return AppIntegrationConfig.defaultBackendBaseURL
+        return baseURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     }
 }

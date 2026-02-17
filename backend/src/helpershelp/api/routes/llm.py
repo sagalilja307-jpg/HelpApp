@@ -23,6 +23,7 @@ from helpershelp.api.models import (
     SimilarityRequest,
 )
 from helpershelp.domain.value_objects.time_utils import utcnow
+from helpershelp.infrastructure.llm.bge_m3_adapter import EMBEDDING_BACKEND_UNAVAILABLE
 from helpershelp.retrieval.content_object import ContentObject, MailSender
 
 logger = logging.getLogger(__name__)
@@ -32,8 +33,11 @@ router = APIRouter()
 
 def _raise_if_error(result: dict) -> dict:
     if "error" in result:
+        status_code = status.HTTP_400_BAD_REQUEST
+        if result.get("error_code") == EMBEDDING_BACKEND_UNAVAILABLE:
+            status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status_code,
             detail=result["error"],
         )
     return result

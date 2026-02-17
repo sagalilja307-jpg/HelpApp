@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from helpershelp.testing.embedding_test_utils import install_deterministic_embedding_stubs
 from helpershelp.assistant.models import UnifiedItem, UnifiedItemType
 from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore, StoreConfig
 from helpershelp.domain.value_objects.time_utils import utcnow
@@ -26,6 +27,7 @@ class APIQueryAssistantStoreTests(unittest.TestCase):
         self.app = app
         reset_assistant_store()
         self._get_store = get_assistant_store
+        install_deterministic_embedding_stubs()
 
         store = SqliteStore(StoreConfig(db_path=self.db_path))
         store.init()
@@ -88,6 +90,43 @@ class APIQueryAssistantStoreTests(unittest.TestCase):
         time_range = payload.get("time_range")
         self.assertIsInstance(time_range, dict)
         self.assertEqual(time_range.get("days"), 7)
+
+    def test_query_accepts_question_alias(self):
+        store = self._get_store()
+        now = utcnow()
+
+        event = UnifiedItem(
+            source="ios_push",
+            type=UnifiedItemType.event,
+            title="Alias test event",
+            body="",
+            created_at=now,
+            updated_at=now,
+            start_at=now,
+            end_at=now + timedelta(hours=1),
+            status={"event": {"location": "Office"}},
+        )
+        store.upsert_items([event])
+
+        client = TestClient(self.app)
+        resp = client.post(
+            "/query",
+            json={"question": "Vad har jag idag?", "language": "sv", "days": 7},
+        )
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertIn("content", payload)
+
+    def test_query_returns_400_when_query_and_question_missing(self):
+        client = TestClient(self.app)
+        resp = client.post(
+            "/query",
+            json={"language": "sv", "days": 7},
+        )
+        self.assertEqual(resp.status_code, 400)
+        payload = resp.json()
+        message = payload.get("error", {}).get("message", "")
+        self.assertIn("Either 'query' or 'question' must be provided", message)
 
     def test_ingest_then_query_returns_note_event_and_reminder_evidence(self):
         client = TestClient(self.app)

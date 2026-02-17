@@ -33,7 +33,7 @@ backend/
 │   │       └── sync.py         # Background sync
 │   │
 │   ├── llm/                 # AI/ML models layer
-│   │   ├── embedding_service.py      # BGE-M3 embeddings
+│   │   ├── embedding_service.py      # BGE-M3 embeddings (Ollama-backed shim)
 │   │   ├── ollama_service.py         # Ollama text generation
 │   │   ├── text_generation_service.py # Service facade
 │   │   └── llm_service.py            # Query interpretation
@@ -71,7 +71,7 @@ backend/
 │   └── test_*.py
 │
 └── tools/                   # Development and testing tools
-    ├── test_bge_m3.py      # BGE-M3 verification
+    ├── test_bge_m3.py      # Ollama bge-m3 verification
     └── ngrok/              # Local tunneling examples
 ```
 
@@ -97,14 +97,14 @@ backend/
 **Responsibility:** AI model interactions
 
 **Services:**
-- `EmbeddingService`: BGE-M3 for semantic similarity (local)
-- `OllamaTextGenerationService`: Qwen2.5 for text generation (local)
+- `EmbeddingService`: BGE-M3 via Ollama embeddings
+- `OllamaTextGenerationService`: Qwen2.5 via Ollama generation
 - `QueryInterpretationService`: Query classification (uses embeddings)
 
 **Key Principles:**
 - Models never make decisions (return scores/data only)
-- Local-first (no external API calls)
-- Graceful degradation (placeholder mode if unavailable)
+- Single inference boundary (all model calls via Ollama)
+- Explicit availability signalling (`503` for embedding-dependent endpoints)
 - Clear contracts (documented input/output)
 
 ### 3. Assistant Layer (`src/helpershelp/assistant/`)
@@ -170,11 +170,11 @@ backend/
    ↓
 4. Content Retrieval (Retrieval layer)
    - Fetch from sources (mail, assistant_store)
-   - Semantic ranking (BGE-M3)
+   - Semantic ranking (Ollama bge-m3 embeddings)
    - Apply filters and limits
    ↓
 5. Text Generation (LLM layer)
-   - Formulate response (Ollama Qwen2.5)
+   - Formulate response (Ollama qwen2.5:7b)
    ↓
 6. HTTP Response
 ```
@@ -201,15 +201,13 @@ See `.env.example` for full list. Key variables:
 
 **Models:**
 - `OLLAMA_HOST`: Ollama server URL
-- `OLLAMA_MODEL`: Model name (default: qwen2.5:7b)
-- `BGE_M3_LOCAL_PATH`: Custom BGE-M3 path
+- `OLLAMA_MODEL`: Generation model (default: qwen2.5:7b)
+- `OLLAMA_EMBED_MODEL`: Embedding model (default: bge-m3)
 
 **Storage:**
 - `HELPERSHELP_DB_PATH`: SQLite database path
-- `HELPERSHELP_MODEL_CACHE_DIR`: Model cache directory
 
 **Features:**
-- `HELPERSHELP_OFFLINE`: Offline mode (no model downloads)
 - `HELPERSHELP_ENABLE_SYNC_LOOP`: Background sync enabled
 
 ### Configuration Loading
@@ -218,7 +216,6 @@ Configuration is loaded in `config.py`:
 1. Load `.env` file (if exists)
 2. Read environment variables
 3. Set defaults
-4. Configure Hugging Face settings
 
 ## Testing Strategy
 
@@ -236,14 +233,13 @@ tests/
 
 ```bash
 # All tests
-python -m unittest discover -s tests -p 'test*.py'
+pytest
 
-# Specific test
-python -m unittest tests.test_assistant_core
+# Specific test file
+pytest tests/test_api_query_assistant_store.py
 
-# With coverage
-coverage run -m unittest discover -s tests
-coverage report
+# Specific test case
+pytest tests/test_query_stage2_sources.py -k contacts -q
 ```
 
 ### Test Fixtures
@@ -257,7 +253,7 @@ coverage report
 ### Model Verification
 
 ```bash
-# Test BGE-M3
+# Test Ollama embeddings (bge-m3)
 python tools/test_bge_m3.py
 
 # Test Ollama
@@ -267,7 +263,12 @@ curl http://localhost:11434/api/tags
 ### Local Development
 
 ```bash
+# Create + activate venv (first time)
+python3 -m venv .venv
+source .venv/bin/activate
+
 # Install in development mode
+python -m pip install --upgrade pip
 pip install -e .
 
 # Run with auto-reload
@@ -288,10 +289,10 @@ LOG_LEVEL=DEBUG uvicorn api:app
 
 ### Error Handling
 
-1. **Graceful Degradation**: Fallback modes for missing models
+1. **Strict Availability for Embeddings**: Return `503` when embedding backend is unavailable
 2. **Informative Errors**: Clear error messages for API users
 3. **Logging**: Log errors with context, not secrets
-4. **HTTP Status Codes**: Use appropriate codes (400, 404, 500)
+4. **HTTP Status Codes**: Use appropriate codes (400, 404, 500, 503)
 
 ### Performance
 

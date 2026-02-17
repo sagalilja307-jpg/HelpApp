@@ -2,16 +2,15 @@
 
 FastAPI-backend i monorepot, paketerad som `helpershelp` med `src/`-layout.
 
-> ⚠️ **DEPRECATION NOTICE:** This project has been refactored to Clean Architecture.  
-> Legacy import paths are deprecated and will be removed in **version 2.0.0 (August 2026)**.  
-> See [Shim Deprecation Strategy](docs/SHIM_DEPRECATION_STRATEGY.md) for migration guide.
+> ℹ️ **Status:** Shim-importer är borttagna.  
+> Använd canonical imports enligt [Shim Deprecation Strategy](docs/SHIM_DEPRECATION_STRATEGY.md).
 
 ## Quick Links
 
 - 📋 **[Architecture Guide](docs/STRUCTURE.md)** - Complete backend structure and organization
 - 🏗️ **[Clean Architecture](docs/CLEAN_ARCHITECTURE.md)** - Architecture principles and patterns
 - 🔄 **[Shim Deprecation Strategy](docs/SHIM_DEPRECATION_STRATEGY.md)** - Migration guide for legacy imports
-- 🔍 **[Model Verification](docs/MODEL_VERIFICATION.md)** - Test BGE-M3 and Ollama
+- 🔍 **[Model Verification](docs/MODEL_VERIFICATION.md)** - Test Ollama generation + embeddings
 - 📚 **[API Documentation](http://localhost:8000/docs)** - Interactive API docs (when running)
 
 ## Struktur
@@ -22,39 +21,17 @@ FastAPI-backend i monorepot, paketerad som `helpershelp` med `src/`-layout.
 
 ## Setup
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip
 pip install -e .
 ```
 
 ## Model Configuration
 
-### BGE-M3 Embedding Model
-
-The backend uses **BGE-M3** for semantic embeddings and similarity calculations.
-
-**First-time Setup:**
-```bash
-# Install dependencies (if not already done)
-pip install -e .
-
-# Test BGE-M3 (downloads model automatically on first run)
-python tools/test_bge_m3.py
-```
-
-**Configuration:**
-- Model is downloaded automatically from Hugging Face on first use
-- Default cache: `backend/.model_cache/`
-- Set `HELPERSHELP_OFFLINE=1` to use only cached models
-- Set `BGE_M3_LOCAL_PATH=/path/to/model` to use a specific model location
-
-**Requirements:**
-- ~2GB disk space for model
-- Works CPU-only (no GPU required)
-
-### Ollama Text Generation
-
-This backend uses **Ollama** with **Qwen2.5 7B** for text generation (replaced GPT-SW3).
+This backend is **Ollama-only** for all model inference:
+- **Generation:** `qwen2.5:7b`
+- **Embeddings:** `bge-m3`
 
 ### Installation
 
@@ -68,28 +45,30 @@ This backend uses **Ollama** with **Qwen2.5 7B** for text generation (replaced G
    ollama serve
    ```
 
-3. Pull the Qwen2.5 7B model:
+3. Pull both required models:
    ```bash
    ollama pull qwen2.5:7b
+   ollama pull bge-m3
    ```
 
 ### Configuration
 
 Environment variables:
 - `OLLAMA_HOST` - Ollama server URL (default: `http://localhost:11434`)
-- `OLLAMA_MODEL` - Model to use (default: `qwen2.5:7b`)
+- `OLLAMA_MODEL` - Generation model (default: `qwen2.5:7b`)
+- `OLLAMA_EMBED_MODEL` - Embedding model (default: `bge-m3`)
 
 ### Hardware Requirements
 
-- **RAM**: Minimum 8GB, recommended 16GB for optimal performance
+- **RAM**: Minimum 8GB, recommended 16GB for stable generation + embeddings
 - **CPU**: Multi-core processor recommended
-- **Disk**: ~4.7GB for the Qwen2.5 7B model
+- **Disk**: ~8-10GB for both models
 
 ### Notes
 
 - Ollama runs locally - no API keys required
 - First inference may be slow (model loading)
-- If Ollama is unavailable, the backend falls back to placeholder mode
+- Embedding-dependent endpoints return `503` when Ollama embeddings are unavailable
 
 ## Kör API
 ```bash
@@ -98,15 +77,15 @@ uvicorn api:app --reload
 
 ## Kör tester
 ```bash
-python -m unittest discover -s tests -p 'test*.py'
+pytest
 ```
 
 ## Verify Models
 
-To verify that BGE-M3 and Ollama are working correctly:
+To verify that Ollama generation and embeddings are working correctly:
 
 ```bash
-# Test BGE-M3 embedding model
+# Test Ollama BGE-M3 embedding model
 python tools/test_bge_m3.py
 
 # Test Ollama (requires ollama serve running)
@@ -133,10 +112,9 @@ Notera:
 - `/settings` (GET/POST) finns kvar för bakåtkompatibilitet.
 - `learning/reset` återställer bara lärda vikter/mönster, inte vald stödnivå.
 
-## Modellpolicy: offline/online
-- `HELPERSHELP_OFFLINE=1` aktiverar offline-läge (`HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`).
-- Utan `HELPERSHELP_OFFLINE` körs online-default där modellvikter får laddas ned vid behov.
-- Lokal cache styrs via `HELPERSHELP_MODEL_CACHE_DIR` (default: `backend/.model_cache`).
+## Modellpolicy
+- Ollama krävs för både generation och embeddings.
+- Pulla modeller i förväg i driftmiljö med `ollama pull qwen2.5:7b` och `ollama pull bge-m3`.
 
 ## Databas
 - Default DB: `backend/data/helpershelp.db`

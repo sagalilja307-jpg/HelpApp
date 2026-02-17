@@ -13,8 +13,6 @@ dependencies = [
   "uvicorn[standard]",
   "pydantic",
   "numpy",
-  "transformers",
-  "sentence-transformers",
   "requests",
   "PyJWT",
   "python-dotenv",

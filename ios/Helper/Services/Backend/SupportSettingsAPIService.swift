@@ -206,11 +206,7 @@ final class SupportSettingsAPIService {
     }
 
     private static func backendBaseURL() -> URL? {
-        if let override = UserDefaults.standard.string(forKey: "helper.backend.base_url"),
-           let url = URL(string: override), url.scheme != nil {
-            return url
-        }
-        return URL(string: "http://localhost:8000")
+        AppIntegrationConfig.resolvedBackendBaseURL()
     }
 
     private static func makeDecoder() -> JSONDecoder {

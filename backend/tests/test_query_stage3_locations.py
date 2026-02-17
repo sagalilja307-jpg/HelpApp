@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import pytest
 from unittest.mock import patch, MagicMock
 
+from helpershelp.testing.embedding_test_utils import install_deterministic_embedding_stubs
 from helpershelp.assistant.models import UnifiedItem, UnifiedItemType
 from helpershelp.domain.value_objects.time_utils import utcnow
 
@@ -224,9 +225,10 @@ def client():
     from helpershelp.api.deps import reset_assistant_store
     
     reset_assistant_store()
+    install_deterministic_embedding_stubs()
     
     # Import app after reset
-    from api import app
+    from helpershelp.api.app import app
     return TestClient(app)
 
 
@@ -242,5 +244,9 @@ def mock_store():
     store.upsert_settings.return_value = {}
     store.list_audit_events.return_value = []
     
-    with patch("helpershelp.api.deps.get_assistant_store", return_value=store):
+    with (
+        patch("helpershelp.api.deps.get_assistant_store", return_value=store),
+        patch("helpershelp.api.routes.assistant.get_assistant_store", return_value=store),
+        patch("helpershelp.api.routes.query.get_assistant_store", return_value=store),
+    ):
         yield store

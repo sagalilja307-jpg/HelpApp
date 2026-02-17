@@ -109,12 +109,7 @@ final class BackendQueryAPIService: BackendQuerying {
     }
 
     private static func backendBaseURL() -> URL? {
-        if let override = UserDefaults.standard.string(forKey: "helper.backend.base_url"),
-           let url = URL(string: override),
-           url.scheme != nil {
-            return url
-        }
-        return URL(string: "http://localhost:8000")
+        AppIntegrationConfig.resolvedBackendBaseURL()
     }
 
     private static func parseErrorMessage(from data: Data) -> String? {

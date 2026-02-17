@@ -5,6 +5,7 @@ from datetime import timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, model_validator
 
 from helpershelp.api.deps import (
     get_assistant_store,
@@ -13,8 +14,12 @@ from helpershelp.api.deps import (
     query_service,
     text_service,
 )
-from helpershelp.api.models import LLMResponse, QueryEvidenceItem, TimeRange, UnifiedQueryRequest
+from helpershelp.api.models import LLMResponse, QueryEvidenceItem, TimeRange
 from helpershelp.domain.value_objects.time_utils import utcnow
+from helpershelp.infrastructure.llm.bge_m3_adapter import (
+    EMBEDDING_BACKEND_UNAVAILABLE,
+    EmbeddingBackendUnavailableError,
+)
 from helpershelp.retrieval.retrieval_coordinator import (
     RetrievalInterpretation,
     get_retrieval_coordinator,
@@ -25,19 +30,42 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+class QueryRequest(BaseModel):
+    query: Optional[str] = None
+    question: Optional[str] = None
+    language: str = "sv"
+    sources: Optional[List[str]] = None
+    days: int = 90
+    data_filter: Optional[dict] = None
+
+    @model_validator(mode="after")
+    def validate_input(self):
+        if not self.query and not self.question:
+            raise ValueError("Either 'query' or 'question' must be provided")
+        return self
+
+    @property
+    def resolved_query(self) -> str:
+        return self.query or self.question or ""
+
+
 @router.post("/query", response_model=LLMResponse, tags=["query"])
-async def unified_query(request: UnifiedQueryRequest):
+async def unified_query(request: QueryRequest):
     try:
         now = utcnow()
-        logger.info("Processing query: %s", request.query)
+        user_query = request.resolved_query
+        logger.info("Processing query: %s", user_query)
 
         interpretation_result = query_service.interpret_query(
-            request.query,
+            user_query,
             request.language,
         )
         if "error" in interpretation_result:
+            status_code = status.HTTP_400_BAD_REQUEST
+            if interpretation_result.get("error_code") == EMBEDDING_BACKEND_UNAVAILABLE:
+                status_code = status.HTTP_503_SERVICE_UNAVAILABLE
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=status_code,
                 detail=interpretation_result["error"],
             )
 
@@ -75,12 +103,18 @@ async def unified_query(request: UnifiedQueryRequest):
         retrieval_interp = RetrievalInterpretation(
             intent=interpretation_result.get("intent", "summary"),
             sources=active_sources,
-            topic_hint=request.query,
+            topic_hint=user_query,
             time_range=time_range,
             context={"language": request.language},
             data_filter=request.data_filter,
         )
-        retrieved_items = coordinator.retrieve(retrieval_interp)
+        try:
+            retrieved_items = coordinator.retrieve(retrieval_interp)
+        except EmbeddingBackendUnavailableError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=str(exc),
+            ) from exc
 
         logger.info("Retrieved %s items", len(retrieved_items))
         if not retrieved_items:
@@ -207,6 +241,12 @@ async def unified_query(request: UnifiedQueryRequest):
         )
     except HTTPException:
         raise
+    except EmbeddingBackendUnavailableError as exc:
+        logger.error("Query processing failed (embedding backend unavailable): %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
     except Exception as exc:
         logger.error("Query processing failed: %s", exc, exc_info=True)
         raise HTTPException(

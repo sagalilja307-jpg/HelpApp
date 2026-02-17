@@ -1,70 +1,20 @@
-# Model Verification Guide
+# Model Verification Guide (Ollama-Only)
 
-This guide helps you verify that both AI models (BGE-M3 and Ollama Qwen2.5) are working correctly.
+Det här dokumentet verifierar att backendens två modeller fungerar via **samma Ollama-instans**:
+- Generation: `qwen2.5:7b`
+- Embeddings: `bge-m3`
 
 ## Prerequisites
 
 ```bash
 cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
 pip install -e .
 ```
 
-## 1. Verify BGE-M3 Embedding Model
-
-BGE-M3 is used for semantic similarity and content ranking.
-
-### Quick Test
-
-```bash
-python tools/test_bge_m3.py
-```
-
-**Expected Output:**
-```
-✓ sentence-transformers: [version]
-✓ torch: [version]
-✓ BGE-M3 model loaded successfully
-✓ Text embedded successfully
-  Embedding dimension: 1024
-✅ All tests passed!
-```
-
-### Manual Verification
-
-```python
-from helpershelp.llm.embedding_service import get_embedding_service
-
-service = get_embedding_service()
-
-# Test embedding
-result = service.embed_text("Detta är ett test")
-print(f"Embedding dimension: {result['embedding_dim']}")  # Should be 1024
-
-# Test similarity
-result = service.similarity(
-    "Jag gillar programmering",
-    "Programmering är roligt"
-)
-print(f"Similarity: {result['similarity']:.3f}")  # Should be > 0.5
-```
-
-### Troubleshooting
-
-**Model not found:**
-- First run downloads ~2GB from Hugging Face
-- Requires internet connection unless `HELPERSHELP_OFFLINE=1`
-- Check `backend/.model_cache/` directory exists
-
-**Out of memory:**
-- BGE-M3 needs ~2GB RAM
-- Close other applications
-- Reduce batch size in code if needed
-
-## 2. Verify Ollama Qwen2.5 Text Generation
-
-Ollama is used for natural language generation and summarization.
-
-### Installation
+## 1. Installera och starta Ollama
 
 ```bash
 # macOS
@@ -73,83 +23,61 @@ brew install ollama
 # Linux
 curl -fsSL https://ollama.com/install.sh | sh
 
-# Start Ollama
+# Starta servern
 ollama serve
 ```
 
-### Pull Model
+I en ny terminal:
 
 ```bash
 ollama pull qwen2.5:7b
+ollama pull bge-m3
 ```
 
-### Quick Test
+## 2. Verifiera embeddingmodellen (`bge-m3`)
 
 ```bash
-# In another terminal
+python tools/test_bge_m3.py
+```
+
+Förväntat:
+- Ollama reachable
+- Embedding model available
+- `embedding_dim = 1024`
+
+## 3. Verifiera generation (`qwen2.5:7b`)
+
+```bash
 curl http://localhost:11434/api/generate -d '{
   "model": "qwen2.5:7b",
-  "prompt": "Skriv en kort sammanfattning om artificiell intelligens på svenska.",
+  "prompt": "Skriv en kort svensk sammanfattning om AI.",
   "stream": false
 }'
 ```
 
-### Backend Integration Test
+## 4. Verifiera backendens health-status
 
-```python
-from helpershelp.llm.text_generation_service import get_text_generation_service
-
-service = get_text_generation_service()
-
-# Check if available
-if service.model_available:
-    print("✓ Ollama is connected")
-else:
-    print("✗ Ollama is not available")
-
-# Test generation
-result = service.generate_text(
-    "Beskriv vad en hjälpassistent gör",
-    max_length=100
-)
-
-if "error" not in result:
-    print("✓ Text generation works")
-    print(result["generated_text"])
-else:
-    print(f"✗ Error: {result['error']}")
-```
-
-### Troubleshooting
-
-**Cannot connect to Ollama:**
-- Check if `ollama serve` is running
-- Verify `OLLAMA_HOST=http://localhost:11434`
-- Test with: `curl http://localhost:11434/api/tags`
-
-**Model not found:**
-- Run `ollama list` to see installed models
-- Pull model: `ollama pull qwen2.5:7b`
-- Check model name matches `OLLAMA_MODEL` env var
-
-**Slow inference:**
-- First request is slower (model loading)
-- Requires ~8GB RAM for 7B model
-- Consider using smaller model: `ollama pull qwen2.5:3b`
-
-## 3. Full System Test
-
-Test the complete query pipeline:
+Starta backend:
 
 ```bash
-# Start backend
 uvicorn api:app --reload
 ```
 
-Then in another terminal:
+Kontrollera:
 
 ```bash
-# Test query endpoint
+curl http://localhost:8000/health/details
+```
+
+Förväntat fält:
+- `llm.generation_model`
+- `llm.embedding_model`
+- `llm.ollama_reachable`
+- `llm.missing_models`
+
+## 5. Full query-pipeline test
+
+```bash
 curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
   -d '{
@@ -160,60 +88,28 @@ curl -X POST http://localhost:8000/query \
   }'
 ```
 
-**Expected behavior:**
-1. Query is interpreted (BGE-M3 similarity)
-2. Items are retrieved and ranked (BGE-M3)
-3. Response is formulated (Ollama Qwen2.5)
-
-## Environment Variables Summary
+## Environment Variables
 
 ```bash
-# Ollama
 OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=qwen2.5:7b
-
-# BGE-M3
-BGE_M3_LOCAL_PATH=/custom/path/to/model  # optional
-HELPERSHELP_OFFLINE=0  # set to 1 for offline mode
-
-# General
-HELPERSHELP_MODEL_CACHE_DIR=.model_cache
+OLLAMA_EMBED_MODEL=bge-m3
 ```
 
-## Health Check Endpoint
+## Troubleshooting
 
-```bash
-curl http://localhost:8000/health/details
-```
+### Ollama unreachable
+- Kontrollera att `ollama serve` körs.
+- Testa: `curl http://localhost:11434/api/tags`.
 
-**Expected output:**
-```json
-{
-  "status": "ok",
-  "timestamp": "2024-...",
-  "model": {
-    "embedding": "bge-m3",
-    "generation": "qwen2.5:7b (Ollama)"
-  }
-}
-```
+### Embedding model missing
+- Kör: `ollama pull bge-m3`.
+- Kontrollera att `OLLAMA_EMBED_MODEL` matchar installerat modellnamn.
 
-## Performance Benchmarks
+### Generation model missing
+- Kör: `ollama pull qwen2.5:7b`.
+- Kontrollera `OLLAMA_MODEL`.
 
-**BGE-M3:**
-- Single embedding: ~50-100ms (CPU)
-- Batch of 10: ~200-300ms (CPU)
-- Memory: ~2GB
-
-**Ollama Qwen2.5 7B:**
-- First request: ~5-10 seconds (model loading)
-- Subsequent requests: ~1-3 seconds
-- Memory: ~8GB
-
-## Fallback Behavior
-
-If models are unavailable, the system falls back to "placeholder mode":
-- BGE-M3 unavailable → Returns error for embedding operations
-- Ollama unavailable → Returns simple text extraction without generation
-
-Both failures are logged with warnings but don't crash the system.
+### API returnerar 503 på embedding-endpoints/query
+- Backend signalerar att embedding-backend saknas.
+- Åtgärda Ollama-reachability och model availability först.

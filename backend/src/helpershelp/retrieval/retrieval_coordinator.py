@@ -2,7 +2,11 @@ import logging
 from typing import List, Dict, Optional, Callable
 from dataclasses import dataclass
 from helpershelp.retrieval.content_object import ContentObject
-from helpershelp.llm.embedding_service import get_embedding_service
+from helpershelp.infrastructure.llm.bge_m3_adapter import (
+    EMBEDDING_BACKEND_UNAVAILABLE,
+    EmbeddingBackendUnavailableError,
+    get_embedding_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +154,7 @@ class RetrievalCoordinator:
         candidates: List[ContentObject],
         query_text: str
     ) -> List[Dict]:
-        """Step 5: Beräkna likhet för alla kandidater med en batch-encode."""
+        """Step 5: Beräkna likhet för alla kandidater med en batch-embedding."""
 
         normalized_query = (query_text or "").strip()
         if not normalized_query:
@@ -165,45 +169,33 @@ class RetrievalCoordinator:
         if not candidate_rows:
             return []
 
-        try:
-            texts = [normalized_query] + [text for _, text in candidate_rows]
-            embeddings = self.embedding_service.model.encode(texts, convert_to_tensor=False)
+        texts = [normalized_query] + [text for _, text in candidate_rows]
+        result = self.embedding_service.embed_batch(texts)
+        if "error" in result:
+            error = result.get("error", "Batch scoring failed")
+            if result.get("error_code") == EMBEDDING_BACKEND_UNAVAILABLE:
+                raise EmbeddingBackendUnavailableError(error)
+            raise RuntimeError(error)
 
-            query_embedding = embeddings[0]
-            if hasattr(query_embedding, "tolist"):
-                query_embedding = query_embedding.tolist()
+        embedding_rows = result.get("embeddings", [])
+        if len(embedding_rows) != len(texts):
+            raise RuntimeError(
+                f"Batch scoring embedding count mismatch: expected {len(texts)}, got {len(embedding_rows)}"
+            )
 
-            scored = []
-            for item_embedding, (item, _) in zip(embeddings[1:], candidate_rows):
-                if hasattr(item_embedding, "tolist"):
-                    item_embedding = item_embedding.tolist()
+        vectors = [row.get("embedding", []) for row in embedding_rows]
+        if any(not vector for vector in vectors):
+            raise RuntimeError("Batch scoring received empty embedding vector")
 
-                scored.append({
-                    "item": item,
-                    "score": self._cosine_similarity(query_embedding, item_embedding)
-                })
-
-            return scored
-        except Exception as e:
-            logger.error(f"Batch scoring failed, using fallback scorer: {e}")
-
-        query_embedding = self.embedding_service.embed_text(normalized_query).get("embedding")
-        if not query_embedding:
-            logger.error("Fallback scoring failed to embed query; returning unscored candidates")
-            return [{"item": item, "score": 0.0} for item, _ in candidate_rows]
-
+        query_embedding = vectors[0]
         scored = []
-        for item, text in candidate_rows:
-            try:
-                item_embedding = self.embedding_service.embed_text(text).get("embedding")
-                if not item_embedding:
-                    continue
-                scored.append({
+        for item_embedding, (item, _) in zip(vectors[1:], candidate_rows):
+            scored.append(
+                {
                     "item": item,
-                    "score": self._cosine_similarity(query_embedding, item_embedding)
-                })
-            except Exception as e:
-                logger.error(f"Error scoring item {item.id}: {e}")
+                    "score": self._cosine_similarity(query_embedding, item_embedding),
+                }
+            )
         return scored
 
     def _filter_and_select(
