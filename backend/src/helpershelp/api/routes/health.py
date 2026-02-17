@@ -5,7 +5,7 @@ import os
 from fastapi import APIRouter
 
 from helpershelp.domain.value_objects.time_utils import utcnow
-from helpershelp.config import DEFAULT_DB_PATH
+from helpershelp.infrastructure.config.settings import get_settings
 
 router = APIRouter()
 
@@ -22,11 +22,11 @@ def health_check_extended():
 
 @router.get("/health/details", tags=["system"])
 def health_details():
-    db_path = os.getenv("HELPERSHELP_DB_PATH", str(DEFAULT_DB_PATH))
+    settings = get_settings()
     return {
         "status": "ok",
         "timestamp": utcnow().isoformat(),
-        "db_path": db_path,
+        "db_path": str(settings.db_path),
         "sync_loop_enabled": os.getenv("HELPERSHELP_ENABLE_SYNC_LOOP", "0") == "1",
         "model": {
             "embedding": "bge-m3",

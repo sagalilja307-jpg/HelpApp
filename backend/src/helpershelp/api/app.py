@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, status
@@ -24,6 +25,15 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Apply runtime policy for offline mode
+    from helpershelp.infrastructure.config.settings import get_settings
+    
+    settings = get_settings()
+    if settings.offline:
+        os.environ["HF_HUB_OFFLINE"] = "1"
+        os.environ["TRANSFORMERS_OFFLINE"] = "1"
+        logger.info("Offline mode enabled: HF_HUB_OFFLINE=1, TRANSFORMERS_OFFLINE=1")
+    
     store = get_assistant_store()
     start_sync_loop(store)
     yield
