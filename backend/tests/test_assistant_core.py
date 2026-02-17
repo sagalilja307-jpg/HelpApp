@@ -3,11 +3,11 @@ import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from helpershelp.assistant.models import ExternalRef, Person, UnifiedItem, UnifiedItemType
-from helpershelp.application.assistant.proposals import generate_proposals
-from helpershelp.domain.rules.scoring import score_item
-from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore, StoreConfig
-from helpershelp.domain.value_objects.time_utils import utcnow
+from src.helpershelp.domain.models import ExternalRef, Person, UnifiedItem, UnifiedItemType
+from src.helpershelp.application.assistant.proposals import generate_proposals
+from src.helpershelp.domain.rules.scoring import score_item
+from src.helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore, StoreConfig
+from src.helpershelp.domain.value_objects.time_utils import utcnow
 
 
 class AssistantCoreTests(unittest.TestCase):
