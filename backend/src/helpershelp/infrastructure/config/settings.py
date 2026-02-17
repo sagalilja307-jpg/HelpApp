@@ -3,11 +3,6 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from dotenv import load_dotenv
-
-
-# Only load .env once when explicitly imported
-load_dotenv()
 
 
 @dataclass(frozen=True)
@@ -19,6 +14,10 @@ class Settings:
 
 
 def load_settings() -> Settings:
+    # Load .env only when settings are explicitly requested
+    from dotenv import load_dotenv
+    load_dotenv()
+    
     base_dir = Path(__file__).resolve().parents[3]
 
     model_cache_dir = Path(
@@ -37,3 +36,15 @@ def load_settings() -> Settings:
         db_path=db_path,
         offline=offline,
     )
+
+
+# Cached singleton instance to avoid repeated calls
+_settings_instance: Settings | None = None
+
+
+def get_settings() -> Settings:
+    """Get cached settings instance, loading on first call."""
+    global _settings_instance
+    if _settings_instance is None:
+        _settings_instance = load_settings()
+    return _settings_instance
