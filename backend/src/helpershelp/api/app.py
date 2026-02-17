@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, status
@@ -19,20 +18,22 @@ from helpershelp.api.routes.oauth_gmail import router as oauth_gmail_router
 from helpershelp.api.routes.query import router as query_router
 from helpershelp.api.routes.sync import router as sync_router
 from helpershelp.assistant.sync import start_sync_loop
-from helpershelp.infrastructure.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
-
-# Load settings and apply runtime policy
-settings = get_settings()
-
-if settings.offline:
-    os.environ["HF_HUB_OFFLINE"] = "1"
-    os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Apply runtime policy for offline mode
+    import os
+    from helpershelp.infrastructure.config.settings import get_settings
+    
+    settings = get_settings()
+    if settings.offline:
+        os.environ["HF_HUB_OFFLINE"] = "1"
+        os.environ["TRANSFORMERS_OFFLINE"] = "1"
+        logger.info("Offline mode enabled: HF_HUB_OFFLINE=1, TRANSFORMERS_OFFLINE=1")
+    
     store = get_assistant_store()
     start_sync_loop(store)
     yield

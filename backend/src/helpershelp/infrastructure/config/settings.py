@@ -18,7 +18,15 @@ def load_settings() -> Settings:
     from dotenv import load_dotenv
     load_dotenv()
     
-    base_dir = Path(__file__).resolve().parents[3]
+    # Try to determine base_dir from environment variable first,
+    # fall back to file location as a reasonable default
+    base_dir_env = os.getenv("HELPERSHELP_BASE_DIR")
+    if base_dir_env:
+        base_dir = Path(base_dir_env).expanduser().resolve()
+    else:
+        # Default: assume we're in helpershelp/infrastructure/config/settings.py
+        # and go up 3 levels to reach the backend/src directory
+        base_dir = Path(__file__).resolve().parents[3]
 
     model_cache_dir = Path(
         os.getenv("HELPERSHELP_MODEL_CACHE_DIR", base_dir / ".model_cache")

@@ -661,7 +661,8 @@ class SqliteStore:
 
 def get_store() -> SqliteStore:
     settings = get_settings()
-    db_path = Path(os.getenv("HELPERSHELP_DB_PATH", str(settings.db_path))).expanduser().resolve()
+    # Use settings.db_path directly - it already incorporates HELPERSHELP_DB_PATH env var
+    db_path = settings.db_path.expanduser().resolve()
     store = SqliteStore(StoreConfig(db_path=db_path))
     store.init()
     return store
