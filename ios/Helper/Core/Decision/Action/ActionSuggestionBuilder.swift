@@ -114,7 +114,7 @@ final class ActionSuggestionBuilder {
         } else if let date = dateHint {
             let formatter = RelativeDateTimeFormatter()
             formatter.unitsStyle = .full
-            let relative = formatter.localizedString(for: date, relativeTo: Date())
+            let relative = formatter.localizedString(for: date, relativeTo: DateService.shared.now())
             base = "Du har inget planerat \(relative). Vill du lägga in detta i kalendern?"
         } else {
             base = "Detta låter som ett möte. Vill du lägga in det i kalendern?"

@@ -46,7 +46,7 @@ struct PhotosIndexService: PhotosIndexing {
     init(
         sourceConnectionStore: SourceConnectionStoring = SourceConnectionStore.shared,
         defaults: UserDefaults = .standard,
-        nowProvider: @escaping () -> Date = Date.init
+        nowProvider: @escaping () -> Date = DateService.shared.now
     ) {
         self.sourceConnectionStore = sourceConnectionStore
         self.defaults = defaults

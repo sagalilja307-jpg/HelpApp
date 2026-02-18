@@ -188,10 +188,8 @@ final class BackendQueryAPIService: BackendQuerying {
     }
 
     private static func parseDate(_ rawValue: String) -> Date? {
-        for formatter in iso8601Formatters {
-            if let date = formatter.date(from: rawValue) {
-                return date
-            }
+        if let date = DateService.shared.parseISO8601(rawValue) {
+            return date
         }
 
         for formatter in fallbackDateFormatters {
@@ -202,18 +200,6 @@ final class BackendQueryAPIService: BackendQuerying {
 
         return nil
     }
-
-    private static let iso8601Formatters: [ISO8601DateFormatter] = {
-        let withFractional = ISO8601DateFormatter()
-        withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        withFractional.timeZone = TimeZone(secondsFromGMT: 0)
-
-        let standard = ISO8601DateFormatter()
-        standard.formatOptions = [.withInternetDateTime]
-        standard.timeZone = TimeZone(secondsFromGMT: 0)
-
-        return [withFractional, standard]
-    }()
 
     private static let fallbackDateFormatters: [DateFormatter] = {
         let formats = [
@@ -227,12 +213,11 @@ final class BackendQueryAPIService: BackendQuerying {
         ]
 
         return formats.map { format in
-            let formatter = DateFormatter()
-            formatter.calendar = Calendar(identifier: .gregorian)
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.timeZone = TimeZone(secondsFromGMT: 0)
-            formatter.dateFormat = format
-            return formatter
+            DateService.shared.dateFormatter(
+                dateFormat: format,
+                locale: Locale(identifier: "en_US_POSIX"),
+                timeZone: TimeZone(secondsFromGMT: 0)
+            )
         }
     }()
 }

@@ -30,7 +30,7 @@ extension LLMExtraction {
     /// Safely parses the ISO 8601 date string into a Date
     func parsedDate() -> Date? {
         guard let iso = suggestedDateISO8601 else { return nil }
-        return ISO8601DateFormatter().date(from: iso)
+        return DateService.shared.parseISO8601(iso)
     }
 }
 // MARK: - Builder bridging
@@ -64,4 +64,3 @@ extension LLMExtraction {
         }
     }
 }
-

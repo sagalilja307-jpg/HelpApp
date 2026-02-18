@@ -11,14 +11,15 @@ struct NotesStoreService {
         source: String = "user",
         in context: ModelContext
     ) throws -> UserNote {
+        let now = DateService.shared.now()
 
         let note = UserNote(
             title: title,
             body: body,
             source: source,
             externalRef: nil,
-            createdAt: Date(),
-            updatedAt: Date()
+            createdAt: now,
+            updatedAt: now
         )
 
         context.insert(note)
@@ -50,15 +51,16 @@ struct NotesStoreService {
             note.body = body
             note.source = source
             note.externalRef = externalRef
-            note.updatedAt = Date()
+            note.updatedAt = DateService.shared.now()
         } else {
+            let now = DateService.shared.now()
             note = UserNote(
                 title: title,
                 body: body,
                 source: source,
                 externalRef: externalRef,
-                createdAt: Date(),
-                updatedAt: Date()
+                createdAt: now,
+                updatedAt: now
             )
             context.insert(note)
         }

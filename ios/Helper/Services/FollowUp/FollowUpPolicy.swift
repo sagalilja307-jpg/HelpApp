@@ -18,10 +18,10 @@ struct FollowUpPolicy {
         lastActivity: Date
     ) -> Bool {
 
-        let daysWaiting = Calendar.current.dateComponents(
+        let daysWaiting = DateService.shared.dateComponents(
             [.day],
             from: waitingSince,
-            to: Date()
+            to: DateService.shared.now()
         ).day ?? 0
 
         return daysWaiting >= daysUntilFollowUp

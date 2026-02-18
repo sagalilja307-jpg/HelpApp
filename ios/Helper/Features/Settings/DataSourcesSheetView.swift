@@ -381,8 +381,8 @@ private extension DataSourcesSheetView {
 
     static func formatRelativeDate(_ date: Date) -> String {
         let formatter = RelativeDateTimeFormatter()
-        formatter.locale = Locale(identifier: "sv_SE")
+        formatter.locale = DateService.shared.locale
         formatter.unitsStyle = .short
-        return formatter.localizedString(for: date, relativeTo: Date())
+        return formatter.localizedString(for: date, relativeTo: DateService.shared.now())
     }
 }

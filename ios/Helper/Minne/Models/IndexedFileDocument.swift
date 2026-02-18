@@ -25,8 +25,8 @@ public final class IndexedFileDocument {
         sizeBytes: Int,
         bookmarkData: Data?,
         source: String,
-        createdAt: Date = Date(),
-        updatedAt: Date = Date()
+        createdAt: Date = DateService.shared.now(),
+        updatedAt: Date = DateService.shared.now()
     ) {
         self.id = id
         self.stableHash = stableHash

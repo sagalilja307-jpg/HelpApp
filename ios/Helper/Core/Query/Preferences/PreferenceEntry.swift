@@ -12,7 +12,7 @@ public struct PreferenceEntry: Codable {
         value: PreferenceValue,
         scope: PreferenceScope,
         source: PreferenceSource,
-        updatedAt: Date = Date()
+        updatedAt: Date = DateService.shared.now()
     ) {
         self.key = key
         self.value = value

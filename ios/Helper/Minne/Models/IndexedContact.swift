@@ -25,8 +25,8 @@ public final class IndexedContact {
         hasEmail: Bool,
         hasPhone: Bool,
         contactHash: String,
-        createdAt: Date = Date(),
-        updatedAt: Date = Date()
+        createdAt: Date = DateService.shared.now(),
+        updatedAt: Date = DateService.shared.now()
     ) {
         self.id = id
         self.contactIdentifier = contactIdentifier

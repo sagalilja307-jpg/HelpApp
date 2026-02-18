@@ -19,8 +19,8 @@ public final class UserNote {
         body: String,
         source: String,
         externalRef: String? = nil,
-        createdAt: Date = Date(),
-        updatedAt: Date = Date()
+        createdAt: Date = DateService.shared.now(),
+        updatedAt: Date = DateService.shared.now()
     ) {
         self.id = id
         self.title = title

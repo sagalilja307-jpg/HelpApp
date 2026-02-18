@@ -139,7 +139,7 @@ final class GmailOAuthService {
         let resolved = OAuthToken(
             accessToken: token.accessToken,
             refreshToken: token.refreshToken,
-            expiresAt: Date().addingTimeInterval(TimeInterval(token.expiresIn))
+            expiresAt: DateService.shared.now().addingTimeInterval(TimeInterval(token.expiresIn))
         )
         await tokenManager.saveToken(resolved)
 
@@ -158,7 +158,7 @@ final class GmailOAuthService {
         let resolved = OAuthToken(
             accessToken: token.accessToken,
             refreshToken: token.refreshToken ?? refreshToken,
-            expiresAt: Date().addingTimeInterval(TimeInterval(token.expiresIn))
+            expiresAt: DateService.shared.now().addingTimeInterval(TimeInterval(token.expiresIn))
         )
 
         await tokenManager.saveToken(resolved)

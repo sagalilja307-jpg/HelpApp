@@ -252,14 +252,14 @@ public final class MemoryService {
         if let existing = try context.fetch(descriptor).first {
             existing.confidence = confidence
             existing.evidenceJSON = evidenceJSON
-            existing.updatedAt = Date()
+            existing.updatedAt = DateService.shared.now()
         } else {
             context.insert(
                 BehaviorPattern(
                     pattern: pattern,
                     confidence: confidence,
                     evidenceJSON: evidenceJSON,
-                    updatedAt: Date()
+                    updatedAt: DateService.shared.now()
                 )
             )
         }
@@ -326,7 +326,7 @@ public final class MemoryService {
         cluster.requiresPrep = requiresPrep
         cluster.confidence = confidence
         cluster.status = .proposed
-        cluster.updatedAt = Date()
+        cluster.updatedAt = DateService.shared.now()
         cluster.proposedBy.value = actor.rawValue
 
         if !sourceEventIds.isEmpty {
@@ -358,7 +358,7 @@ public final class MemoryService {
         guard let cluster = try context.fetch(descriptor).first else { return }
 
         cluster.status = .active
-        cluster.updatedAt = Date()
+        cluster.updatedAt = DateService.shared.now()
         try context.save()
     }
 

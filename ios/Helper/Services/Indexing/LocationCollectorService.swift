@@ -31,7 +31,7 @@ struct LocationCollectorService: LocationCollecting {
 
     init(
         snapshotService: LocationSnapshoting,
-        nowProvider: @escaping () -> Date = Date.init
+        nowProvider: @escaping () -> Date = DateService.shared.now
     ) {
         self.snapshotService = snapshotService
         self.nowProvider = nowProvider

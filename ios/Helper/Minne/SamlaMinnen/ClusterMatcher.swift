@@ -30,7 +30,7 @@ final class ClusterMatcher {
             )
 
             // 2️⃣ Hur många dagar sedan klustret uppdaterades
-            let daysDiff = abs(Calendar.current.dateComponents(
+            let daysDiff = abs(DateService.shared.dateComponents(
                 [.day],
                 from: cluster.updatedAt,   // ✅ FIX
                 to: eventDate

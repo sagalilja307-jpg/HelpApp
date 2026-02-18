@@ -35,7 +35,7 @@ public final class BehaviorPattern {
         pattern: String,
         confidence: Double,
         evidenceJSON: String? = nil,
-        updatedAt: Date = Date()
+        updatedAt: Date = DateService.shared.now()
     ) {
         self.pattern = pattern
         self.confidence = confidence

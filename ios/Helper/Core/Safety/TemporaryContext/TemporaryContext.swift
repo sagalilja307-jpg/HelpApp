@@ -19,7 +19,7 @@ public final class TemporaryContext {
     public init(
         mode: TemporaryContextMode,
         reason: String? = nil,
-        updatedAt: Date = Date()
+        updatedAt: Date = DateService.shared.now()
     ) {
         self.id = "current"
         self.mode = mode

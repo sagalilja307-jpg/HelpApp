@@ -55,7 +55,7 @@ public final class TemporaryContextService {
         if let existing {
             existing.mode = mode
             existing.reason = reason
-            existing.updatedAt = Date()
+            existing.updatedAt = DateService.shared.now()
         } else {
             context.insert(
                 TemporaryContext(

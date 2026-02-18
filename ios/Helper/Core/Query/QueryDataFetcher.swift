@@ -84,7 +84,7 @@ final class QueryDataFetcher: QueryDataFetching {
         filesImportService: FilesImporting? = nil,
         locationCollector: LocationCollecting? = nil,
         sourceConnectionStore: SourceConnectionStoring = SourceConnectionStore.shared,
-        nowProvider: @escaping () -> Date = Date.init,
+        nowProvider: @escaping () -> Date = DateService.shared.now,
         eventStore: EKEventStore = EKEventStore()
     ) {
         self.memoryService = memoryService
@@ -111,7 +111,7 @@ final class QueryDataFetcher: QueryDataFetching {
         filesImportService: FilesImporting? = nil,
         locationCollector: LocationCollecting? = nil,
         sourceConnectionStore: SourceConnectionStoring = SourceConnectionStore.shared,
-        nowProvider: @escaping () -> Date = Date.init
+        nowProvider: @escaping () -> Date = DateService.shared.now
     ) {
         self.memoryService = memoryService
         self.reminderSyncManager = reminderSyncManager
@@ -334,8 +334,8 @@ final class QueryDataFetcher: QueryDataFetching {
     private static func timeRange(days: Int, now: Date) -> DateInterval {
         let clamped = max(1, min(3650, days))
 
-        let start = Calendar.current.date(byAdding: .day, value: -clamped, to: now) ?? now
-        let end = Calendar.current.date(byAdding: .day, value: clamped, to: now) ?? now
+        let start = DateService.shared.date(byAdding: .day, value: -clamped, to: now) ?? now
+        let end = DateService.shared.date(byAdding: .day, value: clamped, to: now) ?? now
 
         return DateInterval(start: start, end: end)
     }
@@ -390,7 +390,10 @@ extension QueryDataFetcher {
         )
     }
 
-    nonisolated static func mapReminder(_ reminder: ReminderItem, now: Date = Date()) -> UnifiedItemDTO {
+    nonisolated static func mapReminder(
+        _ reminder: ReminderItem,
+        now: Date = DateService.shared.now()
+    ) -> UnifiedItemDTO {
         let baseDate = reminder.dueDate ?? now
         return UnifiedItemDTO(
             id: "reminder:\(reminder.id)",

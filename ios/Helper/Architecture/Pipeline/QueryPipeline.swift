@@ -44,7 +44,7 @@ struct QueryPipeline {
         backendQueryService: BackendQuerying,
         sourceConnectionStore: SourceConnectionStoring = SourceConnectionStore.shared,
         mailSyncService: MailSyncService = .shared,
-        nowProvider: @escaping () -> Date = Date.init
+        nowProvider: @escaping () -> Date = DateService.shared.now
     ) {
         self.access = access
         self.fetcher = fetcher
@@ -467,10 +467,9 @@ extension QueryPipeline {
     }
 
     private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "sv_SE")
-        formatter.dateStyle = .short
-        formatter.timeStyle = .short
-        return formatter
+        DateService.shared.dateFormatter(
+            dateStyle: .short,
+            timeStyle: .short
+        )
     }()
 }

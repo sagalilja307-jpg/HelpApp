@@ -47,7 +47,7 @@ final class FollowUpEvaluator {
         }
 
         // ✅ Om tillräckligt lång tid har passerat → föreslå uppföljning
-        let now = Date()
+        let now = DateService.shared.now()
         let elapsedTime = now.timeIntervalSince(waitingSince)
 
         if elapsedTime >= maxWaitTime {
@@ -59,4 +59,3 @@ final class FollowUpEvaluator {
         return false
     }
 }
-

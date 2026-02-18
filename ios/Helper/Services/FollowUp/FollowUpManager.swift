@@ -36,7 +36,7 @@ final class FollowUpManager {
         }
 
         cluster.status = .waitingForResponse
-        cluster.waitingSince = Date()
+        cluster.waitingSince = DateService.shared.now()
         cluster.followUpSuggested = false
     }
 
@@ -53,4 +53,3 @@ final class FollowUpManager {
         cluster.followUpSuggested = false
     }
 }
-

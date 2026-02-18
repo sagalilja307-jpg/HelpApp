@@ -14,7 +14,7 @@ public final class SemanticEmbedding {
         sourceType: String,
         sourceId: String,
         vectorData: Data,
-        createdAt: Date = Date()
+        createdAt: Date = DateService.shared.now()
     ) {
         self.embeddingId = embeddingId
         self.sourceType = sourceType

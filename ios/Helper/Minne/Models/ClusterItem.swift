@@ -8,7 +8,7 @@ public final class ClusterItem {
     @Relationship public var event: RawEvent
     public var addedAt: Date
 
-    public init(cluster: Cluster, event: RawEvent, addedAt: Date = Date()) {
+    public init(cluster: Cluster, event: RawEvent, addedAt: Date = DateService.shared.now()) {
         self.id = UUID()
         self.cluster = cluster
         self.event = event

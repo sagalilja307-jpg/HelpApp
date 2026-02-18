@@ -272,7 +272,7 @@ final class BackendQueryPipelineTests: XCTestCase {
         fetcher: MockFetcher,
         backend: MockBackendQueryService,
         sourceConnectionStore: SourceConnectionStoring = InMemorySourceConnectionStore(),
-        nowProvider: @escaping () -> Date = Date.init
+        nowProvider: @escaping () -> Date = DateService.shared.now
     ) async throws -> QueryPipeline {
         QueryPipeline(
             access: MockAccess(),

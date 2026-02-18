@@ -54,7 +54,7 @@ final class LocationSnapshotService: NSObject, LocationSnapshoting {
     static let locationTimeout: TimeInterval = 15
 
     init(
-        nowProvider: @escaping () -> Date = Date.init
+        nowProvider: @escaping () -> Date = DateService.shared.now
     ) {
         self.nowProvider = nowProvider
         #if canImport(CoreLocation)
@@ -242,9 +242,9 @@ final class LocationSnapshotService: NSObject, LocationSnapshoting {
         timestamp: Date
     ) -> String {
 
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "sv_SE")
-        formatter.dateFormat = "HH:mm"
+        let formatter = DateService.shared.dateFormatter(
+            dateFormat: "HH:mm"
+        )
 
         let timeString = formatter.string(from: timestamp)
 

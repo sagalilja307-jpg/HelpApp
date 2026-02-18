@@ -141,7 +141,7 @@ private extension ShareViewController {
            let decoded = try? decoder.decode(SharedItemsEnvelope.self, from: data) {
             existing = decoded
         } else {
-            existing = SharedItemsEnvelope(version: .v1, items: [], createdAt: Date())
+            existing = SharedItemsEnvelope(version: .v1, items: [], createdAt: DateService.shared.now())
         }
 
         var items = existing.items
@@ -151,7 +151,7 @@ private extension ShareViewController {
                 kind: kind,
                 value: value,
                 source: source,
-                createdAt: Date()
+                createdAt: DateService.shared.now()
             )
         )
 

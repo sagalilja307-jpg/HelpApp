@@ -32,7 +32,7 @@ struct FilesImportService: FilesImporting {
     init(
         textExtractionService: FileTextExtractionService = FileTextExtractionService(),
         sourceConnectionStore: SourceConnectionStoring = SourceConnectionStore.shared,
-        nowProvider: @escaping () -> Date = Date.init
+        nowProvider: @escaping () -> Date = DateService.shared.now
     ) {
         self.textExtractionService = textExtractionService
         self.sourceConnectionStore = sourceConnectionStore
@@ -54,7 +54,7 @@ struct FilesImportService: FilesImporting {
         
         let fileName = values.name ?? url.lastPathComponent
         let size = max(0, values.fileSize ?? 0)
-        let modifiedAt = values.contentModificationDate ?? Date()
+        let modifiedAt = values.contentModificationDate ?? DateService.shared.now()
         
         let stableHash = Self.stableHash(
             url: url,

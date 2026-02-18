@@ -28,7 +28,7 @@ public final class Cluster {
         confidence: Double = 0.0,
         status: ClusterStatus = .proposed,
         proposedBy: Actor,
-        updatedAt: Date = Date(),
+        updatedAt: Date = DateService.shared.now(),
         centroid: [Double] = [],
         title: String? = nil,
         titleConfidence: TitleConfidence = .low,

@@ -41,7 +41,7 @@ struct FollowUpItem: Identifiable, Equatable {
         self.relatedCalendarEventId = relatedCalendarEventId
         self.relatedReminderId = relatedReminderId
         self.status = .open
-        self.createdAt = Date()
+        self.createdAt = DateService.shared.now()
         self.completedAt = nil
     }
 }

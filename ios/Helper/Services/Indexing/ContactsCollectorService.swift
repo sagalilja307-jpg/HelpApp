@@ -81,7 +81,7 @@ struct ContactsCollectorService: ContactsCollecting {
             Dictionary(uniqueKeysWithValues: existing.map { ($0.contactIdentifier, $0) })
 
         var changedCount = 0
-        let now = Date()
+        let now = DateService.shared.now()
 
         for snapshot in snapshots {
 

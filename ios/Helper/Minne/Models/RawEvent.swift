@@ -26,7 +26,7 @@ public final class RawEvent {
         timestamp: Date,
         payloadJSON: String,
         text: String? = nil,
-        createdAt: Date = Date()
+        createdAt: Date = DateService.shared.now()
     ) {
         self.id = id
         self.source = source

@@ -6,7 +6,7 @@ struct OAuthToken: Codable {
     let expiresAt: Date
 
     var isExpired: Bool {
-        return Date() >= expiresAt
+        return DateService.shared.now() >= expiresAt
     }
 }
 

@@ -49,7 +49,7 @@ final class ReminderSyncManager {
         reminder.calendar = eventStore.defaultCalendarForNewReminders()
 
         if let dueDate = item.dueDate {
-            reminder.dueDateComponents = Calendar.current.dateComponents(
+            reminder.dueDateComponents = DateService.shared.dateComponents(
                 [.year, .month, .day, .hour, .minute],
                 from: dueDate
             )
@@ -106,7 +106,7 @@ extension ReminderSyncManager {
             let rawId = "reminder:\(item.id)"
 
             // timestamp: använd dueDate om den finns, annars "nu"
-            let ts = item.dueDate ?? Date()
+            let ts = item.dueDate ?? DateService.shared.now()
 
             try memory.putRawEvent(
                 actor: .system,

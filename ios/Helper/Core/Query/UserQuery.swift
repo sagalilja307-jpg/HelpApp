@@ -17,7 +17,7 @@ struct UserQuery: Identifiable, Equatable, Sendable, Codable {
     init(
         id: UUID = UUID(),
         text: String,
-        createdAt: Date = Date(),
+        createdAt: Date = DateService.shared.now(),
         source: Source = .userTyped
     ) {
         self.id = id

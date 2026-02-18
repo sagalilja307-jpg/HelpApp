@@ -22,7 +22,7 @@ struct ContentObject: Identifiable, Equatable, Sendable {
     init(
         rawText: String,
         source: ContentSource,
-        createdAt: Date = Date(),
+        createdAt: Date = DateService.shared.now(),
         originalDateHint: Date? = nil,
         relatedEntityId: String? = nil
     ) {

@@ -57,7 +57,7 @@ struct Mail: Identifiable, Decodable {
         } else if let receivedAt = try? container.decode(Date.self, forKey: .receivedAt) {
             date = receivedAt
         } else {
-            date = Date()
+            date = DateService.shared.now()
         }
 
         if let readValue = try? container.decode(Bool.self, forKey: .isRead) {
