@@ -102,8 +102,8 @@ class DashboardResponse(BaseModel):
 
 
 class IngestRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     items: List[UnifiedItem] = Field(default_factory=list)
-    features: Optional[Dict[str, Any]] = None
 
 
 class SyncGmailRequest(BaseModel):

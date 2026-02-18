@@ -69,7 +69,7 @@ class APIQueryAssistantStoreTests(unittest.TestCase):
         payload = resp.json()
         self.assertIn("error", payload)
 
-    def test_ingest_accepts_features_payload(self):
+    def test_ingest_accepts_items_payload(self):
         client = TestClient(self.app)
         now = utcnow()
 
@@ -87,20 +87,24 @@ class APIQueryAssistantStoreTests(unittest.TestCase):
                     "end_at": now.isoformat(),
                     "status": {"is_all_day": False},
                 }
-            ],
-            "features": {"calendar_events": [{"id": "evt-1"}]},
+            ]
         }
 
         ingest_resp = client.post("/ingest", json=ingest_payload)
         self.assertEqual(ingest_resp.status_code, 200)
-        payload = ingest_resp.json()
-        self.assertEqual(payload.get("feature_inserted"), 0)
-        self.assertEqual(payload.get("feature_updated"), 0)
 
         store = self._get_store()
         items = store.list_items(limit=10)
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0].title, "Packa for Grekland")
+
+    def test_ingest_rejects_legacy_features_payload(self):
+        client = TestClient(self.app)
+        response = client.post(
+            "/ingest",
+            json={"items": [], "features": {"calendar_events": [{"id": "evt-1"}]}},
+        )
+        self.assertEqual(response.status_code, 422)
 
 
 if __name__ == "__main__":

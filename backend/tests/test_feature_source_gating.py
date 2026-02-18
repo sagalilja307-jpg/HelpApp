@@ -44,13 +44,10 @@ class SnapshotDataIntentContractTests(unittest.TestCase):
         response = self.client.get("/assistant/feature-status")
         self.assertEqual(response.status_code, 404)
 
-    def test_ingest_accepts_features_payload(self):
+    def test_ingest_rejects_legacy_features_payload(self):
         payload = {"items": [], "features": {"calendar_events": [{"id": "evt-1"}]}}
         response = self.client.post("/ingest", json=payload)
-        self.assertEqual(response.status_code, 200)
-        body = response.json()
-        self.assertEqual(body.get("feature_inserted"), 0)
-        self.assertEqual(body.get("feature_updated"), 0)
+        self.assertEqual(response.status_code, 422)
 
 
 if __name__ == "__main__":

@@ -223,22 +223,10 @@ def ingest(request: IngestRequest):
             },
         )
 
-    feature_inserted = 0
-    feature_updated = 0
-    if request.features:
-        store.audit(
-            "feature_ingest_ignored",
-            {
-                "feature_keys": sorted(list(request.features.keys())),
-            },
-        )
-
     return {
         "status": "ok",
         "inserted": inserted,
         "updated": updated,
-        "feature_inserted": feature_inserted,
-        "feature_updated": feature_updated,
     }
 
 
