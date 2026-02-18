@@ -64,9 +64,9 @@ struct QuerySourceAccess: QuerySourceAccessing, Sendable {
         case .rawEvents:
             return isAllowed(rawEventsAccess)
         case .calendar:
-            return calendarAuthorized()
+            return calendarReadAuthorized()
         case .reminders:
-            return remindersAuthorized()
+            return remindersReadAuthorized()
         case .contacts:
             return sourceConnectionStore.isEnabled(.contacts) && contactsAuthorized()
         case .photos:
@@ -99,25 +99,38 @@ struct QuerySourceAccess: QuerySourceAccessing, Sendable {
                 for: rawEventsAccess,
                 fallback: "Jag kan inte se råhändelser – du har inte godkänt åtkomst."
             )
+
         case .calendar:
+            // ✅ Ge bättre orsak om användaren har write-only
+            if calendarHasWriteOnly() {
+                return "Jag kan inte läsa kalenderhändelser utan full åtkomst. Ändra till Full åtkomst i Inställningar."
+            }
             return "Jag kan inte se kalendern – du har inte godkänt åtkomst."
+
         case .reminders:
+            if remindersHasWriteOnly() {
+                return "Jag kan inte läsa påminnelser utan full åtkomst. Ändra till Full åtkomst i Inställningar."
+            }
             return "Jag kan inte se påminnelser – du har inte godkänt åtkomst."
+
         case .contacts:
             if !sourceConnectionStore.isEnabled(.contacts) {
                 return "Kontakter är inte aktiverad som datakälla."
             }
             return "Jag kan inte läsa kontakter – du har inte godkänt åtkomst."
+
         case .photos:
             if !sourceConnectionStore.isEnabled(.photos) {
                 return "Bilder är inte aktiverad som datakälla."
             }
             return "Jag kan inte läsa bilder – du har inte godkänt åtkomst."
+
         case .files:
             if !sourceConnectionStore.isEnabled(.files) {
                 return "Filer är inte aktiverad som datakälla."
             }
             return "Jag hittar ingen importerad fil-data ännu."
+
         case .location:
             if !sourceConnectionStore.isEnabled(.location) {
                 return "Plats är inte aktiverad som datakälla."
@@ -130,12 +143,12 @@ struct QuerySourceAccess: QuerySourceAccessing, Sendable {
 // MARK: - Helpers
 
 private extension QuerySourceAccess {
-    
+
     func isAllowed(_ access: MemoryAccess) -> Bool {
         if case .allowed = access { return true }
         return false
     }
-    
+
     func reason(for access: MemoryAccess, fallback: String) -> String {
         switch access {
         case .allowed:
@@ -144,12 +157,13 @@ private extension QuerySourceAccess {
             return reason
         }
     }
-    
-    func calendarAuthorized() -> Bool {
+
+    // ✅ READ access för kalender (krävs för att kunna lista händelser)
+    func calendarReadAuthorized() -> Bool {
 #if canImport(EventKit)
         let status = EKEventStore.authorizationStatus(for: .event)
         if #available(iOS 17.0, macOS 14.0, *) {
-            return status == .fullAccess || status == .writeOnly
+            return status == .fullAccess
         } else {
             return status == .authorized
         }
@@ -157,12 +171,13 @@ private extension QuerySourceAccess {
         return false
 #endif
     }
-    
-    func remindersAuthorized() -> Bool {
+
+    // ✅ READ access för påminnelser (om du listar/läser reminders)
+    func remindersReadAuthorized() -> Bool {
 #if canImport(EventKit)
         let status = EKEventStore.authorizationStatus(for: .reminder)
         if #available(iOS 17.0, macOS 14.0, *) {
-            return status == .fullAccess || status == .writeOnly
+            return status == .fullAccess
         } else {
             return status == .authorized
         }
@@ -170,7 +185,30 @@ private extension QuerySourceAccess {
         return false
 #endif
     }
-    
+
+    // För bättre felmeddelanden
+    func calendarHasWriteOnly() -> Bool {
+#if canImport(EventKit)
+        if #available(iOS 17.0, macOS 14.0, *) {
+            return EKEventStore.authorizationStatus(for: .event) == .writeOnly
+        }
+        return false
+#else
+        return false
+#endif
+    }
+
+    func remindersHasWriteOnly() -> Bool {
+#if canImport(EventKit)
+        if #available(iOS 17.0, macOS 14.0, *) {
+            return EKEventStore.authorizationStatus(for: .reminder) == .writeOnly
+        }
+        return false
+#else
+        return false
+#endif
+    }
+
     func contactsAuthorized() -> Bool {
 #if canImport(Contacts)
         let status = CNContactStore.authorizationStatus(for: .contacts)
@@ -179,7 +217,7 @@ private extension QuerySourceAccess {
         return false
 #endif
     }
-    
+
     func photosAuthorized() -> Bool {
 #if canImport(PhotoKit)
         let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
@@ -188,19 +226,20 @@ private extension QuerySourceAccess {
         return false
 #endif
     }
-    
+
     func locationAuthorized() -> Bool {
-    #if canImport(CoreLocation)
+#if canImport(CoreLocation)
         let status = CLLocationManager().authorizationStatus
-        
+
         switch status {
         case .authorizedAlways, .authorizedWhenInUse:
             return true
         default:
             return false
         }
-    #else
+#else
         return false
-    #endif
+#endif
     }
 }
+

@@ -151,29 +151,23 @@ struct HelperApp: App {
 
     var body: some Scene {
         WindowGroup {
-            Group {
+
+            NavigationStack {
+
                 if onboardingComplete {
-                    // Main app
-                    NavigationStack {
-                        ChatView(
-                            pipeline: queryPipeline,
-                            sourceConnectionStore: sourceConnectionStore,
-                            photosIndexService: photosIndexService,
-                            filesImportService: filesImportService,
-                            locationSnapshotService: locationSnapshotService
-                        )
-                    }
+
+                    ChatView(
+                        pipeline: queryPipeline,
+                        sourceConnectionStore: sourceConnectionStore,
+                        photosIndexService: photosIndexService,
+                        filesImportService: filesImportService,
+                        locationSnapshotService: locationSnapshotService
+                    )
+
                 } else {
-                    // Permission onboarding flow
-                    NavigationStack {
-                        PermissionOnboardingView(
-                            pipeline: queryPipeline,
-                            sourceConnectionStore: sourceConnectionStore,
-                            photosIndexService: photosIndexService,
-                            filesImportService: filesImportService,
-                            locationSnapshotService: locationSnapshotService
-                        )
-                    }
+
+                    PermissionsOnboardingFlow(onboardingComplete: $onboardingComplete)
+
                 }
             }
             .environment(\.modelContext, modelContext)

@@ -1,152 +1,66 @@
 import SwiftUI
+import UIKit
 
-struct PermissionView: View {
+struct PermissionSimpleView: View {
 
     let type: AppPermissionType
-    var onGranted: (() -> Void)? = nil
+    let onContinue: () -> Void
 
     @State private var status: AppPermissionStatus = .notDetermined
-    @State private var isRequesting = false
-    @State private var errorMessage: String?
+    @State private var isLoading = false
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         VStack(spacing: 24) {
-            // Ikon
-            Image(systemName: iconName)
-                .font(.system(size: 48, weight: .semibold))
 
-            // Titel
             Text(title)
-                .font(.title)
+                .font(.title2)
                 .bold()
 
-            // Beskrivning
             Text(description)
                 .multilineTextAlignment(.center)
                 .foregroundColor(.secondary)
 
-            // Felmeddelande (om det finns)
-            if let error = errorMessage {
-                Text(error)
-                    .foregroundColor(.red)
-                    .font(.caption)
-            }
-
-            // Åtgärder beroende på status
             switch status {
+
             case .granted:
-                Label("Tillgång beviljad", systemImage: "checkmark.circle.fill")
-                    .foregroundColor(.green)
+                Button("Fortsätt") { onContinue() }
+                    .buttonStyle(.borderedProminent)
 
             case .denied:
-                Button("Öppna Inställningar") {
-                    openSettings()
-                }
+                Button("Öppna Inställningar") { openSettings() }
+                    .buttonStyle(.bordered)
 
             case .notDetermined:
-                Button(action: requestPermission) {
-                    if isRequesting {
+                Button { request() } label: {
+                    if isLoading {
                         ProgressView()
                     } else {
                         Text("Ge tillgång")
-                            .bold()
-                            .frame(maxWidth: .infinity)
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(isRequesting)
+                .disabled(isLoading)
             }
         }
-        .padding(24)
         .task {
-            await refreshStatus()
+            status = await PermissionManager.shared.status(for: type)
+        }
+        .onChange(of: scenePhase) { _, newValue in
+            guard newValue == .active else { return }
+            Task {
+                status = await PermissionManager.shared.status(for: type)
+            }
         }
     }
 
-    // MARK: - Dynamiska texter & ikoner
-
-    private var iconName: String {
-        switch type {
-        case .calendar: return "calendar.badge.exclamationmark"
-        case .reminder: return "checklist"
-        case .notification: return "bell.badge"
-        case .camera: return "camera.viewfinder"
-        case .contacts: return "person.2.fill"
-        case .photos: return "photo.on.rectangle.angled"
-        case .location: return "location.fill"
-        }
-    }
-
-    private var title: String {
-        switch type {
-        case .calendar: return "Tillgång till kalender"
-        case .reminder: return "Tillgång till påminnelser"
-        case .notification: return "Tillåt notiser"
-        case .camera: return "Tillgång till kamera"
-        case .contacts: return "Tillgång till kontakter"
-        case .photos: return "Tillgång till bilder"
-        case .location: return "Tillgång till plats"
-        }
-    }
-
-    private var description: String {
-        switch type {
-        case .calendar:
-            return "För att kunna lägga in förslag direkt i din kalender behöver appen tillgång."
-        case .reminder:
-            return "För att kunna skapa påminnelser åt dig behöver appen tillgång."
-        case .notification:
-            return "Notiser används för att ställa frågor och ge förslag när det passar."
-        case .camera:
-            return "Kameran används för att scanna dokument och bilder."
-        case .contacts:
-            return "Kontakter används när du vill låta hjälparen svara med kontaktkontext."
-        case .photos:
-            return "Bilder används när du aktiverar bildindexering i datakällor."
-        case .location:
-            return "Din plats används för att svara på platsfrågor som 'vad finns nära mig'."
-        }
-    }
-
-    // MARK: - Behörighetsbegäran
-
-    // MARK: - Statusuppdatering
-    private func refreshStatus() async {
-        await Task.yield()
-        self.status = await PermissionManager.shared.status(for: type)
-    }
-
-    private func requestPermission() {
-        isRequesting = true
-        errorMessage = nil
+    private func request() {
+        isLoading = true
 
         Task {
-            do {
-                switch type {
-                case .calendar:
-                    try await PermissionManager.shared.requestCalendarAccess()
-                case .reminder:
-                    try await PermissionManager.shared.requestReminderAccess()
-                case .notification:
-                    try await PermissionManager.shared.requestNotificationAccess()
-                case .camera:
-                    try await PermissionManager.shared.requestCameraAccess()
-                case .contacts:
-                    try await PermissionManager.shared.requestContactsAccess()
-                case .photos:
-                    try await PermissionManager.shared.requestPhotosAccess()
-                case .location:
-                    try await PermissionManager.shared.requestLocationAccess()
-                }
-
-                status = .granted
-                onGranted?()
-
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-
-            isRequesting = false
+            defer { isLoading = false }
+            try? await PermissionManager.shared.requestAccess(for: type)
+            status = await PermissionManager.shared.status(for: type)
         }
     }
 
@@ -154,4 +68,22 @@ struct PermissionView: View {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
     }
+
+    private var title: String {
+        switch type {
+        case .calendar: return "Kalender"
+        case .reminder: return "Påminnelser"
+        case .notification: return "Notiser"
+        case .camera: return "Kamera"
+        case .contacts: return "Kontakter"
+        case .photos: return "Bilder"
+        case .location: return "Plats"
+        }
+    }
+
+    private var description: String {
+        "Appen behöver denna tillgång för att fungera korrekt."
+    }
 }
+
+

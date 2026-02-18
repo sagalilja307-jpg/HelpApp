@@ -188,6 +188,9 @@ struct DataSourcesSheetView: View {
 
 @MainActor
 private extension DataSourcesSheetView {
+
+    // MARK: - Contacts
+
     func toggleContacts(_ enabled: Bool) async {
         guard enabled else {
             sourceConnectionStore.setEnabled(false, for: .contacts)
@@ -196,23 +199,27 @@ private extension DataSourcesSheetView {
         }
 
         do {
-            try await PermissionManager.shared.requestContactsAccess()
+            try await PermissionManager.shared.requestAccess(for: .contacts)
             let status = await PermissionManager.shared.status(for: .contacts)
+
             guard status == .granted else {
                 contactsEnabled = false
                 sourceConnectionStore.setEnabled(false, for: .contacts)
-                message = "Kontakter kunde inte aktiveras: behorighet saknas."
+                message = "Kontakter kunde inte aktiveras: behörighet saknas."
                 return
             }
 
             sourceConnectionStore.setEnabled(true, for: .contacts)
             contactsEnabled = true
+
         } catch {
             contactsEnabled = false
             sourceConnectionStore.setEnabled(false, for: .contacts)
             message = "Kontakter kunde inte aktiveras: \(error.localizedDescription)"
         }
     }
+
+    // MARK: - Photos
 
     func togglePhotos(_ enabled: Bool) async {
         guard enabled else {
@@ -222,17 +229,19 @@ private extension DataSourcesSheetView {
         }
 
         do {
-            try await PermissionManager.shared.requestPhotosAccess()
+            try await PermissionManager.shared.requestAccess(for: .photos)
             let status = await PermissionManager.shared.status(for: .photos)
+
             guard status == .granted else {
                 photosEnabled = false
                 sourceConnectionStore.setEnabled(false, for: .photos)
-                message = "Bilder kunde inte aktiveras: behorighet saknas."
+                message = "Bilder kunde inte aktiveras: behörighet saknas."
                 return
             }
 
             sourceConnectionStore.setEnabled(true, for: .photos)
             photosEnabled = true
+
         } catch {
             photosEnabled = false
             sourceConnectionStore.setEnabled(false, for: .photos)
@@ -240,27 +249,34 @@ private extension DataSourcesSheetView {
         }
     }
 
+    // MARK: - Files
+
     func toggleFiles(_ enabled: Bool) {
         sourceConnectionStore.setEnabled(enabled, for: .files)
         filesEnabled = enabled
+
         if enabled && !hasImportedFiles {
-            message = "Importera minst en fil for att aktivera filsvar i chatten."
+            message = "Importera minst en fil för att aktivera filsvar i chatten."
         }
     }
 
     func runPhotoIndex(fullScan: Bool) async {
         guard photosEnabled else { return }
+
         isWorking = true
         defer { isWorking = false }
 
         do {
             let count: Int
+
             if fullScan {
                 count = try await photosIndexService.fullScan(in: modelContext)
             } else {
                 count = try await photosIndexService.indexIncremental(in: modelContext)
             }
+
             message = "Bildindexering klar: \(count) objekt uppdaterade."
+
         } catch {
             message = "Bildindexering misslyckades: \(error.localizedDescription)"
         }
@@ -268,18 +284,27 @@ private extension DataSourcesSheetView {
 
     func handleFileImportResult(_ result: Result<[URL], Error>) async {
         switch result {
+
         case .failure(let error):
             message = "Filimport misslyckades: \(error.localizedDescription)"
+
         case .success(let urls):
             guard !urls.isEmpty else { return }
+
             isWorking = true
             defer { isWorking = false }
 
             do {
-                let count = try await filesImportService.importDocuments(urls: urls, in: modelContext)
+                let count = try await filesImportService.importDocuments(
+                    urls: urls,
+                    in: modelContext
+                )
+
                 hasImportedFiles = hasImportedFiles || count > 0
                 sourceConnectionStore.setHasImportedFiles(hasImportedFiles)
+
                 message = "Filimport klar: \(count) dokument uppdaterade."
+
             } catch {
                 message = "Filimport misslyckades: \(error.localizedDescription)"
             }
@@ -291,10 +316,13 @@ private extension DataSourcesSheetView {
             let imported = try filesImportService.hasImportedDocuments(in: modelContext)
             hasImportedFiles = imported || sourceConnectionStore.hasImportedFiles()
             sourceConnectionStore.setHasImportedFiles(hasImportedFiles)
+
         } catch {
             hasImportedFiles = sourceConnectionStore.hasImportedFiles()
         }
     }
+
+    // MARK: - Location
 
     func toggleLocation(_ enabled: Bool) async {
         guard enabled else {
@@ -304,8 +332,9 @@ private extension DataSourcesSheetView {
         }
 
         do {
-            try await PermissionManager.shared.requestLocationAccess()
+            try await PermissionManager.shared.requestAccess(for: .location)
             let status = await PermissionManager.shared.status(for: .location)
+
             guard status == .granted else {
                 locationEnabled = false
                 sourceConnectionStore.setEnabled(false, for: .location)
@@ -315,7 +344,9 @@ private extension DataSourcesSheetView {
 
             sourceConnectionStore.setEnabled(true, for: .location)
             locationEnabled = true
+
             message = "Plats aktiverad. Tryck \"Uppdatera plats nu\" för att indexera din position."
+
         } catch {
             locationEnabled = false
             sourceConnectionStore.setEnabled(false, for: .location)
@@ -324,22 +355,29 @@ private extension DataSourcesSheetView {
     }
 
     func refreshLocation() async {
-        guard locationEnabled, let service = locationSnapshotService else { return }
+        guard locationEnabled,
+              let service = locationSnapshotService else { return }
+
         isWorking = true
         defer { isWorking = false }
 
         do {
             let result = try await service.captureSnapshot(in: modelContext)
+
             lastLocationUpdate = result.snapshot.observedAt
+
             if result.fallbackUsed {
                 message = "Plats uppdaterad (använder tidigare uppmätt position)."
             } else {
                 message = "Plats uppdaterad: \(result.snapshot.placeLabel)"
             }
+
         } catch {
             message = "Platsuppdatering misslyckades: \(error.localizedDescription)"
         }
     }
+
+    // MARK: - Date Helper
 
     static func formatRelativeDate(_ date: Date) -> String {
         let formatter = RelativeDateTimeFormatter()

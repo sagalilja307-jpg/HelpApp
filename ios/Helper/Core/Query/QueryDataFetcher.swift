@@ -33,7 +33,7 @@ struct QueryCollectionOptions: Sendable {
     let shouldCaptureLocation: Bool
     let includeCalendar: Bool
     let includeReminders: Bool
-    
+
     init(
         shouldCaptureLocation: Bool = false,
         includeCalendar: Bool = true,
@@ -43,7 +43,7 @@ struct QueryCollectionOptions: Sendable {
         self.includeCalendar = includeCalendar
         self.includeReminders = includeReminders
     }
-    
+
     static let `default` = QueryCollectionOptions()
 }
 
@@ -235,14 +235,12 @@ final class QueryDataFetcher: QueryDataFetching {
                         allItems += result.items
                         allEntries += result.entries
                         checkpointSources.append(.location)
-                        
-                        // Check if fallback was used by looking at last snapshot date
+
                         if let lastDate = try? locationCollector.lastSnapshotDate(in: context),
                            nowProvider().timeIntervalSince(lastDate) > 60 {
                             locationFallbackUsed = true
                         }
                     } catch {
-                        // Location capture failed, but don't fail the whole query
                         missingAccess.append(.location)
                     }
                 }
@@ -286,6 +284,15 @@ final class QueryDataFetcher: QueryDataFetching {
 
     private func fetchCalendar(in range: DateInterval) -> (items: [UnifiedItemDTO], entries: [QueryResult.Entry]) {
         #if canImport(EventKit)
+
+        // ✅ Defensivt: om någon ändå försöker läsa utan read access, returnera tomt.
+        let status = EKEventStore.authorizationStatus(for: .event)
+        if #available(iOS 17.0, *) {
+            guard status == .fullAccess else { return ([], []) }
+        } else {
+            guard status == .authorized else { return ([], []) }
+        }
+
         let predicate = eventStore.predicateForEvents(
             withStart: range.start,
             end: range.end,
@@ -351,10 +358,14 @@ final class QueryDataFetcher: QueryDataFetching {
         }
     }
 
+    /// ✅ Viktig fix: inkludera framtid, annars får du aldrig “imorgon/nästa vecka”
     private static func timeRange(days: Int, now: Date) -> DateInterval {
         let clamped = max(1, min(3650, days))
+
         let start = Calendar.current.date(byAdding: .day, value: -clamped, to: now) ?? now
-        return DateInterval(start: start, end: now)
+        let end = Calendar.current.date(byAdding: .day, value: clamped, to: now) ?? now
+
+        return DateInterval(start: start, end: end)
     }
 }
 

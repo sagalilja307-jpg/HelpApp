@@ -3,12 +3,15 @@ import EventKit
 import AVFoundation
 import UserNotifications
 import Combine
+
 #if canImport(Contacts)
 import Contacts
 #endif
+
 #if canImport(PhotoKit)
 @preconcurrency import PhotoKit
 #endif
+
 #if canImport(CoreLocation)
 @preconcurrency import CoreLocation
 #endif
@@ -34,114 +37,148 @@ enum AppPermissionStatus {
 // MARK: - PermissionManager
 
 @MainActor
-final class PermissionManager {
+final class PermissionManager: NSObject {
 
     static let shared = PermissionManager()
-    private init() {}
+    private override init() {
+        super.init()
+        locationManager.delegate = self
+    }
 
     private let eventStore = EKEventStore()
+    private let locationManager = CLLocationManager()
 
-    // MARK: - Status
+    private var locationContinuation: CheckedContinuation<Void, Error>?
+
+    // MARK: - STATUS
 
     func status(for type: AppPermissionType) async -> AppPermissionStatus {
         switch type {
+
         case .calendar:
-            return mapEventKitStatus(EKEventStore.authorizationStatus(for: .event))
+            return mapEventKitStatus(
+                EKEventStore.authorizationStatus(for: .event)
+            )
+
         case .reminder:
-            return mapEventKitStatus(EKEventStore.authorizationStatus(for: .reminder))
+            return mapEventKitStatus(
+                EKEventStore.authorizationStatus(for: .reminder)
+            )
+
         case .notification:
-            let center = UNUserNotificationCenter.current()
-            let settings = await center.notificationSettings()
+            let settings = await UNUserNotificationCenter.current()
+                .notificationSettings()
             return mapNotificationStatus(settings.authorizationStatus)
+
         case .camera:
-            return mapCameraStatus(AVCaptureDevice.authorizationStatus(for: .video))
+            return mapCameraStatus(
+                AVCaptureDevice.authorizationStatus(for: .video)
+            )
+
         case .contacts:
             return contactsPermissionStatus()
+
         case .photos:
             return photosPermissionStatus()
+
         case .location:
             return locationPermissionStatus()
         }
     }
 
-    // Synchronous convenience for non-concurrent callers. Note: notification status defaults to .notDetermined here.
-    func statusSync(for type: AppPermissionType) -> AppPermissionStatus {
+    // MARK: - REQUESTS
+
+    func requestAccess(for type: AppPermissionType) async throws {
         switch type {
+
         case .calendar:
-            return mapEventKitStatus(EKEventStore.authorizationStatus(for: .event))
+            try await requestCalendarAccess()
+
         case .reminder:
-            return mapEventKitStatus(EKEventStore.authorizationStatus(for: .reminder))
+            try await requestReminderAccess()
+
         case .notification:
-            // Cannot synchronously fetch UNNotificationSettings on newer SDKs.
-            return .notDetermined
+            try await requestNotificationAccess()
+
         case .camera:
-            return mapCameraStatus(AVCaptureDevice.authorizationStatus(for: .video))
+            try await requestCameraAccess()
+
         case .contacts:
-            return contactsPermissionStatus()
+            try await requestContactsAccess()
+
         case .photos:
-            return photosPermissionStatus()
+            try await requestPhotosAccess()
+
         case .location:
-            return locationPermissionStatus()
+            try await requestLocationAccess()
         }
     }
 
-    // MARK: - Requests
+    // MARK: Calendar
 
-    func requestCalendarAccess() async throws {
-        if #available(iOS 17.0, macOS 14.0, *) {
+    private func requestCalendarAccess() async throws {
+        if #available(iOS 17.0, *) {
             _ = try await eventStore.requestFullAccessToEvents()
         } else {
             try await eventStore.requestAccess(to: .event)
         }
     }
 
-    func requestReminderAccess() async throws {
-        if #available(iOS 17.0, macOS 14.0, *) {
+    private func requestReminderAccess() async throws {
+        if #available(iOS 17.0, *) {
             _ = try await eventStore.requestFullAccessToReminders()
         } else {
             try await eventStore.requestAccess(to: .reminder)
         }
     }
 
-    func requestNotificationAccess() async throws {
+    // MARK: Notifications
+
+    private func requestNotificationAccess() async throws {
         _ = try await UNUserNotificationCenter.current()
             .requestAuthorization(options: [.alert, .sound, .badge])
     }
 
-    func requestCameraAccess() async throws {
+    // MARK: Camera
+
+    private func requestCameraAccess() async throws {
         _ = await AVCaptureDevice.requestAccess(for: .video)
     }
 
-    func requestContactsAccess() async throws {
+    // MARK: Contacts
+
+    private func requestContactsAccess() async throws {
         #if canImport(Contacts)
         _ = try await CNContactStore().requestAccess(for: .contacts)
         #endif
     }
 
-    func requestPhotosAccess() async throws {
+    // MARK: Photos
+
+    private func requestPhotosAccess() async throws {
         #if canImport(PhotoKit)
         _ = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
         #endif
     }
 
-    func requestLocationAccess() async throws {
-        #if canImport(CoreLocation)
-        let locationManager = CLLocationManager()
-        locationManager.requestWhenInUseAuthorization()
-        // Allow time for the system dialog to process
-        try await Task.sleep(for: .milliseconds(100))
-        #endif
+    // MARK: Location (Correct Async Implementation)
+
+    private func requestLocationAccess() async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            locationContinuation = continuation
+            locationManager.requestWhenInUseAuthorization()
+        }
     }
 
-    // MARK: - Private Mapping Helpers
+    // MARK: - Status Mapping
 
     private func mapEventKitStatus(_ status: EKAuthorizationStatus) -> AppPermissionStatus {
         switch status {
         case .notDetermined:
             return .notDetermined
-        case .authorized, .fullAccess:
+        case .authorized, .fullAccess, .writeOnly:
             return .granted
-        case .denied, .restricted, .writeOnly:
+        case .denied, .restricted:
             return .denied
         @unknown default:
             return .denied
@@ -176,7 +213,9 @@ final class PermissionManager {
 
     private func contactsPermissionStatus() -> AppPermissionStatus {
         #if canImport(Contacts)
-        return mapContactsStatus(CNContactStore.authorizationStatus(for: .contacts))
+        return mapContactsStatus(
+            CNContactStore.authorizationStatus(for: .contacts)
+        )
         #else
         return .denied
         #endif
@@ -184,20 +223,16 @@ final class PermissionManager {
 
     private func photosPermissionStatus() -> AppPermissionStatus {
         #if canImport(PhotoKit)
-        return mapPhotosStatus(PHPhotoLibrary.authorizationStatus(for: .readWrite))
+        return mapPhotosStatus(
+            PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        )
         #else
         return .denied
         #endif
     }
 
-    private let locationManager = CLLocationManager()
-
     private func locationPermissionStatus() -> AppPermissionStatus {
-        #if canImport(CoreLocation)
-        return mapLocationStatus(locationManager.authorizationStatus)
-        #else
-        return .denied
-        #endif
+        mapLocationStatus(locationManager.authorizationStatus)
     }
 
     #if canImport(CoreLocation)
@@ -216,9 +251,7 @@ final class PermissionManager {
     #endif
 
     #if canImport(Contacts)
-    private func mapContactsStatus(
-        _ status: CNAuthorizationStatus
-    ) -> AppPermissionStatus {
+    private func mapContactsStatus(_ status: CNAuthorizationStatus) -> AppPermissionStatus {
         switch status {
         case .notDetermined:
             return .notDetermined
@@ -233,9 +266,7 @@ final class PermissionManager {
     #endif
 
     #if canImport(PhotoKit)
-    private func mapPhotosStatus(
-        _ status: PHAuthorizationStatus
-    ) -> AppPermissionStatus {
+    private func mapPhotosStatus(_ status: PHAuthorizationStatus) -> AppPermissionStatus {
         switch status {
         case .notDetermined:
             return .notDetermined
@@ -250,65 +281,20 @@ final class PermissionManager {
     #endif
 }
 
-// MARK: - CalendarSyncManager
+// MARK: - CLLocationManagerDelegate
 
-public final class CalendarSyncManager: ObservableObject {
+extension PermissionManager: CLLocationManagerDelegate {
 
-    public enum PermissionState {
-        case unknown
-        case denied
-        case authorized
-    }
+    nonisolated func locationManagerDidChangeAuthorization(
+        _ manager: CLLocationManager
+    ) {
+        Task { @MainActor in
+            guard let continuation = locationContinuation else { return }
 
-    @Published public private(set) var permission: PermissionState = .unknown
-
-    private let store: EKEventStore
-    private var cancellables = Set<AnyCancellable>()
-
-    public init(store: EKEventStore = EKEventStore()) {
-        self.store = store
-        refreshAuthorizationStatus()
-
-        NotificationCenter.default.publisher(for: .EKEventStoreChanged)
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
-    }
-
-    // MARK: - Permission Handling
-
-    public func refreshAuthorizationStatus() {
-        let status = EKEventStore.authorizationStatus(for: .event)
-
-        switch status {
-        case .notDetermined:
-            permission = .unknown
-        case .denied, .restricted:
-            permission = .denied
-        case .authorized, .fullAccess:
-            permission = .authorized
-        case .writeOnly:
-            permission = .denied
-        @unknown default:
-            permission = .unknown
-        }
-    }
-
-    public func requestAccess(completion: @escaping (Bool) -> Void) {
-        if #available(iOS 17.0, macOS 14.0, *) {
-            store.requestFullAccessToEvents { granted, _ in
-                DispatchQueue.main.async {
-                    self.refreshAuthorizationStatus()
-                    completion(granted)
-                }
-            }
-        } else {
-            store.requestAccess(to: .event) { granted, _ in
-                DispatchQueue.main.async {
-                    self.refreshAuthorizationStatus()
-                    completion(granted)
-                }
+            let status = manager.authorizationStatus
+            if status != .notDetermined {
+                continuation.resume()
+                locationContinuation = nil
             }
         }
     }
