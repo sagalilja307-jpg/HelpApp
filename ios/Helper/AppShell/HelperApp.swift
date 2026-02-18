@@ -19,8 +19,6 @@ struct HelperApp: App {
     // MARK: - Coordinators
     
     private let memoryCoordinator: MemoryCoordinator
-    private let indexingCoordinator: IndexingCoordinator
-    private let queryDataCoordinator: QueryDataCoordinator
     private let decisionLogger: DecisionLogger
     private let safetyCoordinator: SafetyCoordinator
     private let suggestionCoordinator: DecisionCoordinator
@@ -58,20 +56,6 @@ struct HelperApp: App {
             self.sourceConnectionStore = sourceConnectionStore
             
             let fileTextExtraction = FileTextExtractionService()
-            
-            let indexCoord = IndexingCoordinator(
-                memoryService: service,
-                sourceConnectionStore: sourceConnectionStore,
-                fileTextExtraction: fileTextExtraction
-            )
-            self.indexingCoordinator = indexCoord
-            
-            let queryDataCoord = QueryDataCoordinator(
-                memoryService: service,
-                sourceConnectionStore: sourceConnectionStore,
-                fileTextExtraction: fileTextExtraction
-            )
-            self.queryDataCoordinator = queryDataCoord
             
             let logger = DecisionLogger(memoryService: service)
             self.decisionLogger = logger

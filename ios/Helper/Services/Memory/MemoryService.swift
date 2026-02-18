@@ -19,28 +19,39 @@ public final class MemoryService {
 
     // MARK: - Init
 
-    public init(inMemory: Bool = false) throws {
-        let schema = Schema([
-            RawEvent.self,
-            Cluster.self,
-            ClusterItem.self,
-            DecisionLogEntry.self,
-            BehaviorPattern.self,
-            SemanticEmbedding.self,
-            ActorRaw.self,
-            TitleConfidenceRaw.self,
-            UserNote.self,
-            IndexedContact.self,
-            IndexedPhotoAsset.self,
-            IndexedFileDocument.self,
-            Etapp2IngestCheckpoint.self
-        ])
+    public init(
+        inMemory: Bool = false,
+        storeURL: URL? = nil
+    ) throws {
+        let schema = Schema(versionedSchema: MemorySchemaV2.self)
+        let config: ModelConfiguration
 
-        let config = ModelConfiguration(isStoredInMemoryOnly: inMemory)
-        self.container = try ModelContainer(
-            for: schema,
-            configurations: [config]
-        )
+        if inMemory {
+            config = ModelConfiguration(
+                schema: schema,
+                isStoredInMemoryOnly: true
+            )
+        } else if let storeURL {
+            config = ModelConfiguration(
+                schema: schema,
+                url: storeURL
+            )
+        } else {
+            config = ModelConfiguration(schema: schema)
+        }
+
+        do {
+            self.container = try ModelContainer(
+                for: schema,
+                migrationPlan: MemorySchemaMigrationPlan.self,
+                configurations: [config]
+            )
+        } catch {
+            self.container = try ModelContainer(
+                for: schema,
+                configurations: [config]
+            )
+        }
     }
 
     public func context() -> ModelContext {

@@ -132,8 +132,7 @@ final class BackendQueryPipelineTests: XCTestCase {
                 timeRange: DateInterval(start: now.addingTimeInterval(-86_400), end: now),
                 items: [matchingLater, nonMatchingDomain, matchingEarly],
                 entries: [],
-                missingAccess: [],
-                checkpointSources: []
+                missingAccess: []
             )
         )
 
@@ -181,8 +180,7 @@ final class BackendQueryPipelineTests: XCTestCase {
                     makeItem(id: UUID().uuidString, source: "notes", type: .note, title: "B", body: "", date: now.addingTimeInterval(-10))
                 ],
                 entries: [],
-                missingAccess: [],
-                checkpointSources: []
+                missingAccess: []
             )
         )
 
@@ -219,8 +217,7 @@ final class BackendQueryPipelineTests: XCTestCase {
                     makeItem(id: UUID().uuidString, source: "reminders", type: .reminder, title: "Senare", body: "", date: now.addingTimeInterval(500))
                 ],
                 entries: [],
-                missingAccess: [],
-                checkpointSources: []
+                missingAccess: []
             )
         )
 
@@ -259,8 +256,7 @@ final class BackendQueryPipelineTests: XCTestCase {
                     makeItem(id: UUID().uuidString, source: "calendar", type: .event, title: "Möte", body: "", date: now)
                 ],
                 entries: [],
-                missingAccess: [.calendar, .files],
-                checkpointSources: []
+                missingAccess: [.calendar, .files]
             )
         )
 
@@ -292,8 +288,7 @@ final class BackendQueryPipelineTests: XCTestCase {
             timeRange: DateInterval(start: .distantPast, end: .distantFuture),
             items: [],
             entries: [],
-            missingAccess: [],
-            checkpointSources: []
+            missingAccess: []
         )
     }
 
