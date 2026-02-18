@@ -7,39 +7,62 @@ enum AppIntegrationConfig {
     static let oauthCallbackScheme = "helper-oauth"
     static let gmailRedirectURI = "helper-oauth://oauth/gmail/callback"
 
-    static let backendBaseURLDefaultsKey = "helper.backend.base_url"
+    static let legacyBackendBaseURLDefaultsKey = "helper.backend.base_url"
+
+    static var backendBaseURLDefaultsKey: String {
+#if targetEnvironment(simulator)
+        return "helper.backend.base_url.simulator"
+#else
+        return "helper.backend.base_url.device"
+#endif
+    }
 
     #if targetEnvironment(simulator)
     static let defaultBackendBaseURL = "http://localhost:8000"
     #else
-    // Physical devices cannot reach the Mac backend via localhost.
+    // Physical devices cannot reach localhost on the Mac process.
     static let defaultBackendBaseURL = "http://Mac-mini-som-tillhor-Saga.local:8000"
     #endif
 
     static func resolvedBackendBaseURL() -> URL? {
-        if let launchOverride = launchArgumentBackendBaseURL(),
-           let url = validatedURL(from: launchOverride) {
-            return url
+        resolvedBackendBaseURLs().first
+    }
+
+    static func resolvedBackendBaseURLs() -> [URL] {
+        var candidates: [URL] = []
+        var seen: Set<String> = []
+
+        func appendIfValid(_ raw: String?) {
+            guard let raw, let url = validatedURL(from: raw) else { return }
+            let key = url.absoluteString.lowercased()
+            guard !seen.contains(key) else { return }
+            seen.insert(key)
+            candidates.append(url)
         }
 
-        if let storedOverride = UserDefaults.standard.string(forKey: backendBaseURLDefaultsKey),
-           let url = validatedURL(from: storedOverride) {
-            return url
-        }
+        appendIfValid(launchArgumentBackendBaseURL())
+        appendIfValid(UserDefaults.standard.string(forKey: backendBaseURLDefaultsKey))
+        appendIfValid(UserDefaults.standard.string(forKey: legacyBackendBaseURLDefaultsKey))
+        appendIfValid(defaultBackendBaseURL)
 
-        return validatedURL(from: defaultBackendBaseURL)
+        return candidates
     }
 
     private static func launchArgumentBackendBaseURL() -> String? {
         let args = ProcessInfo.processInfo.arguments
-        guard let keyIndex = args.firstIndex(of: "-helper.backend.base_url") else {
-            return nil
+        let keys = [backendBaseURLDefaultsKey, legacyBackendBaseURLDefaultsKey]
+        for key in keys {
+            let flag = "-\(key)"
+            guard let keyIndex = args.firstIndex(of: flag) else {
+                continue
+            }
+            let valueIndex = args.index(after: keyIndex)
+            guard valueIndex < args.endIndex else {
+                continue
+            }
+            return args[valueIndex]
         }
-        let valueIndex = args.index(after: keyIndex)
-        guard valueIndex < args.endIndex else {
-            return nil
-        }
-        return args[valueIndex]
+        return nil
     }
 
     private static func validatedURL(from raw: String) -> URL? {
@@ -50,6 +73,19 @@ enum AppIntegrationConfig {
         guard scheme == "http" || scheme == "https" else {
             return nil
         }
+#if !targetEnvironment(simulator)
+        if isLoopbackHost(url.host) {
+            return nil
+        }
+#endif
         return url
+    }
+
+    private static func isLoopbackHost(_ host: String?) -> Bool {
+        guard let normalizedHost = host?.lowercased() else { return false }
+        if normalizedHost == "localhost" || normalizedHost == "::1" {
+            return true
+        }
+        return normalizedHost.hasPrefix("127.")
     }
 }

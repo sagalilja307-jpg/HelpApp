@@ -177,36 +177,65 @@ final class SupportSettingsAPIService {
     }
 
     private func request(path: String, method: String, body: Data?) async throws -> Data {
-        guard
-            let baseURL = Self.backendBaseURL(),
-            let endpoint = URL(string: path, relativeTo: baseURL)?.absoluteURL
-        else {
+        let baseURLs = Self.backendBaseURLs()
+        guard !baseURLs.isEmpty else {
             throw SupportSettingsServiceError.invalidBaseURL
         }
 
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = method
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        var lastConnectivityError: URLError?
+        for baseURL in baseURLs {
+            guard let endpoint = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
+                continue
+            }
 
-        if let body {
-            request.httpBody = body
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            var request = URLRequest(url: endpoint)
+            request.httpMethod = method
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+            if let body {
+                request.httpBody = body
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            }
+
+            do {
+                let (data, response) = try await session.data(for: request)
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw SupportSettingsServiceError.badResponse(-1, "No HTTP response")
+                }
+
+                guard (200..<300).contains(httpResponse.statusCode) else {
+                    let message = Self.parseErrorMessage(from: data) ?? "Okänt fel"
+                    throw SupportSettingsServiceError.badResponse(httpResponse.statusCode, message)
+                }
+                return data
+            } catch let urlError as URLError where Self.shouldTryNextBaseURL(urlError) {
+                lastConnectivityError = urlError
+                continue
+            }
         }
 
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw SupportSettingsServiceError.badResponse(-1, "No HTTP response")
+        if let lastConnectivityError {
+            throw lastConnectivityError
         }
-
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            let message = Self.parseErrorMessage(from: data) ?? "Okänt fel"
-            throw SupportSettingsServiceError.badResponse(httpResponse.statusCode, message)
-        }
-        return data
+        throw SupportSettingsServiceError.badResponse(-1, "No HTTP response")
     }
 
-    private static func backendBaseURL() -> URL? {
-        AppIntegrationConfig.resolvedBackendBaseURL()
+    private static func backendBaseURLs() -> [URL] {
+        AppIntegrationConfig.resolvedBackendBaseURLs()
+    }
+
+    private static func shouldTryNextBaseURL(_ error: URLError) -> Bool {
+        switch error.code {
+        case .cannotFindHost,
+             .cannotConnectToHost,
+             .dnsLookupFailed,
+             .timedOut,
+             .networkConnectionLost,
+             .notConnectedToInternet:
+            return true
+        default:
+            return false
+        }
     }
 
     private static func makeDecoder() -> JSONDecoder {

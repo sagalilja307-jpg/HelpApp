@@ -41,6 +41,12 @@
     <key>CFBundleVersion</key>
     <string>1</string>
 
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
+
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.productivity</string>
 
@@ -72,6 +78,10 @@
     <!-- Location (When In Use) -->
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Helper använder din plats för att ge relevanta svar på platsfrågor, t.ex. "vad finns nära mig?".</string>
+
+    <!-- Local network for backend on same Wi-Fi -->
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Helper behöver lokal nätverksåtkomst för att ansluta till backend på samma Wi-Fi.</string>
 
     <!-- Notifications (optional, but recommended text shown in system sheet) -->
     <key>NSUserNotificationUsageDescription</key>
