@@ -21,9 +21,7 @@ private struct DomainEntry: Sendable, Equatable {
 
 private struct CollectedDomainData {
     let entries: [DomainEntry]
-    let items: [UnifiedItemDTO]
     let missingAccess: [QuerySource]
-    let checkpointSources: [QuerySource]
     let timeRange: DateInterval?
 }
 
@@ -35,32 +33,23 @@ struct QueryPipeline {
 
     let access: QuerySourceAccessing
     let fetcher: QueryDataFetching
-    let ingestService: AssistantIngesting
     let backendQueryService: BackendQuerying
-    let checkpointStore: Etapp2IngestCheckpointStoring
     let sourceConnectionStore: SourceConnectionStoring
-    let memoryService: MemoryService
     let mailSyncService: MailSyncService
     let nowProvider: () -> Date
 
     init(
         access: QuerySourceAccessing,
         fetcher: QueryDataFetching,
-        ingestService: AssistantIngesting,
         backendQueryService: BackendQuerying,
-        checkpointStore: Etapp2IngestCheckpointStoring = NoOpEtapp2IngestCheckpointStore(),
         sourceConnectionStore: SourceConnectionStoring = SourceConnectionStore.shared,
-        memoryService: MemoryService,
         mailSyncService: MailSyncService = .shared,
         nowProvider: @escaping () -> Date = Date.init
     ) {
         self.access = access
         self.fetcher = fetcher
-        self.ingestService = ingestService
         self.backendQueryService = backendQueryService
-        self.checkpointStore = checkpointStore
         self.sourceConnectionStore = sourceConnectionStore
-        self.memoryService = memoryService
         self.mailSyncService = mailSyncService
         self.nowProvider = nowProvider
     }
@@ -113,9 +102,7 @@ extension QueryPipeline {
             let entries = try await fetchMailEntries(intent: intent)
             return CollectedDomainData(
                 entries: entries,
-                items: [],
                 missingAccess: [],
-                checkpointSources: [],
                 timeRange: dateRange(for: entries)
             )
         }
@@ -127,21 +114,11 @@ extension QueryPipeline {
         )
 
         let collected = try await fetcher.collect(days: days, access: access, options: options)
-        if !collected.items.isEmpty {
-            try await ingestService.ingest(items: collected.items)
-            let context = memoryService.context()
-            for source in collected.checkpointSources {
-                try? checkpointStore.updateCheckpoint(for: source, at: Date(), in: context)
-            }
-        }
-
         let entries = collected.items.compactMap(Self.mapDomainEntry(from:))
 
         return CollectedDomainData(
             entries: entries,
-            items: collected.items,
             missingAccess: collected.missingAccess,
-            checkpointSources: collected.checkpointSources,
             timeRange: collected.timeRange
         )
     }

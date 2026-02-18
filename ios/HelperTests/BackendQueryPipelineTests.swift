@@ -59,7 +59,7 @@ final class BackendQueryPipelineTests: XCTestCase {
         XCTAssertEqual(jsonObject["days"] as? Int, 7)
     }
 
-    func testNeedsClarificationSkipsCollectionAndIngest() async throws {
+    func testNeedsClarificationSkipsCollection() async throws {
         let backend = MockBackendQueryService(
             response: BackendDataIntentResponseDTO(
                 dataIntent: BackendDataIntentDTO(
@@ -74,13 +74,11 @@ final class BackendQueryPipelineTests: XCTestCase {
             )
         )
         let fetcher = MockFetcher(result: emptyCollectedData())
-        let ingest = MockIngestService()
 
-        let result = try await makePipeline(fetcher: fetcher, ingest: ingest, backend: backend)
+        let result = try await makePipeline(fetcher: fetcher, backend: backend)
             .run(UserQuery(text: "vad händer nästa gång?"))
 
         XCTAssertEqual(fetcher.collectCallCount, 0)
-        XCTAssertEqual(ingest.callCount, 0)
         XCTAssertTrue(result.entries.isEmpty)
         XCTAssertEqual(result.answer, "Menar du kalender eller mejl?")
     }
@@ -139,12 +137,10 @@ final class BackendQueryPipelineTests: XCTestCase {
             )
         )
 
-        let ingest = MockIngestService()
         let sourceStore = InMemorySourceConnectionStore()
 
         let result = try await makePipeline(
             fetcher: fetcher,
-            ingest: ingest,
             backend: backend,
             sourceConnectionStore: sourceStore,
             nowProvider: { now }
@@ -155,7 +151,6 @@ final class BackendQueryPipelineTests: XCTestCase {
         XCTAssertEqual(fetcher.lastOptions?.includeReminders, false)
         XCTAssertEqual(fetcher.lastOptions?.shouldCaptureLocation, false)
 
-        XCTAssertEqual(ingest.callCount, 1)
         XCTAssertEqual(result.entries.count, 1)
         XCTAssertEqual(result.entries.first?.title, "Planeringsmöte")
         XCTAssertTrue(result.answer?.contains("Här är 1 kalenderhändelser") == true)
@@ -191,7 +186,7 @@ final class BackendQueryPipelineTests: XCTestCase {
             )
         )
 
-        let result = try await makePipeline(fetcher: fetcher, ingest: MockIngestService(), backend: backend)
+        let result = try await makePipeline(fetcher: fetcher, backend: backend)
             .run(UserQuery(text: "hur många anteckningar"))
 
         XCTAssertEqual(result.entries, [])
@@ -231,7 +226,6 @@ final class BackendQueryPipelineTests: XCTestCase {
 
         let result = try await makePipeline(
             fetcher: fetcher,
-            ingest: MockIngestService(),
             backend: backend,
             nowProvider: { now }
         ).run(UserQuery(text: "vad är nästa påminnelse"))
@@ -270,7 +264,7 @@ final class BackendQueryPipelineTests: XCTestCase {
             )
         )
 
-        let result = try await makePipeline(fetcher: fetcher, ingest: MockIngestService(), backend: backend)
+        let result = try await makePipeline(fetcher: fetcher, backend: backend)
             .run(UserQuery(text: "visa kalender"))
 
         XCTAssertTrue(result.answer?.contains("Obs: Kalenderåtkomst saknas") == true)
@@ -280,7 +274,6 @@ final class BackendQueryPipelineTests: XCTestCase {
 
     private func makePipeline(
         fetcher: MockFetcher,
-        ingest: MockIngestService,
         backend: MockBackendQueryService,
         sourceConnectionStore: SourceConnectionStoring = InMemorySourceConnectionStore(),
         nowProvider: @escaping () -> Date = Date.init
@@ -288,11 +281,8 @@ final class BackendQueryPipelineTests: XCTestCase {
         QueryPipeline(
             access: MockAccess(),
             fetcher: fetcher,
-            ingestService: ingest,
             backendQueryService: backend,
-            checkpointStore: NoOpEtapp2IngestCheckpointStore(),
             sourceConnectionStore: sourceConnectionStore,
-            memoryService: try MemoryService(inMemory: true),
             nowProvider: nowProvider
         )
     }
@@ -363,16 +353,6 @@ private final class MockFetcher: QueryDataFetching {
         lastDays = days
         lastOptions = options
         return result
-    }
-}
-
-private final class MockIngestService: AssistantIngesting {
-    private(set) var callCount = 0
-    private(set) var lastItems: [UnifiedItemDTO] = []
-
-    func ingest(items: [UnifiedItemDTO]) async throws {
-        callCount += 1
-        lastItems = items
     }
 }
 

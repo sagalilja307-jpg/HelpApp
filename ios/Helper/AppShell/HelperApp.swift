@@ -84,7 +84,6 @@ struct HelperApp: App {
 
             // 4️⃣ Skapa QueryPipeline (needs refactoring, but keep for now)
             let access = QuerySourceAccess(sourceConnectionStore: sourceConnectionStore)
-            let checkpointStore = Etapp2IngestCheckpointStore()
             let contactsCollector = ContactsCollectorService()
             let photosIndexService = PhotosIndexService(
                 sourceConnectionStore: sourceConnectionStore
@@ -103,20 +102,15 @@ struct HelperApp: App {
                 photosIndexService: photosIndexService,
                 filesImportService: filesImportService,
                 locationCollector: locationCollector,
-                sourceConnectionStore: sourceConnectionStore,
-                checkpointStore: checkpointStore
+                sourceConnectionStore: sourceConnectionStore
             )
-            let ingestService = AssistantIngestAPIService.shared
             let backendQueryService = BackendQueryAPIService.shared
 
             self.queryPipeline = QueryPipeline(
                 access: access,
                 fetcher: fetcher,
-                ingestService: ingestService,
                 backendQueryService: backendQueryService,
-                checkpointStore: checkpointStore,
-                sourceConnectionStore: sourceConnectionStore,
-                memoryService: service
+                sourceConnectionStore: sourceConnectionStore
             )
             
             // 5️⃣ Other services
