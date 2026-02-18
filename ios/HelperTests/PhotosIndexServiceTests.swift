@@ -5,32 +5,56 @@ import SwiftData
 @MainActor
 final class PhotosIndexServiceTests: XCTestCase {
 
-    func testSnapshotRespectsOCROffAndOn() {
-        let createdAt = Date(timeIntervalSince1970: 1_700_100_000)
-
-        let ocrOff = PhotosIndexService.makeSnapshot(
-            localIdentifier: "asset-off",
-            assetCreatedAt: createdAt,
-            assetUpdatedAt: createdAt,
-            isFavorite: false,
-            metadataSnippet: "Skapad: 2026-02-13",
-            ocrText: nil,
-            ocrEnabled: false
+    func testCollectDeltaPreservesOCRStateAndBody() throws {
+        let container = try ModelContainer(
+            for: IndexedPhotoAsset.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
-        XCTAssertEqual(ocrOff.ocrState, "disabled")
-        XCTAssertEqual(ocrOff.bodySnippet, "Skapad: 2026-02-13")
+        let context = ModelContext(container)
 
-        let ocrOn = PhotosIndexService.makeSnapshot(
-            localIdentifier: "asset-on",
-            assetCreatedAt: createdAt,
-            assetUpdatedAt: createdAt,
-            isFavorite: true,
-            metadataSnippet: "Skapad: 2026-02-13",
-            ocrText: "Boarding 08:00",
-            ocrEnabled: true
+        context.insert(
+            IndexedPhotoAsset(
+                id: "photo:ocr-off",
+                localIdentifier: "ocr-off",
+                title: "OCR Off",
+                bodySnippet: "Skapad: 2026-02-13",
+                assetCreatedAt: Date(timeIntervalSince1970: 10),
+                assetUpdatedAt: Date(timeIntervalSince1970: 10),
+                isFavorite: false,
+                ocrText: nil,
+                ocrEnabled: false,
+                ocrState: "disabled",
+                createdAt: Date(timeIntervalSince1970: 10),
+                updatedAt: Date(timeIntervalSince1970: 20)
+            )
         )
-        XCTAssertEqual(ocrOn.ocrState, "completed")
-        XCTAssertEqual(ocrOn.bodySnippet, "Boarding 08:00")
+        context.insert(
+            IndexedPhotoAsset(
+                id: "photo:ocr-on",
+                localIdentifier: "ocr-on",
+                title: "OCR On",
+                bodySnippet: "Boarding 08:00",
+                assetCreatedAt: Date(timeIntervalSince1970: 30),
+                assetUpdatedAt: Date(timeIntervalSince1970: 30),
+                isFavorite: true,
+                ocrText: "Boarding 08:00",
+                ocrEnabled: true,
+                ocrState: "completed",
+                createdAt: Date(timeIntervalSince1970: 30),
+                updatedAt: Date(timeIntervalSince1970: 40)
+            )
+        )
+        try context.save()
+
+        let service = PhotosIndexService()
+        let delta = try service.collectDelta(since: nil, in: context)
+
+        XCTAssertEqual(delta.items.count, 2)
+        let byID = Dictionary(uniqueKeysWithValues: delta.items.map { ($0.id, $0) })
+        XCTAssertEqual(byID["photo:ocr-off"]?.status["ocr_state"], AnyCodable("disabled"))
+        XCTAssertEqual(byID["photo:ocr-on"]?.status["ocr_state"], AnyCodable("completed"))
+        XCTAssertEqual(byID["photo:ocr-off"]?.body, "Skapad: 2026-02-13")
+        XCTAssertEqual(byID["photo:ocr-on"]?.body, "Boarding 08:00")
     }
 
     func testCollectDeltaUsesUpdatedAtCheckpoint() throws {
@@ -74,8 +98,8 @@ final class PhotosIndexServiceTests: XCTestCase {
         )
         try context.save()
 
-        let service = PhotosIndexService(context: context)
-        let delta = try service.collectDelta(since: Date(timeIntervalSince1970: 25))
+        let service = PhotosIndexService()
+        let delta = try service.collectDelta(since: Date(timeIntervalSince1970: 25), in: context)
 
         XCTAssertEqual(delta.items.count, 1)
         XCTAssertEqual(delta.items.first?.id, "photo:new")

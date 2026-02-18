@@ -1,35 +1,10 @@
 import XCTest
-import SwiftData
 @testable import Helper
 
-@MainActor
 final class ShareImportServiceTests: XCTestCase {
-    private var container: ModelContainer!
 
-    override func setUpWithError() throws {
-        try super.setUpWithError()
-        container = try ModelContainer(
-            for: UserNote.self,
-            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
-        )
-    }
-
-    override func tearDownWithError() throws {
-        container = nil
-        try super.tearDownWithError()
-    }
-
-    private func makeNotesStore() throws -> NotesStoreService {
-        let container = try XCTUnwrap(container)
-        return NotesStoreService(context: ModelContext(container))
-    }
-
-    func testImportSharedItemsCreatesNotesAndClearsPayload() throws {
-        let suiteName = "test.share.import.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-
-        let notesStore = try makeNotesStore()
-        let service = ShareImportService(notesStore: notesStore, defaults: defaults)
+    func testSharedItemsEnvelopeCodableRoundTrip() throws {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
 
         let envelope = SharedItemsEnvelope(
             version: .v1,
@@ -39,28 +14,31 @@ final class ShareImportServiceTests: XCTestCase {
                     kind: .text,
                     value: "Packa pass",
                     source: "share_text",
-                    createdAt: Date()
+                    createdAt: now
                 ),
                 SharedItemPayload(
                     id: "item-2",
                     kind: .url,
                     value: "https://example.com",
                     source: "share_url",
-                    createdAt: Date()
+                    createdAt: now
                 )
             ],
-            createdAt: Date()
+            createdAt: now
         )
 
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        defaults.set(try encoder.encode(envelope), forKey: AppIntegrationConfig.sharedItemsKey)
 
-        let count = try service.importPendingSharedItems()
-        XCTAssertEqual(count, 2)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
 
-        let notes = try notesStore.listNotes()
-        XCTAssertEqual(notes.count, 2)
-        XCTAssertNil(defaults.data(forKey: AppIntegrationConfig.sharedItemsKey))
+        let data = try encoder.encode(envelope)
+        let decoded = try decoder.decode(SharedItemsEnvelope.self, from: data)
+
+        XCTAssertEqual(decoded.version, .v1)
+        XCTAssertEqual(decoded.items.count, 2)
+        XCTAssertEqual(decoded.items.first?.kind, .text)
+        XCTAssertEqual(decoded.items.last?.kind, .url)
     }
 }

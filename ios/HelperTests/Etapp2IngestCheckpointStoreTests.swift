@@ -11,18 +11,18 @@ final class Etapp2IngestCheckpointStoreTests: XCTestCase {
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
         let context = ModelContext(container)
-        let store = Etapp2IngestCheckpointStore(context: context)
+        let store = Etapp2IngestCheckpointStore()
 
-        XCTAssertNil(try store.lastCheckpoint(for: .contacts))
+        XCTAssertNil(try store.lastCheckpoint(for: .contacts, in: context))
 
         let first = Date(timeIntervalSince1970: 100)
         let second = Date(timeIntervalSince1970: 200)
 
-        try store.updateCheckpoint(for: .contacts, at: first)
-        XCTAssertEqual(try store.lastCheckpoint(for: .contacts), first)
+        try store.updateCheckpoint(for: .contacts, at: first, in: context)
+        XCTAssertEqual(try store.lastCheckpoint(for: .contacts, in: context), first)
 
-        try store.updateCheckpoint(for: .contacts, at: second)
-        XCTAssertEqual(try store.lastCheckpoint(for: .contacts), second)
+        try store.updateCheckpoint(for: .contacts, at: second, in: context)
+        XCTAssertEqual(try store.lastCheckpoint(for: .contacts, in: context), second)
     }
 
     func testNonStage2SourceReturnsNilAndNoopUpdate() throws {
@@ -31,10 +31,10 @@ final class Etapp2IngestCheckpointStoreTests: XCTestCase {
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
         let context = ModelContext(container)
-        let store = Etapp2IngestCheckpointStore(context: context)
+        let store = Etapp2IngestCheckpointStore()
 
-        XCTAssertNil(try store.lastCheckpoint(for: .memory))
-        XCTAssertNoThrow(try store.updateCheckpoint(for: .memory, at: Date()))
-        XCTAssertNil(try store.lastCheckpoint(for: .memory))
+        XCTAssertNil(try store.lastCheckpoint(for: .memory, in: context))
+        XCTAssertNoThrow(try store.updateCheckpoint(for: .memory, at: Date(), in: context))
+        XCTAssertNil(try store.lastCheckpoint(for: .memory, in: context))
     }
 }

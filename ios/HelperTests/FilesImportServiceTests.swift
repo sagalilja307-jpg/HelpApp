@@ -15,7 +15,6 @@ final class FilesImportServiceTests: XCTestCase {
         sourceStore.setEnabled(true, for: .files)
 
         let service = FilesImportService(
-            context: context,
             textExtractionService: FileTextExtractionService(),
             sourceConnectionStore: sourceStore,
             nowProvider: { Date(timeIntervalSince1970: 1_700_200_000) }
@@ -29,12 +28,12 @@ final class FilesImportServiceTests: XCTestCase {
         let fileURL = tmpDir.appendingPathComponent("travel.txt")
         try "Boarding 08:00\nGate 42".write(to: fileURL, atomically: true, encoding: .utf8)
 
-        let importedCount = try await service.importDocuments(urls: [fileURL])
+        let importedCount = try await service.importDocuments(urls: [fileURL], in: context)
         XCTAssertEqual(importedCount, 1)
-        XCTAssertTrue(try service.hasImportedDocuments())
+        XCTAssertTrue(try service.hasImportedDocuments(in: context))
         XCTAssertTrue(sourceStore.hasImportedFiles())
 
-        let delta = try service.collectDelta(since: nil)
+        let delta = try service.collectDelta(since: nil, in: context)
         XCTAssertEqual(delta.items.count, 1)
         XCTAssertEqual(delta.items.first?.type, .file)
         XCTAssertEqual(delta.items.first?.source, "files")

@@ -5,44 +5,40 @@ import SwiftData
 @MainActor
 final class ContactsCollectorServiceTests: XCTestCase {
 
-    func testSnapshotHashIsStableAndMapsToContactItem() {
-        let snapshotA = ContactsCollectorService.makeSnapshot(
-            identifier: "abc",
-            fullName: "Alva Andersson",
-            organization: "Resegruppen",
-            emails: ["alva@example.com"],
-            phones: ["+46701234567"]
+    func testCollectDeltaMapsIndexedContactToUnifiedItem() throws {
+        let container = try ModelContainer(
+            for: IndexedContact.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
-        let snapshotB = ContactsCollectorService.makeSnapshot(
-            identifier: "abc",
-            fullName: "Alva Andersson",
-            organization: "Resegruppen",
-            emails: ["alva@example.com"],
-            phones: ["+46701234567"]
+        let context = ModelContext(container)
+
+        context.insert(
+            IndexedContact(
+                id: "contact:abc",
+                contactIdentifier: "abc",
+                fullName: "Alva Andersson",
+                organization: "Resegruppen",
+                bodySnippet: "Org: Resegruppen | E-post: alva@example.com | Tel: +46701234567",
+                hasEmail: true,
+                hasPhone: true,
+                contactHash: "hash-1",
+                createdAt: Date(timeIntervalSince1970: 100),
+                updatedAt: Date(timeIntervalSince1970: 200)
+            )
         )
+        try context.save()
 
-        XCTAssertEqual(snapshotA.hash, snapshotB.hash)
+        let service = ContactsCollectorService()
+        let delta = try service.collectDelta(since: nil, in: context)
 
-        let row = IndexedContact(
-            id: "contact:abc",
-            contactIdentifier: snapshotA.identifier,
-            fullName: snapshotA.fullName,
-            organization: snapshotA.organization,
-            bodySnippet: "Resegruppen\nE-post: alva@example.com\nTelefon: +46701234567",
-            hasEmail: true,
-            hasPhone: true,
-            contactHash: snapshotA.hash,
-            createdAt: Date(timeIntervalSince1970: 100),
-            updatedAt: Date(timeIntervalSince1970: 200)
-        )
-
-        let mapped = ContactsCollectorService.mapIndexedContact(row)
-        XCTAssertEqual(mapped.id, "contact:abc")
-        XCTAssertEqual(mapped.source, "contacts")
-        XCTAssertEqual(mapped.type, .contact)
-        XCTAssertEqual(mapped.title, "Alva Andersson")
-        XCTAssertEqual(mapped.status["has_email"], AnyCodable(true))
-        XCTAssertEqual(mapped.status["has_phone"], AnyCodable(true))
+        XCTAssertEqual(delta.items.count, 1)
+        XCTAssertEqual(delta.items.first?.id, "contact:abc")
+        XCTAssertEqual(delta.items.first?.source, "contacts")
+        XCTAssertEqual(delta.items.first?.type, .contact)
+        XCTAssertEqual(delta.items.first?.title, "Alva Andersson")
+        XCTAssertEqual(delta.items.first?.status["has_email"], AnyCodable(true))
+        XCTAssertEqual(delta.items.first?.status["has_phone"], AnyCodable(true))
+        XCTAssertEqual(delta.entries.first?.source, .contacts)
     }
 
     func testCollectDeltaRespectsCheckpoint() throws {
@@ -72,7 +68,7 @@ final class ContactsCollectorServiceTests: XCTestCase {
                 contactIdentifier: "new",
                 fullName: "New Contact",
                 organization: "Travel",
-                bodySnippet: "Travel\nE-post: new@example.com",
+                bodySnippet: "Org: Travel | E-post: new@example.com",
                 hasEmail: true,
                 hasPhone: false,
                 contactHash: "new",
@@ -82,8 +78,8 @@ final class ContactsCollectorServiceTests: XCTestCase {
         )
         try context.save()
 
-        let service = ContactsCollectorService(context: context)
-        let delta = try service.collectDelta(since: Date(timeIntervalSince1970: 25))
+        let service = ContactsCollectorService()
+        let delta = try service.collectDelta(since: Date(timeIntervalSince1970: 25), in: context)
 
         XCTAssertEqual(delta.items.count, 1)
         XCTAssertEqual(delta.items.first?.id, "contact:new")

@@ -31,8 +31,7 @@ final class LocationSnapshotServiceTests: XCTestCase {
     func testServiceInitializesCorrectly() throws {
         // This test just verifies the service can be initialized
         // without crashing when CoreLocation is available
-        let mockMemoryService = try MemoryService()
-        let service = LocationSnapshotService(memoryService: mockMemoryService)
+        let service = LocationSnapshotService()
         XCTAssertNotNil(service)
     }
     #endif
