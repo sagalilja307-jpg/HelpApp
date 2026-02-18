@@ -6,7 +6,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Query
 
 from helpershelp.api.deps import mail_queries
-from helpershelp.retrieval.content_object import ContentObject
+from helpershelp.mail.content_object import ContentObject
 
 router = APIRouter()
 

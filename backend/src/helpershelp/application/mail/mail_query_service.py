@@ -2,21 +2,20 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict
 
 from helpershelp.domain.value_objects.time_utils import utcnow
-from helpershelp.retrieval.content_object import ContentObject
+from helpershelp.mail.content_object import ContentObject
 from helpershelp.mail.mail_event import mail_event_to_content_object
 
 
 class MailQueryService:
     """
-    Mail source for universal retrieval pipeline.
+    Mail source query service.
     
     Handles:
     - Fetching mail from provider
     - Normalizing to ContentObject
     - Supporting time-range filtering
     
-    This is ONE source in the retrieval system.
-    Not responsible for ranking or filtering – that's RetrievalCoordinator.
+    Not responsible for ranking or interpretation.
     """
 
     def __init__(self, mail_provider):

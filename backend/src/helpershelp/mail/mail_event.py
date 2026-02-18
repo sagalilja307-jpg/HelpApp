@@ -2,7 +2,7 @@ from datetime import datetime
 from email.utils import parseaddr
 from typing import Dict, Any
 
-from helpershelp.retrieval.content_object import ContentObject, MailSender
+from helpershelp.mail.content_object import ContentObject, MailSender
 
 
 def _extract_domain(email_address: str) -> str | None:

@@ -5,10 +5,8 @@ from typing import Optional
 
 @dataclass(frozen=True)
 class MailSender:
-    """
-    Raw sender metadata.
-    Relation is interpreted in the app – never here.
-    """
+    """Raw sender metadata."""
+
     address: str
     name: Optional[str]
     domain: Optional[str]
@@ -16,26 +14,13 @@ class MailSender:
 
 @dataclass(frozen=True)
 class ContentObject:
-    """
-    Canonical content contract between backend and app.
-    Backend provides facts only.
-    App decides meaning.
-    """
+    """Canonical mail/query content contract."""
 
-    # Identity
     id: str
-    source: str  # e.g. "email"
-
-    # Content
+    source: str
     subject: str
     body: str
-
-    # Relation
     sender: MailSender
-
-    # Time
     received_at: datetime
-
-    # Thread / status
     thread_id: Optional[str]
     is_replied: bool

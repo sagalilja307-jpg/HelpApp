@@ -60,30 +60,6 @@ def test_assistant_scheduling_shim_imports():
     assert TimeSlot is not None
 
 
-def test_llm_llm_service_shim_imports():
-    from helpershelp.llm.llm_service import QueryInterpretationService
-
-    assert QueryInterpretationService is not None
-
-
-def test_llm_embedding_service_shim_imports():
-    from helpershelp.llm.embedding_service import EmbeddingService
-
-    assert EmbeddingService is not None
-
-
-def test_llm_ollama_service_shim_imports():
-    from helpershelp.llm.ollama_service import OllamaTextGenerationService
-
-    assert OllamaTextGenerationService is not None
-
-
-def test_llm_text_generation_service_shim_imports():
-    from helpershelp.llm.text_generation_service import TextGenerationService
-
-    assert TextGenerationService is not None
-
-
 def test_mail_oauth_service_shim_imports():
     from helpershelp.mail.oauth_service import OAuthService
 
