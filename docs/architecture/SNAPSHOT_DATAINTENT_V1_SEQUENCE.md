@@ -73,3 +73,4 @@ Local formatter
 - `/assistant/feature-status` endpoint.
 - Feature snapshot tables (e.g., `calendar_feature_events`).
 - `analysis` payloads in `/query` responses.
+- `features` payload in `POST /ingest`.

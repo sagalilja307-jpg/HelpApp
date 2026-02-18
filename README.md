@@ -37,14 +37,9 @@ pip install -e .
 uvicorn api:app --reload
 ```
 
-## Start/Stop: backend + Ollama
+## Start/Stop: backend
 
-Starta Ollama:
-```bash
-ollama serve
-```
-
-Starta backend (lyssna på alla interfaces):
+Starta backend (lyssna pa alla interfaces):
 ```bash
 cd backend
 source .venv/bin/activate
@@ -56,14 +51,9 @@ Stäng av backend:
 pkill -f "uvicorn api:app"
 ```
 
-Stäng av Ollama:
-```bash
-pkill -f "ollama serve"
-```
-
 ## Test: backend
 ```bash
 cd backend
 source .venv/bin/activate
-pytest
+pytest -q
 ```

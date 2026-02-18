@@ -116,7 +116,8 @@ Ambigua frågor kodas alltid som:
 
 ## Ingest/feature-regler
 
-- `POST /ingest` accepterar fortsatt `features` för kompatibilitet, men payloaden ignoreras.
+- `POST /ingest` accepterar endast `items`.
+- `features` i request-payload ska ge valideringsfel (422).
 - Feature-store-tabeller för analytics-snapshots ska inte användas eller återskapas.
 - Endpointen `/assistant/feature-status` ska inte finnas i v1.
 

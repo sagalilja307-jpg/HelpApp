@@ -1,34 +1,24 @@
 # Backend Documentation
 
-This directory contains documentation for the HelpersHelp backend.
+Dokumentationen i den har mappen beskriver nuvarande Snapshot DataIntent v1-backend.
 
-## Documents
+## Canonical Documents
 
-### [STRUCTURE.md](STRUCTURE.md)
-Backend architecture and module organization.
+1. [STRUCTURE.md](STRUCTURE.md) - backendens modulstruktur och lager.
+2. [INSIGHT_QUERY_ARCHITECTURE.md](INSIGHT_QUERY_ARCHITECTURE.md) - `/query` och DataIntent-router.
+3. [ADDING_NEW_SOURCE.md](ADDING_NEW_SOURCE.md) - playbook for nya snapshot-kallor.
+4. [MODEL_VERIFICATION.md](MODEL_VERIFICATION.md) - verifieringssteg for API-kontrakt och testsvit.
+5. [CLEAN_ARCHITECTURE.md](CLEAN_ARCHITECTURE.md) - designprinciper.
 
-### [MODEL_VERIFICATION.md](MODEL_VERIFICATION.md)
-AI model verification guide (Ollama embeddings + generation).
+## Related Monorepo Docs
 
-### [INSIGHT_QUERY_ARCHITECTURE.md](INSIGHT_QUERY_ARCHITECTURE.md)
-Snapshot DataIntent v1 query model and responsibilities.
+- [Root README](../../README.md)
+- [Snapshot DataIntent v1 rules](../../docs/architecture/SNAPSHOT_DATAINTENT_V1_REGLER.md)
+- [Snapshot DataIntent v1 sequence](../../docs/architecture/SNAPSHOT_DATAINTENT_V1_SEQUENCE.md)
 
-### [ADDING_NEW_SOURCE.md](ADDING_NEW_SOURCE.md)
-Playbook for adding new snapshot sources in DataIntent v1.
+## Local Commands
 
-### [SOURCE_GATING_CONTRACT.md](SOURCE_GATING_CONTRACT.md)
-Deprecated in v1. Kept for historical reference.
-
-## Quick Links
-
-1. [Backend README](../README.md)
-2. [STRUCTURE.md](STRUCTURE.md)
-3. [MODEL_VERIFICATION.md](MODEL_VERIFICATION.md)
-4. [INSIGHT_QUERY_ARCHITECTURE.md](INSIGHT_QUERY_ARCHITECTURE.md)
-5. [ADDING_NEW_SOURCE.md](ADDING_NEW_SOURCE.md)
-6. [Snapshot DataIntent v1 rules](../../docs/architecture/SNAPSHOT_DATAINTENT_V1_REGLER.md)
-
-## Start Backend (canonical flow)
+Start backend:
 
 ```bash
 cd backend
@@ -39,16 +29,16 @@ pip install -e .
 uvicorn api:app --reload
 ```
 
-## Run Tests
+Run tests:
 
 ```bash
 cd backend
 source .venv/bin/activate
-pytest
+pytest -q
 ```
 
-## Documentation Standards
+## Documentation Rules
 
-- Keep docs aligned with Snapshot DataIntent v1 rules.
-- Update `docs/architecture/SNAPSHOT_DATAINTENT_V1_REGLER.md` when changing query behavior.
-- Avoid references to deprecated source-gating or feature-store flows.
+- Hall dokumentation alignad med Snapshot DataIntent v1.
+- Uppdatera `docs/architecture/SNAPSHOT_DATAINTENT_V1_REGLER.md` vid kontraktsandringar i `/query`.
+- Beskriv endast aktiv kodvag, inte borttagna legacy-floden.

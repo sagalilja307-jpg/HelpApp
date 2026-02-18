@@ -41,6 +41,7 @@ class APIQueryAssistantStoreTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
 
         payload = resp.json()
+        self.assertEqual(set(payload.keys()), {"data_intent"})
         data_intent = payload.get("data_intent")
         self.assertIsInstance(data_intent, dict)
         self.assertEqual(data_intent.get("domain"), "mail")

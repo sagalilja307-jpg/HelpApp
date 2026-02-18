@@ -24,6 +24,7 @@ No analytics engine. No feature-store. No source-gating. No retry loops.
 - No feature-store persistence.
 - No embedding dependency for `/query`.
 - No retry loop in client pipeline.
+- `POST /ingest` accepts `items` only. Legacy `features` payload is rejected.
 
 ## 3) DataIntent v1 Schema (Normative)
 
@@ -133,6 +134,7 @@ INVARIANTS:
 - `/assistant/feature-status` endpoint.
 - Feature snapshot tables (e.g., `calendar_feature_events`).
 - `analysis` payloads in `/query` responses.
+- `features` in `POST /ingest` payload.
 
 ## 9) Reference
 
