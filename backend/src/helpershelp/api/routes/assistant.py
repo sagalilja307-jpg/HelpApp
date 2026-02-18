@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -26,6 +26,7 @@ from helpershelp.application.assistant.proposals import (
     ProposalConfig,
     get_proposal_config,
     generate_proposals,
+    maybe_adjust_followup_days_on_feedback,
 )
 from helpershelp.application.assistant.support import (
     SUPPORT_ADAPTATION_ENABLED_KEY,
@@ -44,25 +45,6 @@ from helpershelp.domain.rules.scoring import build_dashboard_lists
 from helpershelp.domain.value_objects.time_utils import utcnow
 
 router = APIRouter()
-
-FEATURE_STATUS_TTL_HOURS = 24
-
-
-def _serialize_optional_datetime(value: Any) -> Any:
-    if isinstance(value, datetime):
-        dt = value
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-    return value
-
-
-def _serialize_feature_status(payload: Dict[str, Any]) -> Dict[str, Any]:
-    out = dict(payload)
-    for key in ("last_updated", "coverage_start", "coverage_end"):
-        out[key] = _serialize_optional_datetime(out.get(key))
-    return out
-
 
 def _ensure_support_defaults(store) -> Dict[str, Any]:
     settings = store.get_settings()
@@ -243,17 +225,11 @@ def ingest(request: IngestRequest):
 
     feature_inserted = 0
     feature_updated = 0
-    calendar_events = request.features.calendar_events if request.features else []
-    if calendar_events:
-        feature_inserted, feature_updated = store.upsert_calendar_feature_events(
-            [event.model_dump() for event in calendar_events]
-        )
+    if request.features:
         store.audit(
-            "feature_ingest_calendar",
+            "feature_ingest_ignored",
             {
-                "inserted": feature_inserted,
-                "updated": feature_updated,
-                "count": len(calendar_events),
+                "feature_keys": sorted(list(request.features.keys())),
             },
         )
 
@@ -264,26 +240,6 @@ def ingest(request: IngestRequest):
         "feature_inserted": feature_inserted,
         "feature_updated": feature_updated,
     }
-
-
-@router.get("/assistant/feature-status", tags=["assistant"])
-def feature_status():
-    store = get_assistant_store()
-    status_payload = store.get_calendar_feature_status(
-        now=utcnow(),
-        ttl_hours=FEATURE_STATUS_TTL_HOURS,
-    )
-    serialized = {"calendar": _serialize_feature_status(status_payload)}
-    store.audit(
-        "feature_status_requested",
-        {
-            "sources": ["calendar"],
-            "calendar_available": bool(status_payload.get("available")),
-            "calendar_fresh": bool(status_payload.get("fresh")),
-            "snapshot_count": int(status_payload.get("snapshot_count") or 0),
-        },
-    )
-    return serialized
 
 
 @router.post("/proposals/{proposal_id}/accept", tags=["assistant"])

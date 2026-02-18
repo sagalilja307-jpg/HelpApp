@@ -1,13 +1,7 @@
 import Foundation
 
 protocol AssistantIngesting {
-    func ingest(items: [UnifiedItemDTO], features: IngestFeaturesDTO?) async throws
-}
-
-extension AssistantIngesting {
-    func ingest(items: [UnifiedItemDTO]) async throws {
-        try await ingest(items: items, features: nil)
-    }
+    func ingest(items: [UnifiedItemDTO]) async throws
 }
 
 enum AssistantIngestAPIError: LocalizedError {
@@ -36,10 +30,9 @@ final class AssistantIngestAPIService: AssistantIngesting {
         self.session = session
     }
 
-    func ingest(items: [UnifiedItemDTO], features: IngestFeaturesDTO? = nil) async throws {
-        guard !items.isEmpty || features != nil else { return }
-
-        let payload = IngestRequestDTO(items: items, features: features)
+    func ingest(items: [UnifiedItemDTO]) async throws {
+        guard !items.isEmpty else { return }
+        let payload = IngestRequestDTO(items: items)
         let body = try Self.encoder.encode(payload)
         let data = try await performRequest(path: "/ingest", method: "POST", body: body)
 

@@ -15,6 +15,14 @@ Monorepot innehåller iOS-appen, backend och dokumentation i en tydlig struktur.
 - Daglig nudgetak per nivå: `0/2/3/5`.
 - Externa handlingar ska fortsätta följa `propose -> confirm -> execute`.
 
+## Snapshot DataIntent v1 (query)
+- Regler och kontrakt för backend-only intent finns i:
+  - `docs/architecture/SNAPSHOT_DATAINTENT_V1_REGLER.md`
+- Arkitektur-låsning (normativt):
+  - `docs/architecture/SNAPSHOT_DATAINTENT_V1.md`
+  - `docs/architecture/SNAPSHOT_DATAINTENT_V1_SEQUENCE.md`
+- Använd dokumentet som normativ källa vid alla ändringar i `/query`-flödet.
+
 ## Snabbstart: iOS
 1. Öppna `ios/Helper.xcodeproj` i Xcode.
 2. Kör scheme `Helper`.

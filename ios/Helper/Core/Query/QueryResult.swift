@@ -11,7 +11,6 @@ struct QueryResult: Codable, Equatable, Sendable {
     }
 
     let timeRange: DateInterval?
-    var entries: [Entry]           // måste vara var
-    var answer: String?            // ✅ ny property
-    var backendAnalyticsIntent: String?
+    var entries: [Entry]
+    var answer: String?
 }

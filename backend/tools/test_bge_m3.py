@@ -13,6 +13,11 @@ import os
 import sys
 from pathlib import Path
 
+if __name__ != "__main__":
+    import pytest
+
+    pytest.skip("Manual embedding verification tool (not a unit test).", allow_module_level=True)
+
 # Add backend src to path
 backend_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_dir / "src"))

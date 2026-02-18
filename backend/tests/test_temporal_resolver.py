@@ -1,55 +1,38 @@
-from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
-from helpershelp.application.analytics.intent_parser import (
-    CALENDAR_LEAST_LOADED_DAY_INTENT,
-    CALENDAR_SPECIFIC_DAY_INTENT,
-)
-from helpershelp.application.analytics.temporal.resolver import TemporalResolver
+from helpershelp.application.query.data_intent_router import DataIntentRouter
 
 
-def test_resolve_specific_day_keywords():
-    resolver = TemporalResolver(timezone_name="Europe/Stockholm")
-    now = datetime(2026, 2, 17, 12, 0, tzinfo=timezone.utc)
+def test_router_explicit_date_resolves_day_window():
+    router = DataIntentRouter(timezone_name="Europe/Stockholm")
+    payload = router.route(query="Visa mina möten den 19/3/2026", language="sv")
 
-    today = resolver.resolve("Vad gör jag idag?", CALENDAR_SPECIFIC_DAY_INTENT, now=now)
-    assert today.start.date().isoformat() == "2026-02-17"
-    assert today.granularity == "day"
+    assert payload["domain"] == "calendar"
+    timeframe = payload.get("timeframe")
+    assert timeframe is not None
+    assert timeframe["granularity"] == "day"
 
-    yesterday = resolver.resolve("Vad gjorde jag igår?", CALENDAR_SPECIFIC_DAY_INTENT, now=now)
-    assert yesterday.start.date().isoformat() == "2026-02-16"
-
-    tomorrow = resolver.resolve("Vad gör jag imorgon?", CALENDAR_SPECIFIC_DAY_INTENT, now=now)
-    assert tomorrow.start.date().isoformat() == "2026-02-18"
-
-
-def test_resolve_specific_day_ddmm_with_verb_inference():
-    resolver = TemporalResolver(timezone_name="Europe/Stockholm")
-    now = datetime(2026, 2, 17, 12, 0, tzinfo=timezone.utc)
-
-    future = resolver.resolve("Vad gör jag den 19/3?", CALENDAR_SPECIFIC_DAY_INTENT, now=now)
-    assert future.start.date().isoformat() == "2026-03-19"
-
-    past = resolver.resolve("Vad gjorde jag den 19/1?", CALENDAR_SPECIFIC_DAY_INTENT, now=now)
-    assert past.start.date().isoformat() == "2026-01-19"
+    start = timeframe["start"].astimezone(ZoneInfo("Europe/Stockholm"))
+    end = timeframe["end"].astimezone(ZoneInfo("Europe/Stockholm"))
+    assert start.date().isoformat() == "2026-03-19"
+    assert end.date().isoformat() == "2026-03-19"
 
 
-def test_resolve_week_window_for_least_loaded_day():
-    resolver = TemporalResolver(timezone_name="Europe/Stockholm")
-    now = datetime(2026, 2, 17, 12, 0, tzinfo=timezone.utc)
+def test_router_count_mail_unread():
+    router = DataIntentRouter(timezone_name="Europe/Stockholm")
+    payload = router.route(query="Hur många olästa mejl har jag?", language="sv")
 
-    current_week = resolver.resolve(
-        "Vilken dag den här veckan är minst belastad?",
-        CALENDAR_LEAST_LOADED_DAY_INTENT,
-        now=now,
-    )
-    assert current_week.start.date().isoformat() == "2026-02-16"
-    assert current_week.end.date().isoformat() == "2026-02-22"
-    assert current_week.granularity == "week"
+    assert payload["domain"] == "mail"
+    assert payload["operation"] == "count"
+    filters = payload.get("filters") or {}
+    assert filters.get("status") == "unread"
 
-    last_week = resolver.resolve(
-        "Vilken dag förra veckan var minst belastad?",
-        CALENDAR_LEAST_LOADED_DAY_INTENT,
-        now=now,
-    )
-    assert last_week.start.date().isoformat() == "2026-02-09"
-    assert last_week.end.date().isoformat() == "2026-02-15"
+
+def test_router_ambiguity_returns_clarification():
+    router = DataIntentRouter(timezone_name="Europe/Stockholm")
+    payload = router.route(query="Vad händer?", language="sv")
+
+    assert payload["domain"] == "system"
+    assert payload["operation"] == "needs_clarification"
+    filters = payload.get("filters") or {}
+    assert isinstance(filters.get("suggested_domains"), list)

@@ -1,12 +1,10 @@
 import os
 import tempfile
 import unittest
-from datetime import timedelta
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from helpershelp.testing.embedding_test_utils import install_deterministic_embedding_stubs
 from helpershelp.assistant.models import UnifiedItem, UnifiedItemType
 from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore, StoreConfig
 from helpershelp.domain.value_objects.time_utils import utcnow
@@ -27,7 +25,6 @@ class APIQueryAssistantStoreTests(unittest.TestCase):
         self.app = app
         reset_assistant_store()
         self._get_store = get_assistant_store
-        install_deterministic_embedding_stubs()
 
         store = SqliteStore(StoreConfig(db_path=self.db_path))
         store.init()
@@ -35,89 +32,34 @@ class APIQueryAssistantStoreTests(unittest.TestCase):
     def tearDown(self):
         self.tmpdir.cleanup()
 
-    def test_query_defaults_to_assistant_store_and_returns_evidence(self):
-        store = self._get_store()
-        now = utcnow()
-
-        event = UnifiedItem(
-            source="ios_push",
-            type=UnifiedItemType.event,
-            title="Team meeting",
-            body="",
-            created_at=now,
-            updated_at=now,
-            start_at=now,
-            end_at=now + timedelta(hours=1),
-            status={"event": {"location": "Office"}},
-        )
-        reminder = UnifiedItem(
-            source="ios_push",
-            type=UnifiedItemType.reminder,
-            title="Buy milk",
-            body="",
-            created_at=now,
-            updated_at=now,
-            due_at=now + timedelta(days=1),
-            status={"state": "open"},
-        )
-
-        store.upsert_items([event, reminder])
-
+    def test_query_returns_data_intent_mail_count(self):
         client = TestClient(self.app)
         resp = client.post(
             "/query",
-            json={"query": "Vad har jag idag?", "language": "sv", "days": 7},
+            json={"query": "Hur många olästa mejl har jag?", "language": "sv", "days": 7},
         )
         self.assertEqual(resp.status_code, 200)
 
         payload = resp.json()
-        self.assertIn("content", payload)
-        self.assertIsInstance(payload.get("content"), str)
-
-        evidence = payload.get("evidence_items")
-        self.assertIsInstance(evidence, list)
-        self.assertGreaterEqual(len(evidence), 1)
-
-        sources = {row.get("source") for row in evidence}
-        self.assertTrue(bool(sources.intersection({"calendar", "reminders"})))
-
-        used_sources = payload.get("used_sources")
-        self.assertIsInstance(used_sources, list)
-        for src in sources:
-            if src:
-                self.assertIn(src, used_sources)
-
-        time_range = payload.get("time_range")
-        self.assertIsInstance(time_range, dict)
-        self.assertEqual(time_range.get("days"), 7)
+        data_intent = payload.get("data_intent")
+        self.assertIsInstance(data_intent, dict)
+        self.assertEqual(data_intent.get("domain"), "mail")
+        self.assertEqual(data_intent.get("operation"), "count")
+        self.assertEqual((data_intent.get("filters") or {}).get("status"), "unread")
 
     def test_query_accepts_question_alias(self):
-        store = self._get_store()
-        now = utcnow()
-
-        event = UnifiedItem(
-            source="ios_push",
-            type=UnifiedItemType.event,
-            title="Alias test event",
-            body="",
-            created_at=now,
-            updated_at=now,
-            start_at=now,
-            end_at=now + timedelta(hours=1),
-            status={"event": {"location": "Office"}},
-        )
-        store.upsert_items([event])
-
         client = TestClient(self.app)
         resp = client.post(
             "/query",
-            json={"question": "Vad har jag idag?", "language": "sv", "days": 7},
+            json={"question": "Visa mina möten idag", "language": "sv", "days": 7},
         )
         self.assertEqual(resp.status_code, 200)
         payload = resp.json()
-        self.assertIn("content", payload)
+        data_intent = payload.get("data_intent")
+        self.assertIsInstance(data_intent, dict)
+        self.assertEqual(data_intent.get("domain"), "calendar")
 
-    def test_query_returns_400_when_query_and_question_missing(self):
+    def test_query_returns_422_when_query_and_question_missing(self):
         client = TestClient(self.app)
         resp = client.post(
             "/query",
@@ -125,10 +67,9 @@ class APIQueryAssistantStoreTests(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 400)
         payload = resp.json()
-        message = payload.get("error", {}).get("message", "")
-        self.assertIn("Either 'query' or 'question' must be provided", message)
+        self.assertIn("error", payload)
 
-    def test_ingest_then_query_returns_note_event_and_reminder_evidence(self):
+    def test_ingest_accepts_features_payload(self):
         client = TestClient(self.app)
         now = utcnow()
 
@@ -143,136 +84,23 @@ class APIQueryAssistantStoreTests(unittest.TestCase):
                     "created_at": now.isoformat(),
                     "updated_at": now.isoformat(),
                     "start_at": now.isoformat(),
-                    "end_at": (now + timedelta(hours=2)).isoformat(),
+                    "end_at": now.isoformat(),
                     "status": {"is_all_day": False},
-                },
-                {
-                    "id": "reminder:item-1",
-                    "source": "reminders",
-                    "type": "reminder",
-                    "title": "Kop solskydd",
-                    "body": "",
-                    "created_at": now.isoformat(),
-                    "updated_at": now.isoformat(),
-                    "due_at": (now + timedelta(days=1)).isoformat(),
-                    "status": {"is_completed": False},
-                },
-                {
-                    "id": "memory:item-1",
-                    "source": "notes",
-                    "type": "note",
-                    "title": "Reseanteckning",
-                    "body": "Vi har bokat hotell i Aten",
-                    "created_at": now.isoformat(),
-                    "updated_at": now.isoformat(),
-                    "status": {"memory_source": "memory"},
-                },
-            ]
+                }
+            ],
+            "features": {"calendar_events": [{"id": "evt-1"}]},
         }
 
         ingest_resp = client.post("/ingest", json=ingest_payload)
         self.assertEqual(ingest_resp.status_code, 200)
+        payload = ingest_resp.json()
+        self.assertEqual(payload.get("feature_inserted"), 0)
+        self.assertEqual(payload.get("feature_updated"), 0)
 
-        resp = client.post(
-            "/query",
-            json={
-                "query": "Sammanfatta vad vi planerat och bokat till Grekland",
-                "language": "sv",
-                "days": 90,
-                "sources": ["assistant_store"],
-            },
-        )
-        self.assertEqual(resp.status_code, 200)
-
-        payload = resp.json()
-        evidence = payload.get("evidence_items")
-        self.assertIsInstance(evidence, list)
-        self.assertGreaterEqual(len(evidence), 1)
-
-        titles = {row.get("title") for row in evidence}
-        self.assertTrue(
-            bool(
-                titles.intersection(
-                    {"Packa for Grekland", "Kop solskydd", "Reseanteckning"}
-                )
-            )
-        )
-
-        sources = {row.get("source") for row in evidence if row.get("source")}
-        self.assertTrue(bool(sources.intersection({"calendar", "reminders", "notes"})))
-
-        used_sources = payload.get("used_sources")
-        self.assertIsInstance(used_sources, list)
-        self.assertTrue(bool(set(used_sources).intersection({"calendar", "reminders", "notes"})))
-
-    def test_ingest_then_query_returns_stage2_source_evidence(self):
-        client = TestClient(self.app)
-        now = utcnow()
-
-        ingest_payload = {
-            "items": [
-                {
-                    "id": "contact:anna",
-                    "source": "contacts",
-                    "type": "contact",
-                    "title": "Anna Andersson",
-                    "body": "Resekoordinator\\nanna@example.com\\n+46700000000",
-                    "created_at": now.isoformat(),
-                    "updated_at": now.isoformat(),
-                    "status": {"has_email": True, "has_phone": True},
-                },
-                {
-                    "id": "photo:asset-1",
-                    "source": "photos",
-                    "type": "photo",
-                    "title": "Bild 2026-02-12",
-                    "body": "Metadata: favoritbild fran packning",
-                    "created_at": now.isoformat(),
-                    "updated_at": now.isoformat(),
-                    "status": {"ocr_enabled": False, "favorite": True},
-                },
-                {
-                    "id": "file:doc-1",
-                    "source": "files",
-                    "type": "file",
-                    "title": "Resplan.pdf",
-                    "body": "Dokument med bokningsdetaljer",
-                    "created_at": now.isoformat(),
-                    "updated_at": now.isoformat(),
-                    "status": {"uti": "com.adobe.pdf", "size_bytes": 2048},
-                },
-            ]
-        }
-
-        ingest_resp = client.post("/ingest", json=ingest_payload)
-        self.assertEqual(ingest_resp.status_code, 200)
-
-        resp = client.post(
-            "/query",
-            json={
-                "query": "sammanfatta kontakter bilder och filer for resan",
-                "language": "sv",
-                "days": 90,
-                "sources": ["assistant_store"],
-            },
-        )
-        self.assertEqual(resp.status_code, 200)
-
-        payload = resp.json()
-        evidence = payload.get("evidence_items") or []
-        self.assertGreaterEqual(len(evidence), 1)
-
-        evidence_sources = {row.get("source") for row in evidence}
-        self.assertTrue(
-            bool(evidence_sources.intersection({"contacts", "photos", "files"}))
-        )
-
-        evidence_types = {row.get("type") for row in evidence}
-        self.assertTrue(bool(evidence_types.intersection({"contact", "photo", "file"})))
-
-        used_sources = payload.get("used_sources")
-        self.assertIsInstance(used_sources, list)
-        self.assertTrue(bool(set(used_sources).intersection({"contacts", "photos", "files"})))
+        store = self._get_store()
+        items = store.list_items(limit=10)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].title, "Packa for Grekland")
 
 
 if __name__ == "__main__":

@@ -3,14 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-from helpershelp.application.analytics.analysis_service import AnalysisService
-from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore, get_store
-from helpershelp.application.query.query_orchestrator import QueryOrchestrator
-from helpershelp.domain.value_objects.time_utils import utcnow
-from helpershelp.infrastructure.llm.bge_m3_adapter import get_embedding_service
 from helpershelp.application.llm.llm_service import get_query_service
 from helpershelp.application.llm.text_generation_service import get_text_generation_service
+from helpershelp.infrastructure.llm.bge_m3_adapter import get_embedding_service
 from helpershelp.application.mail.mail_query_service import MailQueryService
+from helpershelp.application.query.data_intent_router import DataIntentRouter
+from helpershelp.domain.value_objects.time_utils import utcnow
+from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore, get_store
 from helpershelp.infrastructure.security.oauth_adapter import OAuthService
 from helpershelp.mail.provider import mail_provider
 from helpershelp.retrieval.content_object import ContentObject, MailSender
@@ -22,6 +21,7 @@ text_service = get_text_generation_service()
 query_service = get_query_service()
 
 assistant_store: Optional[SqliteStore] = None
+data_intent_router: Optional[DataIntentRouter] = None
 
 
 def get_assistant_store() -> SqliteStore:
@@ -198,13 +198,8 @@ def parse_optional_datetime(value: Optional[str]) -> Optional[datetime]:
     return None
 
 
-def get_query_orchestrator() -> QueryOrchestrator:
-    analysis_service = AnalysisService(text_service=text_service)
-    return QueryOrchestrator(
-        query_service=query_service,
-        text_service=text_service,
-        analysis_service=analysis_service,
-        assistant_store_getter=get_assistant_store,
-        assistant_store_fetcher=assistant_store_fetch,
-        mail_fetcher=mail_queries.fetch,
-    )
+def get_data_intent_router() -> DataIntentRouter:
+    global data_intent_router
+    if data_intent_router is None:
+        data_intent_router = DataIntentRouter()
+    return data_intent_router

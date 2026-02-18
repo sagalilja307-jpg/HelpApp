@@ -14,9 +14,9 @@ backend/
 ├── docs/                    # Documentation
 │   ├── STRUCTURE.md         # This file (architecture overview)
 │   ├── MODEL_VERIFICATION.md # Model testing guide
-│   ├── INSIGHT_QUERY_ARCHITECTURE.md # Insight lifecycle and invariants
-│   ├── SOURCE_GATING_CONTRACT.md # Query source-gating API contract
-│   └── ADDING_NEW_SOURCE.md # Playbook for new insight sources
+│   ├── INSIGHT_QUERY_ARCHITECTURE.md # Snapshot DataIntent v1 model
+│   ├── SOURCE_GATING_CONTRACT.md # Deprecated (no longer used)
+│   └── ADDING_NEW_SOURCE.md # Playbook for new snapshot sources
 │
 ├── src/helpershelp/         # Main application package
 │   ├── config.py            # Global configuration
@@ -32,14 +32,21 @@ backend/
 │   │       ├── llm.py          # LLM operations
 │   │       ├── mail.py         # Email operations
 │   │       ├── oauth_gmail.py  # Gmail OAuth
-│   │       ├── query.py        # Unified query endpoint
+│   │       ├── query.py        # DataIntent query endpoint
 │   │       └── sync.py         # Background sync
 │   │
+│   ├── application/          # Use case orchestration
+│   │   ├── query/            # DataIntent router
+│   │
+│   ├── domain/               # Domain model (entities/value objects)
+│   ├── ports/                # Interface definitions (ports)
+│   ├── infrastructure/       # Adapters (SQLite, Ollama, etc.)
+│   │
 │   ├── llm/                 # AI/ML models layer
-│   │   ├── embedding_service.py      # BGE-M3 embeddings (Ollama-backed shim)
+│   │   ├── embedding_service.py      # BGE-M3 embeddings (shim)
 │   │   ├── ollama_service.py         # Ollama text generation
 │   │   ├── text_generation_service.py # Service facade
-│   │   └── llm_service.py            # Query interpretation
+│   │   └── llm_service.py            # Query interpretation (LLM endpoints only)
 │   │
 │   ├── assistant/           # Core assistant logic
 │   │   ├── models.py       # Data models
@@ -102,7 +109,7 @@ backend/
 **Services:**
 - `EmbeddingService`: BGE-M3 via Ollama embeddings
 - `OllamaTextGenerationService`: Qwen2.5 via Ollama generation
-- `QueryInterpretationService`: Query classification (uses embeddings)
+- `QueryInterpretationService`: Query classification for LLM endpoints
 
 **Key Principles:**
 - Models never make decisions (return scores/data only)
@@ -110,7 +117,18 @@ backend/
 - Explicit availability signalling (`503` for embedding-dependent endpoints)
 - Clear contracts (documented input/output)
 
-### 3. Assistant Layer (`src/helpershelp/assistant/`)
+### 3. DataIntent Query Layer (`src/helpershelp/application/query/`)
+
+**Responsibility:** Deterministic intent routing for `/query`
+
+**Components:**
+- `data_intent_router.py`: Domain/operation/timeframe/filter resolution
+
+**Constraints:**
+- Must not depend on embeddings
+- Must not trigger retrieval or analytics
+
+### 4. Assistant Layer (`src/helpershelp/assistant/`)
 
 **Responsibility:** Core assistant intelligence
 
@@ -128,7 +146,7 @@ backend/
 - Learning weights (user feedback)
 - Time-critical detection
 
-### 4. Mail Layer (`src/helpershelp/mail/`)
+### 5. Mail Layer (`src/helpershelp/mail/`)
 
 **Responsibility:** Email provider integration
 
@@ -138,13 +156,7 @@ backend/
 - **mail_query_service.py**: Search and fetch emails
 - **mail_event.py**: Email event handling
 
-**Key Principles:**
-- Provider abstraction (easy to add new providers)
-- Secure OAuth flow
-- Rate limiting awareness
-- Minimal data retention
-
-### 5. Retrieval Layer (`src/helpershelp/retrieval/`)
+### 6. Retrieval Layer (`src/helpershelp/retrieval/`)
 
 **Responsibility:** Multi-source content retrieval
 
@@ -152,48 +164,17 @@ backend/
 - **retrieval_coordinator.py**: Coordinate multiple sources
 - **content_object.py**: Unified content representation
 
-**Key Principles:**
-- Source abstraction
-- Semantic ranking (via LLM layer)
-- Per-source limits
-- Balanced results
-
 ## Data Flow
 
-### Query Processing Pipeline
+### Query Processing Pipeline (Snapshot v1)
 
 ```
 1. HTTP Request
    ↓
-2. QueryOrchestrator (application/query/query_orchestrator.py)
+2. DataIntentRouter (application/query/data_intent_router.py)
    ↓
-3a. Analytics path (deterministic intent match)
-   - Temporal resolve
-   - Calendar feature-store readiness check
-   - Structured calculator
-   - Optional narrative render
-   ↓
-3b. Retrieval path (fallback)
-   - Query interpretation (embeddings)
-   - Multi-source retrieval + ranking
-   - Text formulation
-   ↓
-4. HTTP Response (+ source gating signals)
+3. HTTP Response with { "data_intent": { ... } }
 ```
-
-### Source Gating Contract (Fas 1)
-
-`POST /query` svarar alltid med:
-- `analysis_ready`
-- `requires_sources`
-- `requirement_reason_codes`
-- `required_time_window`
-
-`GET /assistant/feature-status` exponerar per-kalla status (Fas 1: `calendar`).
-
-`POST /ingest` accepterar nu bade:
-- `items` (legacy)
-- `features.calendar_events` (calendar feature snapshots)
 
 ### Background Sync Flow
 
@@ -214,191 +195,3 @@ backend/
 ### Environment Variables
 
 See `.env.example` for full list. Key variables:
-
-**Models:**
-- `OLLAMA_HOST`: Ollama server URL
-- `OLLAMA_MODEL`: Generation model (default: qwen2.5:7b)
-- `OLLAMA_EMBED_MODEL`: Embedding model (default: bge-m3)
-
-**Storage:**
-- `HELPERSHELP_DB_PATH`: SQLite database path
-
-**Features:**
-- `HELPERSHELP_ENABLE_SYNC_LOOP`: Background sync enabled
-- `calendar` analytics freshness TTL: 24h (Fas 1)
-
-### Configuration Loading
-
-Configuration is loaded in `config.py`:
-1. Load `.env` file (if exists)
-2. Read environment variables
-3. Set defaults
-
-## Testing Strategy
-
-### Test Organization
-
-```
-tests/
-├── test_assistant_core.py        # Core logic tests
-├── test_api_*.py                 # API endpoint tests
-├── test_query_*.py               # Query pipeline tests
-└── test_retrieval_*.py           # Retrieval tests
-```
-
-### Running Tests
-
-```bash
-# All tests
-pytest
-
-# Specific test file
-pytest tests/test_api_query_assistant_store.py
-
-# Specific test case
-pytest tests/test_query_stage2_sources.py -k contacts -q
-```
-
-### Test Fixtures
-
-- Tests use `tempfile.TemporaryDirectory()` for databases
-- FastAPI `TestClient` for API tests
-- Mock services for external dependencies
-
-## Development Tools
-
-### Model Verification
-
-```bash
-# Test Ollama embeddings (bge-m3)
-python tools/test_bge_m3.py
-
-# Test Ollama
-curl http://localhost:11434/api/tags
-```
-
-### Local Development
-
-```bash
-# Create + activate venv (first time)
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install in development mode
-python -m pip install --upgrade pip
-pip install -e .
-
-# Run with auto-reload
-uvicorn api:app --reload
-
-# Run with debug logging
-LOG_LEVEL=DEBUG uvicorn api:app
-```
-
-## Best Practices
-
-### Code Organization
-
-1. **Separation of Concerns**: Each layer has clear responsibilities
-2. **Dependency Direction**: Flow from API → Services → Data
-3. **No Circular Dependencies**: Use dependency injection
-4. **Clear Interfaces**: Document service contracts
-
-### Error Handling
-
-1. **Strict Availability for Embeddings**: Return `503` when embedding backend is unavailable
-2. **Informative Errors**: Clear error messages for API users
-3. **Logging**: Log errors with context, not secrets
-4. **HTTP Status Codes**: Use appropriate codes (400, 404, 500, 503)
-
-### Performance
-
-1. **Singleton Services**: Avoid reloading models
-2. **Connection Pooling**: Reuse HTTP clients
-3. **Lazy Loading**: Load models only when needed
-4. **Batch Operations**: Use batch APIs when possible
-
-### Security
-
-1. **No Secrets in Code**: Use environment variables
-2. **Input Validation**: Pydantic schemas for all inputs
-3. **SQL Injection Prevention**: Use parameterized queries
-4. **Local-First**: No external API calls (privacy)
-
-## Adding New Features
-
-### Adding a New API Endpoint
-
-1. Define Pydantic models in `api/models.py`
-2. Create route handler in `api/routes/`
-3. Register router in `api/app.py`
-4. Add tests in `tests/`
-
-### Adding a New Data Source
-
-For retrieval sources:
-1. Create fetcher function in appropriate module
-2. Register with `RetrievalCoordinator`
-3. Map to `ContentObject` format
-4. Add tests
-
-For insight/analytics sources:
-1. Follow `ADDING_NEW_SOURCE.md`
-2. Implement feature-store + reason codes
-3. Integrate source-gating (`/query`, `/assistant/feature-status`, `/ingest`)
-4. Keep analytics path independent from embeddings
-
-### Adding a New Model
-
-1. Create service class in `llm/`
-2. Implement clear contract (input/output)
-3. Add singleton accessor
-4. Update health check
-5. Document in MODEL_VERIFICATION.md
-
-## Troubleshooting
-
-### Common Issues
-
-**Import Errors:**
-- Ensure `pip install -e .` was run
-- Check Python path includes `src/`
-
-**Model Not Loading:**
-- Check internet connection (first download)
-- Verify model cache directory exists
-- See MODEL_VERIFICATION.md
-
-**Database Errors:**
-- Check `HELPERSHELP_DB_PATH` is writable
-- Delete and recreate if corrupted
-
-**API Errors:**
-- Check logs: `uvicorn api:app --log-level debug`
-- Verify all services are initialized
-- Check health endpoint: `/health/details`
-
-## Future Improvements
-
-### Planned Enhancements
-
-1. **Model Abstraction Layer**: Support multiple LLM backends
-2. **Streaming Responses**: Support SSE for real-time output
-3. **Rate Limiting**: Protect against abuse
-4. **Caching Layer**: Redis for frequent queries
-5. **Metrics**: Prometheus metrics endpoint
-6. **Docker**: Containerized deployment
-
-### Architecture Evolution
-
-- Consider microservices if scaling needed
-- Add message queue for async operations
-- Separate read/write databases for scaling
-- Add API versioning for breaking changes
-
-## References
-
-- [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [Pydantic Documentation](https://docs.pydantic.dev/)
-- [Ollama Documentation](https://ollama.com/docs)
-- [Sentence Transformers](https://www.sbert.net/)

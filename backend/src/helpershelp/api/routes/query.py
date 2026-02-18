@@ -6,9 +6,8 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, model_validator
 
-from helpershelp.api.deps import get_assistant_store, get_query_orchestrator
-from helpershelp.api.models import LLMResponse
-from helpershelp.infrastructure.llm.bge_m3_adapter import EmbeddingBackendUnavailableError
+from helpershelp.api.deps import get_data_intent_router
+from helpershelp.api.models import QueryDataIntentResponse
 
 logger = logging.getLogger(__name__)
 
@@ -34,28 +33,18 @@ class QueryRequest(BaseModel):
         return self.query or self.question or ""
 
 
-@router.post("/query", response_model=LLMResponse, tags=["query"])
+@router.post("/query", response_model=QueryDataIntentResponse, tags=["query"])
 async def unified_query(request: QueryRequest):
     try:
         user_query = request.resolved_query
         logger.info("Processing query: %s", user_query)
-
-        payload = await get_query_orchestrator().handle(
-            user_query=user_query,
+        payload = get_data_intent_router().route(
+            query=user_query,
             language=request.language,
-            sources=request.sources,
-            days=request.days,
-            data_filter=request.data_filter,
         )
-        return LLMResponse(**payload)
+        return QueryDataIntentResponse(data_intent=payload)
     except HTTPException:
         raise
-    except EmbeddingBackendUnavailableError as exc:
-        logger.error("Query processing failed (embedding backend unavailable): %s", exc)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(exc),
-        ) from exc
     except Exception as exc:
         logger.error("Query processing failed: %s", exc, exc_info=True)
         raise HTTPException(

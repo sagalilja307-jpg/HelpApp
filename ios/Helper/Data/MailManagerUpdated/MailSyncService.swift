@@ -9,13 +9,38 @@ final class MailSyncService {
 
     private init() {}
 
-    func fetchUnansweredMails() async throws -> [Mail] {
+    func fetchUnansweredMails(since: String? = nil, limit: Int = 50) async throws -> [Mail] {
+        var queryItems: [URLQueryItem] = [URLQueryItem(name: "limit", value: String(limit))]
+        if let since {
+            queryItems.append(URLQueryItem(name: "since", value: since))
+        }
         let data = try await HelperAPIClient.shared.get(
             path: "/mail/unanswered",
-            queryItems: [URLQueryItem(name: "since", value: "2024-01-01"),
-                         URLQueryItem(name: "limit", value: "50")]
+            queryItems: queryItems
         )
-        return try JSONDecoder().decode([Mail].self, from: data)
+        return try BackendQueryAPIService.decoder.decode([Mail].self, from: data)
+    }
+
+    func fetchRecentMails(days: Int = 30, limit: Int = 50) async throws -> [Mail] {
+        let data = try await HelperAPIClient.shared.get(
+            path: "/mail/recent",
+            queryItems: [
+                URLQueryItem(name: "days", value: String(days)),
+                URLQueryItem(name: "limit", value: String(limit))
+            ]
+        )
+        return try BackendQueryAPIService.decoder.decode([Mail].self, from: data)
+    }
+
+    func fetchMails(fromDomain domain: String, limit: Int = 50) async throws -> [Mail] {
+        let data = try await HelperAPIClient.shared.get(
+            path: "/mail/from-domain",
+            queryItems: [
+                URLQueryItem(name: "domain", value: domain),
+                URLQueryItem(name: "limit", value: String(limit))
+            ]
+        )
+        return try BackendQueryAPIService.decoder.decode([Mail].self, from: data)
     }
 
     func syncGmail(

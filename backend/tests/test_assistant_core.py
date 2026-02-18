@@ -1,13 +1,14 @@
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from src.helpershelp.domain.models import ExternalRef, Person, UnifiedItem, UnifiedItemType
-from src.helpershelp.application.assistant.proposals import generate_proposals
-from src.helpershelp.domain.rules.scoring import score_item
-from src.helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore, StoreConfig
-from src.helpershelp.domain.value_objects.time_utils import utcnow
+from helpershelp.domain.models import ExternalRef, Person, UnifiedItem, UnifiedItemType
+from helpershelp.application.assistant.proposals import generate_proposals
+from helpershelp.domain.rules.scoring import score_item
+from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore, StoreConfig
+from helpershelp.domain.value_objects.time_utils import utcnow
 
 
 class AssistantCoreTests(unittest.TestCase):
@@ -37,10 +38,7 @@ class AssistantCoreTests(unittest.TestCase):
         self.assertEqual(ins, 1)
         self.assertEqual(upd, 0)
 
-        if hasattr(item1, "model_copy"):
-            item2 = item1.model_copy(update={"body": "Second", "updated_at": now})  # pydantic v2
-        else:
-            item2 = item1.copy(update={"body": "Second", "updated_at": now})  # pydantic v1
+        item2 = replace(item1, body="Second", updated_at=now)
         ins2, upd2 = self.store.upsert_items([item2])
         self.assertEqual(ins2, 0)
         self.assertEqual(upd2, 1)

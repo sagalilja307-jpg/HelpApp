@@ -6,7 +6,7 @@ protocol BackendQuerying {
         days: Int,
         sources: [String],
         dataFilter: [String: AnyCodable]?
-    ) async throws -> BackendLLMResponseDTO
+    ) async throws -> BackendDataIntentResponseDTO
 }
 
 enum BackendQueryAPIError: LocalizedError {
@@ -43,7 +43,7 @@ final class BackendQueryAPIService: BackendQuerying {
         days: Int,
         sources: [String],
         dataFilter: [String: AnyCodable]? = nil
-    ) async throws -> BackendLLMResponseDTO {
+    ) async throws -> BackendDataIntentResponseDTO {
         let payload = BackendQueryRequestDTO(
             query: text,
             question: text,
@@ -60,7 +60,7 @@ final class BackendQueryAPIService: BackendQuerying {
             throw BackendQueryAPIError.invalidResponse
         }
 
-        guard let decoded = try? Self.decoder.decode(BackendLLMResponseDTO.self, from: data) else {
+        guard let decoded = try? Self.decoder.decode(BackendDataIntentResponseDTO.self, from: data) else {
             throw BackendQueryAPIError.decodingFailed
         }
 

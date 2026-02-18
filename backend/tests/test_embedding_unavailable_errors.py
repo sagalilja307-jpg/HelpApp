@@ -48,10 +48,8 @@ def _install_unavailable_embedding_stub():
 
     import helpershelp.api.deps as deps
     import helpershelp.api.routes.llm as llm_route
-    import helpershelp.api.routes.query as query_route
     import helpershelp.application.llm.llm_service as llm_service_module
     import helpershelp.infrastructure.llm.bge_m3_adapter as bge_adapter
-    import helpershelp.retrieval.retrieval_coordinator as retrieval_module
 
     bge_adapter._embedding_service = service
     llm_service_module._query_service = query_service
@@ -61,9 +59,6 @@ def _install_unavailable_embedding_stub():
 
     llm_route.embedding_service = service
     llm_route.query_service = query_service
-    query_route.query_service = query_service
-
-    retrieval_module._retrieval_coordinator = None
 
 
 class EmbeddingUnavailableErrorTests(unittest.TestCase):
@@ -99,28 +94,14 @@ class EmbeddingUnavailableErrorTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 503)
 
-    def test_query_returns_503_when_embedding_backend_unavailable(self):
+    def test_query_returns_200_when_embedding_backend_unavailable(self):
         response = self.client.post(
             "/query",
-            json={"query": "sammanfatta", "language": "sv", "days": 7},
-        )
-        self.assertEqual(response.status_code, 503)
-
-    def test_query_question_alias_returns_503_when_embedding_backend_unavailable(self):
-        response = self.client.post(
-            "/query",
-            json={"question": "sammanfatta", "language": "sv", "days": 7},
-        )
-        self.assertEqual(response.status_code, 503)
-
-    def test_analytics_query_returns_200_when_embedding_backend_unavailable(self):
-        response = self.client.post(
-            "/query",
-            json={"query": "Vad gjorde jag igår?", "language": "sv", "days": 7},
+            json={"query": "Hur många olästa mejl har jag?", "language": "sv", "days": 7},
         )
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertEqual(payload.get("analysis", {}).get("intent_id"), "calendar.specific_day_query")
+        self.assertIn("data_intent", payload)
 
 
 if __name__ == "__main__":

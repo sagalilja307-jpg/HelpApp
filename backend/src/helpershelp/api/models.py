@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -22,19 +22,39 @@ class TimeRange(BaseModel):
     days: int
 
 
-class AnalysisTimeWindow(BaseModel):
+class DataIntentTimeframe(BaseModel):
     start: datetime
     end: datetime
-    granularity: str
+    granularity: Literal["day", "week", "month", "custom"]
 
 
-class AnalysisResponse(BaseModel):
-    intent_id: str
-    time_window: AnalysisTimeWindow
-    insights: List[dict]
-    patterns: List[dict]
-    limitations: List[str]
-    confidence: Optional[float] = None
+class DataIntentSort(BaseModel):
+    field: str
+    direction: Literal["asc", "desc"]
+
+
+class DataIntent(BaseModel):
+    domain: Literal[
+        "calendar",
+        "reminders",
+        "mail",
+        "contacts",
+        "photos",
+        "files",
+        "location",
+        "notes",
+        "system",
+    ]
+    operation: Literal["list", "count", "next", "details", "search", "needs_clarification"]
+    timeframe: Optional[DataIntentTimeframe] = None
+    filters: Optional[Dict[str, Any]] = None
+    sort: Optional[DataIntentSort] = None
+    limit: Optional[int] = Field(default=None, ge=1)
+    fields: Optional[List[str]] = None
+
+
+class QueryDataIntentResponse(BaseModel):
+    data_intent: DataIntent
 
 
 class LLMResponse(BaseModel):
@@ -44,11 +64,6 @@ class LLMResponse(BaseModel):
     evidence_items: Optional[List[QueryEvidenceItem]] = None
     used_sources: Optional[List[str]] = None
     time_range: Optional[TimeRange] = None
-    analysis: Optional[AnalysisResponse] = None
-    analysis_ready: bool = True
-    requires_sources: List[str] = Field(default_factory=list)
-    requirement_reason_codes: List[str] = Field(default_factory=list)
-    required_time_window: Optional[AnalysisTimeWindow] = None
 
 
 class QueryInterpretationRequest(BaseModel):

@@ -7,6 +7,8 @@ Repo-paths
 * iOS-projekt: `ios/Helper.xcodeproj`
 * Backend: `backend/`
 * Arkitektur-dokument: `docs/ARKITEKTUR.md`
+* Snapshot DataIntent v1 (normativt): `docs/architecture/SNAPSHOT_DATAINTENT_V1.md`
+* Snapshot DataIntent v1 (sekvens): `docs/architecture/SNAPSHOT_DATAINTENT_V1_SEQUENCE.md`
 
 ---
 
@@ -16,7 +18,7 @@ Repo-paths
 Helper/
 ├── Architecture/              ← Arkitektur & Koordinering
 │   ├── Coordinators/          (MemoryCoordinator, IndexingCoordinator, QueryDataCoordinator, DecisionCoordinator, SafetyCoordinator)
-│   └── Pipeline/              (QueryPipeline, QueryInterpreter, QueryAnswerComposer)
+│   └── Pipeline/              (QueryPipeline, QueryAnswerComposer)
 │
 ├── Core/                      ← Business Logic
 │   ├── LLM/                   (LLMClient, LLMIntent, TextEmbedding, LLMAvailability)
@@ -209,27 +211,21 @@ All loggning är append-only.
 
 ---
 
-# 🧩 DEL 3 — QueryPipeline (iOS ↔ Backend)
+# 🧩 DEL 3 — QueryPipeline (iOS ↔ Backend, Snapshot v1)
 
 Flöde:
 
-1. `POST /llm/interpret-query`
-2. Backend klassificerar intent + topic
-3. iOS väljer källor
-4. `POST /llm/similarity-batch`
-5. Backend rankar
-6. `POST /llm/formulate-items`
-7. Backend formulerar
-8. iOS visar svar
-9. iOS loggar beslut
+1. `POST /query`
+2. Backend returnerar `data_intent`
+3. iOS hämtar data från rätt källa
+4. iOS applicerar `operation/timeframe/filters/sort/limit`
+5. iOS formaterar svar och visar
 
 Backend är:
 
 * Stateless
-* Rankar
-* Formulerar
-* Embed:ar
-* Men fattar inga användarbeslut
+* Klassificerar intent till DataIntent
+* Kör ingen analytics och inga retry-loopar
 
 ---
 
@@ -254,7 +250,11 @@ Ingen context lagras.
 
 # 🔌 API-ENDPOINTS (Backend)
 
-LLM:
+Query:
+
+* /query
+
+LLM (ej del av query-flödet i v1):
 
 * /llm/interpret-query
 * /llm/embed
@@ -313,5 +313,3 @@ iOS gör:
 > Context lever och dör inom samma funktion.
 
 ---
-
-

@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
+from pydantic.config import ConfigDict
 
 from helpershelp.domain.value_objects.time_utils import utcnow
 from helpershelp.domain.models import (
@@ -43,6 +44,7 @@ class Provenance(BaseModel):
 
 
 class UnifiedItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: str = Field(default_factory=lambda: str(uuid4()))
     source: str
     type: UnifiedItemType
@@ -75,6 +77,7 @@ class ItemEdge(BaseModel):
 
 
 class Proposal(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: str = Field(default_factory=lambda: str(uuid4()))
     proposal_type: ProposalType
     status: ProposalStatus = ProposalStatus.pending
@@ -98,27 +101,9 @@ class DashboardResponse(BaseModel):
     proposals: List[Proposal]
 
 
-class CalendarFeatureEvent(BaseModel):
-    id: str
-    event_identifier: str
-    title: str = ""
-    notes: Optional[str] = None
-    location: Optional[str] = None
-    start_at: datetime
-    end_at: datetime
-    is_all_day: bool = False
-    calendar_title: Optional[str] = None
-    last_modified_at: Optional[datetime] = None
-    snapshot_hash: str
-
-
-class FeatureIngestPayload(BaseModel):
-    calendar_events: List[CalendarFeatureEvent] = Field(default_factory=list)
-
-
 class IngestRequest(BaseModel):
     items: List[UnifiedItem] = Field(default_factory=list)
-    features: Optional[FeatureIngestPayload] = None
+    features: Optional[Dict[str, Any]] = None
 
 
 class SyncGmailRequest(BaseModel):

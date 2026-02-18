@@ -1,97 +1,76 @@
-# Adding a New Insight Source
+# Adding a New Snapshot Source (DataIntent v1)
+
+This document is normative.
+All new sources MUST comply with these rules.
+Violations require explicit architectural review.
 
 ## Purpose
 
-Detta dokument ar den normativa mallen for att lagga till en ny insight-kalla utan arkitekturdrift.
+Denna guide beskriver hur du lägger till en ny källa i Snapshot DataIntent v1
+utan att återinföra analytics, feature-store, source-gating eller retry-loopar.
 
 ## Required Layers
 
-Varje ny kalla maste implementera alla lager nedan.
+Varje ny källa MUST implementera alla lager nedan.
 
 ### 1) Backend
 
-#### a) Reason codes
+#### a) DataIntent-kontrakt
 
-Definiera maskinlasbara reason codes:
-- `<source>_data_missing`
-- `<source>_data_stale`
-- `<source>_coverage_gap`
+- Lägg till domänen i `DataIntent.domain` enum.
+- Definiera giltiga `operation` för domänen.
+- Uppdatera `DataIntentRouter` med domännyckelord och minimala filter/sort-regler.
 
-Exempel:
-- `reminder_data_missing`
-- `reminder_data_stale`
-- `reminder_coverage_gap`
+Filer:
+- `backend/src/helpershelp/api/models.py`
+- `backend/src/helpershelp/application/query/data_intent_router.py`
 
-#### b) Feature-store table
+#### b) Router-regler
 
-Skapa egen feature-tabell (eller definiera generisk snapshot-tabell med samma semantik).
+- Routern ska vara deterministisk (lexikon/regelbaserad).
+- Routern får inte bero på embeddings eller analytics.
+- Routern får inte trigga retrieval eller andra backends.
 
-Exempel:
-- `reminder_feature_events`
+#### c) Testkrav
 
-Krav:
-- stabilt snapshot-id
-- `snapshot_hash`
-- `updated_at`
-- coverage-falt for status-berakning
-
-#### c) Analytics calculators
-
-Kalkylatorer far endast lasa fran feature-store.
-
-Forbjudet:
-- lasa analytics-data direkt fran `unified_items`
-- bero pa embeddings i analytics-path
+- Lägg till/uppdatera tester för:
+  - domänklassning
+  - operation-klassning
+  - timeframe/filters/sort/limit
+  - ambiguity (`system/needs_clarification`)
 
 ### 2) iOS
 
-#### a) FeatureBuilder
+#### a) QueryPipeline routing
 
-Skapa en builder for kallan.
+- Mappa `data_intent.domain` till rätt lokal fetcher.
+- Applicera `operation/timeframe/filters/sort/limit` lokalt.
+- Inga lokala intent-heuristiker.
 
-Exempel:
-- `ReminderFeatureBuilder`
+#### b) Mail
 
-Krav:
-- input ar explicit `DateInterval` (`required_time_window`)
-- returnerar stabila IDs
-- beraknar `snapshot_hash`
-- ingen global/full sync
-
-#### b) Pipeline integration
-
-`QueryPipeline` maste:
-1. lasa `requires_sources`
-2. hamta feature-status vid behov
-3. bygga + ingest features
-4. retrya exakt en gang
+- Mail ska hämtas via backend mail-endpoints (ingen ny iOS-mail-arkitektur).
 
 ### 3) Documentation
 
-For varje ny kalla maste dokumentationen innehalla:
-- permission model
-- retention policy
-- approximationer/antaganden
-- `limitations` som exponeras i `analysis`
+- Uppdatera `docs/architecture/SNAPSHOT_DATAINTENT_V1_REGLER.md` med:
+  - ny domän
+  - operationer
+  - filter-nycklar
+  - sort/limit-regler
+- Uppdatera `backend/docs/STRUCTURE.md` om struktur ändras.
 
 ## Architecture Invariants
 
-1. Alla kallor använder samma source-gating-kontrakt.
-2. Alla kallor använder `required_time_window`.
-3. Alla kallor returnerar `limitations` nar coverage ar bristfallig.
-4. Inga kallor triggar bakgrundssync utan användarinitierad fraga.
-5. Ingen kalla bypassar dispatcher.
+1. Intent-klassning är backend-only.
+2. Ingen analytics/feature-store/source-gating i v1.
+3. `/query` returnerar alltid `{ "data_intent": { ... } }`.
+4. iOS gör ingen intenttolkning och inga retry-loopar.
 
-## Checklist
+## Example Checklist
 
-Anvand denna checklista innan en ny kalla anses klar:
-
-- [ ] Reason codes tillagda
-- [ ] Feature-table + index + upsert regler klara
-- [ ] `GET /assistant/feature-status` utokad for kallan
-- [ ] `POST /ingest` stoder source features bakatkompatibelt
-- [ ] Analytics calculators laser endast feature-store
-- [ ] iOS FeatureBuilder klar for explicit tidsfonster
-- [ ] QueryPipeline auto-retry max 1 verifierad
-- [ ] Regression tester grona (retrieval + analytics + kontrakt)
-- [ ] Docs uppdaterade
+- [ ] `DataIntent` enum uppdaterad
+- [ ] `DataIntentRouter` regler uppdaterade
+- [ ] iOS `QueryPipeline` mappar domän + operation
+- [ ] Tester uppdaterade (backend + iOS)
+- [ ] Dokumentation uppdaterad
