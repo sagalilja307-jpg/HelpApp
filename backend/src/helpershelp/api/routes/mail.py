@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Query
 
 from helpershelp.api.deps import mail_queries
+from helpershelp.domain.value_objects.time_utils import parse_iso_datetime
 from helpershelp.mail.content_object import ContentObject
 
 router = APIRouter()
@@ -16,7 +16,7 @@ def get_unanswered_mail(
     since: Optional[str] = Query(default=None),
     limit: int = Query(default=50, le=100),
 ):
-    since_dt = datetime.fromisoformat(since) if since else None
+    since_dt = parse_iso_datetime(since) if since else None
     return mail_queries.unanswered(since=since_dt, max_results=limit)
 
 

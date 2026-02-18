@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import os
 import re
-from datetime import datetime, time, timedelta, timezone
-from typing import Dict, List, Optional, Tuple
+from datetime import datetime
+from typing import Callable, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
+
+from helpershelp.application.query.timeframe_resolver import QueryTimeframeResolver
 
 
 class DataIntentRouter:
@@ -130,22 +132,28 @@ class DataIntentRouter:
     _UNREAD_MARKERS = ["unread", "oläst", "olästa"]
     _UNANSWERED_MARKERS = ["unanswered", "obesvarade", "inte svarat"]
 
-    _EXPLICIT_DATE = re.compile(r"\b(?:den\s+)?(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\b", re.IGNORECASE)
-    _LAST_DAYS = re.compile(r"\b(?:last|senaste)\s+(\d{1,3})\s+(?:days|dagar)\b", re.IGNORECASE)
     _ID_FILTER = re.compile(r"\b(?:id|event_id|reminder_id|message_id)\s*[:=]\s*([A-Za-z0-9:_-]+)\b", re.IGNORECASE)
     _LIMIT = re.compile(r"\b(?:top|visa|show|senaste|last)\s+(\d{1,3})\b", re.IGNORECASE)
 
-    def __init__(self, timezone_name: Optional[str] = None):
+    def __init__(
+        self,
+        timezone_name: Optional[str] = None,
+        now_provider: Optional[Callable[[], datetime]] = None,
+    ):
         configured = timezone_name or os.getenv("HELPERSHELP_TIMEZONE", "Europe/Stockholm")
         try:
             self._timezone = ZoneInfo(configured)
         except Exception:
             self._timezone = ZoneInfo("Europe/Stockholm")
+        self._timeframe_resolver = QueryTimeframeResolver(
+            timezone_name=self._timezone.key,
+            now_provider=now_provider,
+        )
 
     def route(self, *, query: str, language: str = "sv") -> Dict[str, object]:
         _ = language
         normalized = (query or "").strip().lower()
-        timeframe = self._resolve_timeframe(normalized)
+        timeframe = self._timeframe_resolver.resolve(normalized)
         domain, suggestions = self._resolve_domain(normalized)
         if domain is None:
             suggested_domains = suggestions or ["calendar", "mail"]
@@ -258,84 +266,3 @@ class DataIntentRouter:
             return 20
         parsed = int(match.group(1))
         return max(1, min(200, parsed))
-
-    def _resolve_timeframe(self, normalized_query: str) -> Optional[Dict[str, object]]:
-        now_local = datetime.now(timezone.utc).astimezone(self._timezone)
-        today = now_local.date()
-
-        if "idag" in normalized_query or "today" in normalized_query:
-            return self._day_window(today)
-        if "igår" in normalized_query or "yesterday" in normalized_query:
-            return self._day_window(today - timedelta(days=1))
-        if "imorgon" in normalized_query or "tomorrow" in normalized_query:
-            return self._day_window(today + timedelta(days=1))
-
-        if "denna vecka" in normalized_query or "this week" in normalized_query or "veckan" in normalized_query:
-            return self._week_window(today)
-        if "nästa vecka" in normalized_query or "next week" in normalized_query:
-            return self._week_window(today + timedelta(days=7))
-        if "förra veckan" in normalized_query or "last week" in normalized_query:
-            return self._week_window(today - timedelta(days=7))
-
-        if "denna månad" in normalized_query or "this month" in normalized_query:
-            return self._month_window(today)
-        if "nästa månad" in normalized_query or "next month" in normalized_query:
-            next_month = (today.replace(day=1) + timedelta(days=32)).replace(day=1)
-            return self._month_window(next_month)
-
-        last_days_match = self._LAST_DAYS.search(normalized_query)
-        if last_days_match:
-            days = max(1, min(365, int(last_days_match.group(1))))
-            start = (now_local - timedelta(days=days)).astimezone(timezone.utc)
-            end = now_local.astimezone(timezone.utc)
-            return {
-                "start": start,
-                "end": end,
-                "granularity": "custom",
-            }
-
-        explicit = self._EXPLICIT_DATE.search(normalized_query)
-        if explicit:
-            day = int(explicit.group(1))
-            month = int(explicit.group(2))
-            year_raw = explicit.group(3)
-            year = today.year
-            if year_raw:
-                year = int(year_raw)
-                if year < 100:
-                    year += 2000
-            try:
-                parsed_day = datetime(year=year, month=month, day=day, tzinfo=self._timezone).date()
-            except ValueError:
-                return None
-            return self._day_window(parsed_day)
-
-        if "senaste" in normalized_query or "recent" in normalized_query:
-            start = (now_local - timedelta(days=30)).astimezone(timezone.utc)
-            end = now_local.astimezone(timezone.utc)
-            return {
-                "start": start,
-                "end": end,
-                "granularity": "custom",
-            }
-        return None
-
-    def _day_window(self, day_value) -> Dict[str, object]:
-        start = datetime.combine(day_value, time.min, tzinfo=self._timezone).astimezone(timezone.utc)
-        end = datetime.combine(day_value, time.max, tzinfo=self._timezone).astimezone(timezone.utc)
-        return {"start": start, "end": end, "granularity": "day"}
-
-    def _week_window(self, day_value) -> Dict[str, object]:
-        week_start = day_value - timedelta(days=day_value.weekday())
-        week_end = week_start + timedelta(days=6)
-        start = datetime.combine(week_start, time.min, tzinfo=self._timezone).astimezone(timezone.utc)
-        end = datetime.combine(week_end, time.max, tzinfo=self._timezone).astimezone(timezone.utc)
-        return {"start": start, "end": end, "granularity": "week"}
-
-    def _month_window(self, day_value) -> Dict[str, object]:
-        month_start = day_value.replace(day=1)
-        next_month_start = (month_start + timedelta(days=32)).replace(day=1)
-        month_end = next_month_start - timedelta(days=1)
-        start = datetime.combine(month_start, time.min, tzinfo=self._timezone).astimezone(timezone.utc)
-        end = datetime.combine(month_end, time.max, tzinfo=self._timezone).astimezone(timezone.utc)
-        return {"start": start, "end": end, "granularity": "month"}

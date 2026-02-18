@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from helpershelp.application.query.data_intent_router import DataIntentRouter
@@ -36,3 +37,32 @@ def test_router_ambiguity_returns_clarification():
     assert payload["operation"] == "needs_clarification"
     filters = payload.get("filters") or {}
     assert isinstance(filters.get("suggested_domains"), list)
+
+
+def test_router_relative_timeframe_is_deterministic_with_injected_now():
+    fixed_now = datetime(2026, 2, 18, 12, 0, tzinfo=timezone.utc)
+    router = DataIntentRouter(
+        timezone_name="Europe/Stockholm",
+        now_provider=lambda: fixed_now,
+    )
+    payload = router.route(query="Visa mina möten idag", language="sv")
+
+    timeframe = payload.get("timeframe")
+    assert timeframe is not None
+    assert timeframe["granularity"] == "day"
+    assert timeframe["start"].tzinfo is not None
+    assert timeframe["end"].tzinfo is not None
+
+    start_local = timeframe["start"].astimezone(ZoneInfo("Europe/Stockholm"))
+    end_local = timeframe["end"].astimezone(ZoneInfo("Europe/Stockholm"))
+    assert start_local.date().isoformat() == "2026-02-18"
+    assert end_local.date().isoformat() == "2026-02-18"
+
+
+def test_router_week_timeframe_uses_allowed_granularity():
+    router = DataIntentRouter(timezone_name="Europe/Stockholm")
+    payload = router.route(query="Visa kalender denna vecka", language="sv")
+
+    timeframe = payload.get("timeframe")
+    assert timeframe is not None
+    assert timeframe["granularity"] in {"day", "week", "month", "custom"}

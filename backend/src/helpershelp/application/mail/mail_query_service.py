@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict
 
-from helpershelp.domain.value_objects.time_utils import utcnow
+from helpershelp.domain.value_objects.time_utils import parse_iso_datetime, utcnow_aware
 from helpershelp.mail.content_object import ContentObject
 from helpershelp.mail.mail_event import mail_event_to_content_object
 
@@ -43,7 +43,7 @@ class MailQueryService:
         # Calculate cutoff if time_range specified
         since = None
         if time_range and "days" in time_range:
-            since = utcnow() - timedelta(days=time_range["days"])
+            since = utcnow_aware() - timedelta(days=time_range["days"])
         
         results: list[ContentObject] = []
         
@@ -121,7 +121,7 @@ class MailQueryService:
         max_results: int = 50
     ) -> List[ContentObject]:
         """Legacy method – kept for backwards compatibility."""
-        since = utcnow() - timedelta(days=days)
+        since = utcnow_aware() - timedelta(days=days)
         mails = self.mail_provider.fetch_all()
         results: list[ContentObject] = []
 
@@ -139,6 +139,9 @@ class MailQueryService:
 
 
 def _parse_datetime(value):
+    parsed = parse_iso_datetime(value)
+    if parsed is not None:
+        return parsed
     if isinstance(value, datetime):
         return value
-    return datetime.fromisoformat(value)
+    return utcnow_aware()

@@ -2,6 +2,7 @@ from datetime import datetime
 from email.utils import parseaddr
 from typing import Dict, Any
 
+from helpershelp.domain.value_objects.time_utils import parse_iso_datetime
 from helpershelp.mail.content_object import ContentObject, MailSender
 
 
@@ -42,6 +43,9 @@ def mail_event_to_content_object(raw_mail: Dict[str, Any]) -> ContentObject:
 
 
 def _parse_datetime(value: str | datetime) -> datetime:
+    parsed = parse_iso_datetime(value)
+    if parsed is not None:
+        return parsed
     if isinstance(value, datetime):
         return value
-    return datetime.fromisoformat(value)
+    raise ValueError(f"Invalid datetime value: {value}")
