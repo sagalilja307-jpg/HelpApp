@@ -33,7 +33,7 @@ public struct DateService: Sendable {
         self.timeZone = timeZone
     }
 
-    public nonisolated func now() -> Date {
+    public func now() -> Date {
         clock.now()
     }
 
