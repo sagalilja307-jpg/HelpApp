@@ -1,10 +1,8 @@
-from .bge_m3_adapter import EmbeddingService, get_embedding_service
-from .ollama_adapter import OllamaClient, OllamaConfig, OllamaUnavailable
+from .embedding_service import EmbeddingService, EmbeddingStatus, get_embedding_service
 
 __all__ = [
     "EmbeddingService",
+    "EmbeddingStatus",
     "get_embedding_service",
-    "OllamaClient",
-    "OllamaConfig",
-    "OllamaUnavailable",
 ]
+

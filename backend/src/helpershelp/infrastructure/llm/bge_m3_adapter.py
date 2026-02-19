@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import math
-import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+from helpershelp.config import OLLAMA_EMBED_MODEL  # single source of truth
 
 from .ollama_adapter import OllamaClient, OllamaUnavailable
 
@@ -27,7 +28,7 @@ class EmbeddingRuntimeStatus:
 
 class EmbeddingService:
     """
-    Ollama-backed embeddings service (bge-m3 by default).
+    Ollama-backed embeddings service.
 
     - Primary endpoint: POST /api/embed (newer)
     - Fallback endpoint: POST /api/embeddings (legacy)
@@ -38,10 +39,14 @@ class EmbeddingService:
     REQUEST_TIMEOUT_SECONDS = 60
     HEALTH_TIMEOUT_SECONDS = 5
 
-    def __init__(self, *, ollama: Optional[OllamaClient] = None):
+    def __init__(self, *, ollama: Optional[OllamaClient] = None, embed_model: Optional[str] = None):
         self.ollama = ollama or OllamaClient()
-        self.ollama_host = self.ollama.config.host
-        self.ollama_embed_model = os.getenv("OLLAMA_EMBED_MODEL", "bge-m3")
+
+        # OllamaClient has .host (we removed OllamaConfig)
+        self.ollama_host = getattr(self.ollama, "host", "").rstrip("/") or "http://localhost:11434"
+
+        # single source of truth is helpershelp.config, but allow override for tests
+        self.ollama_embed_model = (embed_model or OLLAMA_EMBED_MODEL).strip() or "bge-m3"
 
         self.ollama_reachable = False
         self.model_available = False
@@ -56,7 +61,7 @@ class EmbeddingService:
             return False
         if requested_model == available_model:
             return True
-        # allow prefix match "bge-m3" vs "bge-m3:latest"
+        # allow prefix match: "bge-m3" vs "bge-m3:latest"
         prefix = requested_model.split(":")[0]
         return available_model.startswith(prefix)
 
@@ -64,6 +69,7 @@ class EmbeddingService:
         try:
             data = self.ollama.get_tags(timeout_s=self.HEALTH_TIMEOUT_SECONDS)
             self.ollama_reachable = True
+
             models = data.get("models", []) or []
             names = [m.get("name", "") for m in models if isinstance(m, dict)]
             found = any(self._model_matches(self.ollama_embed_model, name) for name in names)
@@ -116,13 +122,14 @@ class EmbeddingService:
                 raise ValueError(f"Text exceeds max length ({self.MAX_TEXT_LENGTH})")
 
     def _extract_vectors(self, data: Dict[str, Any]) -> List[List[float]]:
-        # /api/embed may return {"embeddings":[...]} or {"embedding":[...]} depending on versions
+        # /api/embed returns {"embeddings":[[...]]} for batch
         if "embeddings" in data:
             embs = data.get("embeddings") or []
             if embs and isinstance(embs[0], (int, float)):
                 return [list(map(float, embs))]
             return [list(map(float, vec)) for vec in embs]
 
+        # legacy may return {"embedding":[...]}
         if "embedding" in data:
             emb = data.get("embedding") or []
             return [list(map(float, emb))]
@@ -139,7 +146,6 @@ class EmbeddingService:
         return self._extract_vectors(data)
 
     def _embed_api_embeddings_legacy(self, texts: Sequence[str]) -> List[List[float]]:
-        # legacy endpoint often only supports one prompt per request
         out: List[List[float]] = []
         for t in texts:
             payload = {"model": self.ollama_embed_model, "prompt": t}
@@ -188,7 +194,7 @@ class EmbeddingService:
         return scored
 
 
-# Singleton
+# Singleton (kept for compatibility; prefer importing via embedding_service.py facade)
 _embedding_service: Optional[EmbeddingService] = None
 
 

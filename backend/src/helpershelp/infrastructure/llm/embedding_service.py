@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
-from .bge_m3_adapter import EmbeddingService as _BgeM3EmbeddingService
+from .bge_m3_adapter import EmbeddingService as _BgeM3Backend
 
 
 @dataclass(frozen=True)
@@ -17,19 +17,10 @@ class EmbeddingStatus:
 
 
 class EmbeddingService:
-    """
-    Stable public interface for embeddings in HelpersHelp.
+    """Public embedding interface used by the rest of the backend."""
 
-    This is the ONLY module other code should import from:
-        from helpershelp.infrastructure.llm.embedding_service import get_embedding_service
-
-    Internally backed by Ollama + bge-m3.
-    """
-
-    def __init__(self, backend: Optional[_BgeM3EmbeddingService] = None):
-        self._backend = backend or _BgeM3EmbeddingService()
-
-    # ---- Status / health ----
+    def __init__(self, backend: Optional[_BgeM3Backend] = None):
+        self._backend = backend or _BgeM3Backend()
 
     def status(self) -> EmbeddingStatus:
         raw = self._backend.get_runtime_status()
@@ -45,25 +36,14 @@ class EmbeddingService:
     def is_available(self) -> bool:
         return self._backend.is_available()
 
-    # ---- Embeddings ----
-
     def embed_text(self, text: str) -> List[float]:
         return self._backend.embed_text(text)
 
     def embed_texts(self, texts: Sequence[str]) -> List[List[float]]:
         return self._backend.embed_texts(texts)
 
-    # ---- Similarity helpers ----
-
     def similarity_batch(self, query_text: str, candidates: Sequence[str]) -> List[Tuple[str, float]]:
-        """
-        Returns candidates sorted by similarity, descending.
-        """
         return self._backend.similarity_batch(query_text, candidates)
-
-    @staticmethod
-    def cosine_similarity(vec_a: Sequence[float], vec_b: Sequence[float]) -> float:
-        return _BgeM3EmbeddingService.cosine_similarity(vec_a, vec_b)
 
 
 _embedding_service: Optional[EmbeddingService] = None
