@@ -135,22 +135,20 @@ class QueryTimeframeResolver:
 
     def _day_window(self, d: date) -> Dict[str, object]:
         start_local = datetime.combine(d, time.min, tzinfo=self._tz)
-        end_local = datetime.combine(d, time.max, tzinfo=self._tz)
+        end_local = start_local + timedelta(days=1)  # half-open
         return self._window(start_local, end_local, "day")
 
     def _week_window(self, d: date) -> Dict[str, object]:
         week_start = d - timedelta(days=d.weekday())
-        week_end = week_start + timedelta(days=6)
         start_local = datetime.combine(week_start, time.min, tzinfo=self._tz)
-        end_local = datetime.combine(week_end, time.max, tzinfo=self._tz)
+        end_local = start_local + timedelta(days=7)  # half-open
         return self._window(start_local, end_local, "week")
 
     def _month_window(self, d: date) -> Dict[str, object]:
         month_start = d.replace(day=1)
-        next_month_start = (month_start + timedelta(days=32)).replace(day=1)
-        month_end = next_month_start - timedelta(days=1)
         start_local = datetime.combine(month_start, time.min, tzinfo=self._tz)
-        end_local = datetime.combine(month_end, time.max, tzinfo=self._tz)
+        next_month_start = (month_start + timedelta(days=32)).replace(day=1)
+        end_local = datetime.combine(next_month_start, time.min, tzinfo=self._tz)  # half-open
         return self._window(start_local, end_local, "month")
 
     def _window(self, start_local: datetime, end_local: datetime, granularity: Granularity) -> Dict[str, object]:
