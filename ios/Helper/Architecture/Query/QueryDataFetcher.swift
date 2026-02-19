@@ -130,12 +130,21 @@ final class QueryDataFetcher: QueryDataFetching {
     #endif
 
     func collect(days: Int, access: QuerySourceAccessing) async throws -> QueryCollectedData {
-        return try await collect(days: days, access: access, options: .default)
+        let range = Self.timeRange(days: days, now: nowProvider())
+        return try await collect(in: range, access: access, options: .default)
     }
-
     func collect(days: Int, access: QuerySourceAccessing, options: QueryCollectionOptions) async throws -> QueryCollectedData {
         let range = Self.timeRange(days: days, now: nowProvider())
+        return try await collect(in: range, access: access, options: options)
+    }
 
+    /// New API: collect exactly within the provided `DateInterval`.
+    func collect(in range: DateInterval, access: QuerySourceAccessing) async throws -> QueryCollectedData {
+        try await collect(in: range, access: access, options: .default)
+    }
+
+    /// New API: collect exactly within the provided `DateInterval`.
+    func collect(in range: DateInterval, access: QuerySourceAccessing, options: QueryCollectionOptions) async throws -> QueryCollectedData {
         var allItems: [UnifiedItemDTO] = []
         var allEntries: [QueryResult.Entry] = []
         var missingAccess: [QuerySource] = []
@@ -392,7 +401,7 @@ extension QueryDataFetcher {
 
     nonisolated static func mapReminder(
         _ reminder: ReminderItem,
-        now: Date = DateService.shared.now()
+        now: Date = Date()
     ) -> UnifiedItemDTO {
         let baseDate = reminder.dueDate ?? now
         return UnifiedItemDTO(

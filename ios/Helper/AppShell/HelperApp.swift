@@ -89,12 +89,70 @@ struct HelperApp: App {
                 sourceConnectionStore: sourceConnectionStore
             )
             let backendQueryService = BackendQueryAPIService.shared
+            // Adapter: wrap existing QueryDataFetcher and QuerySourceAccess into
+            // the smaller interfaces expected by the updated `QueryPipeline`.
+            struct AccessAdapter: QuerySourceAccessChecking {
+                let access: QuerySourceAccess
+                let sourceConnectionStore: SourceConnectionStoring
+
+                func isEnabled(_ source: QuerySource) -> Bool {
+                    switch source {
+                    case .contacts, .photos, .files, .location:
+                        return sourceConnectionStore.isEnabled(source)
+                    default:
+                        return true
+                    }
+                }
+
+                func isAllowed(_ source: QuerySource) -> Bool {
+                    access.isAllowed(source)
+                }
+
+                func deniedMessage(for source: QuerySource) -> String? {
+                    let reason = access.deniedReason(for: source)
+                    return reason.isEmpty ? nil : reason
+                }
+            }
+
+            struct LocalCollectorAdapter: LocalQueryCollecting {
+                let fetcher: QueryDataFetcher
+                let access: QuerySourceAccessing
+
+                func collect(
+                    source: QuerySource,
+                    timeRange: DateInterval?,
+                    userQuery: UserQuery
+                ) async throws -> LocalCollectedResult {
+                    // Prefer exact range API when pipeline supplies a timeframe.
+                    var options = QueryCollectionOptions.default
+                    if source == .location {
+                        options = QueryCollectionOptions(shouldCaptureLocation: true)
+                    } else if source == .calendar {
+                        options = QueryCollectionOptions(shouldCaptureLocation: false, includeCalendar: true, includeReminders: false)
+                    } else if source == .reminders {
+                        options = QueryCollectionOptions(shouldCaptureLocation: false, includeCalendar: false, includeReminders: true)
+                    }
+
+                    if let tr = timeRange {
+                        let data = try await fetcher.collect(in: tr, access: access, options: options)
+                        return LocalCollectedResult(entries: data.entries)
+                    }
+
+                    // Fallback: map range to days-window (simple 7‑day window for now)
+                    let span = options.includeCalendar || options.includeReminders ? 7 : 7
+                    let days = max(1, span)
+                    let data = try await fetcher.collect(days: days, access: access, options: options)
+                    return LocalCollectedResult(entries: data.entries)
+                }
+            }
+
+            let accessAdapter = AccessAdapter(access: access, sourceConnectionStore: sourceConnectionStore)
+            let localCollectorAdapter = LocalCollectorAdapter(fetcher: fetcher, access: access)
 
             self.queryPipeline = QueryPipeline(
-                access: access,
-                fetcher: fetcher,
                 backendQueryService: backendQueryService,
-                sourceConnectionStore: sourceConnectionStore
+                localCollector: localCollectorAdapter,
+                accessGate: accessAdapter
             )
             
             // 5️⃣ Other services

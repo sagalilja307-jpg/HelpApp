@@ -6,8 +6,8 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, model_validator
 
-from helpershelp.application.intent.intent_builder import IntentBuilder
-from helpershelp.application.intent.intent_plan import IntentPlanDTO
+from helpershelp.api.models import DataIntent
+from helpershelp.application.query.data_intent_router import DataIntentRouter
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -37,7 +37,7 @@ class QueryRequest(BaseModel):
 
 
 class QueryResponse(BaseModel):
-    intent_plan: IntentPlanDTO
+    data_intent: DataIntent
 
 
 # --- Endpoint ---
@@ -52,10 +52,10 @@ async def unified_query(request: QueryRequest) -> QueryResponse:
         tz = request.timezone or "Europe/Stockholm"
         logger.info("Processing query=%r lang=%s tz=%s", user_query, request.language, tz)
 
-        builder = IntentBuilder(timezone_name=tz)
-        plan = builder.build(user_query)
+        router_service = DataIntentRouter(timezone_name=tz)
+        plan = router_service.route(user_query, language=request.language)
 
-        return QueryResponse(intent_plan=plan)
+        return QueryResponse(data_intent=plan)
 
     except HTTPException:
         raise
