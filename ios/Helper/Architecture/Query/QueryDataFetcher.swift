@@ -129,15 +129,6 @@ final class QueryDataFetcher: QueryDataFetching {
     }
     #endif
 
-    func collect(days: Int, access: QuerySourceAccessing) async throws -> QueryCollectedData {
-        // Removed: iOS should use collect(in: DateInterval, access:)
-        throw QueryCollectionError.unsupportedAPI
-    }
-    func collect(days: Int, access: QuerySourceAccessing, options: QueryCollectionOptions) async throws -> QueryCollectedData {
-        // Removed: iOS should use collect(in: DateInterval, access:options:)
-        throw QueryCollectionError.unsupportedAPI
-    }
-
     /// New API: collect exactly within the provided `DateInterval`.
     func collect(in range: DateInterval, access: QuerySourceAccessing) async throws -> QueryCollectedData {
         try await collect(in: range, access: access, options: .default)
@@ -250,6 +241,17 @@ final class QueryDataFetcher: QueryDataFetching {
         )
     }
 
+    // Backwards-compatible API: wrap days-based collection by building a DateInterval
+    func collect(days: Int, access: QuerySourceAccessing) async throws -> QueryCollectedData {
+        try await collect(days: days, access: access, options: .default)
+    }
+
+    func collect(days: Int, access: QuerySourceAccessing, options: QueryCollectionOptions) async throws -> QueryCollectedData {
+        let now = nowProvider()
+        let range = Self.timeRange(days: days, now: now)
+        return try await collect(in: range, access: access, options: options)
+    }
+
     private func fetchMemory(in range: DateInterval) throws -> (items: [UnifiedItemDTO], entries: [QueryResult.Entry]) {
         let context = memoryService.context()
         let descriptor = FetchDescriptor<RawEvent>(
@@ -341,7 +343,13 @@ final class QueryDataFetcher: QueryDataFetching {
 
     /// ✅ Viktig fix: inkludera framtid, annars får du aldrig “imorgon/nästa vecka”
     private static func timeRange(days: Int, now: Date) -> DateInterval {
-        fatalError("timeRange(days:) removed. Use explicit DateInterval with collect(in:).")
+        // Include the past N days up to the end of today, and a small future window (tomorrow) to catch upcoming items
+        let calendar = Calendar.current
+        let start = calendar.date(byAdding: .day, value: -max(1, days), to: now) ?? now
+        // End at end of next day to ensure we capture "tomorrow/next week" style items
+        let endOfToday = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: now) ?? now
+        let end = calendar.date(byAdding: .day, value: 1, to: endOfToday) ?? endOfToday
+        return DateInterval(start: start, end: end)
     }
 }
 
