@@ -88,6 +88,13 @@ struct BackendQueryEntryDTO: Codable, Sendable, Equatable {
     let date: Date?
 }
 
+private struct BackendDataIntentDTO: Codable, Sendable, Equatable {
+    let domain: String?
+    let operation: String
+    let timeframe: BackendResolvedTimeframeDTO?
+    let filters: [String: AnyCodable]?
+}
+
 // MARK: - Response (stöder både "plan-only" och framtida "answer/entries")
 
 struct BackendQueryResponseDTO: Codable, Sendable, Equatable {
@@ -100,8 +107,57 @@ struct BackendQueryResponseDTO: Codable, Sendable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case intentPlan = "intent_plan"
+        case dataIntent = "data_intent"
         case answer
         case entries
         case missingAccess = "missing_access"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        if let plan = try container.decodeIfPresent(BackendIntentPlanDTO.self, forKey: .intentPlan) {
+            self.intentPlan = plan
+        } else if let dataIntent = try container.decodeIfPresent(BackendDataIntentDTO.self, forKey: .dataIntent) {
+            let needsClarification =
+                dataIntent.operation == "needs_clarification" ||
+                dataIntent.domain?.lowercased() == "system"
+
+            let suggestions = Self.extractSuggestions(from: dataIntent.filters)
+
+            self.intentPlan = BackendIntentPlanDTO(
+                domain: needsClarification ? nil : dataIntent.domain,
+                operation: dataIntent.operation,
+                timeIntent: BackendTimeIntentDTO(category: "NONE", payload: nil),
+                timeframe: dataIntent.timeframe,
+                needsClarification: needsClarification,
+                suggestions: suggestions
+            )
+        } else {
+            throw DecodingError.keyNotFound(
+                CodingKeys.intentPlan,
+                DecodingError.Context(
+                    codingPath: decoder.codingPath,
+                    debugDescription: "Missing both intent_plan and data_intent in query response."
+                )
+            )
+        }
+
+        self.answer = try container.decodeIfPresent(String.self, forKey: .answer)
+        self.entries = try container.decodeIfPresent([BackendQueryEntryDTO].self, forKey: .entries)
+        self.missingAccess = try container.decodeIfPresent([String].self, forKey: .missingAccess)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(intentPlan, forKey: .intentPlan)
+        try container.encodeIfPresent(answer, forKey: .answer)
+        try container.encodeIfPresent(entries, forKey: .entries)
+        try container.encodeIfPresent(missingAccess, forKey: .missingAccess)
+    }
+
+    private static func extractSuggestions(from filters: [String: AnyCodable]?) -> [String] {
+        guard let raw = filters?["suggested_domains"]?.value as? [Any] else { return [] }
+        return raw.compactMap { $0 as? String }
     }
 }
