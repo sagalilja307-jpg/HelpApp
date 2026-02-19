@@ -46,11 +46,38 @@ struct BackendQueryRequestDTO: Codable, Sendable {
     }
 }
 
+// MARK: - Intent plan (nya svaret)
+
+struct BackendTimeIntentDTO: Codable, Sendable, Equatable {
+    let category: String
+    let payload: AnyCodable?
+}
+
 struct BackendResolvedTimeframeDTO: Codable, Sendable, Equatable {
     let start: Date
     let end: Date
     let granularity: String?
 }
+
+struct BackendIntentPlanDTO: Codable, Sendable, Equatable {
+    let domain: String?
+    let operation: String
+    let timeIntent: BackendTimeIntentDTO
+    let timeframe: BackendResolvedTimeframeDTO?
+    let needsClarification: Bool
+    let suggestions: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case domain
+        case operation
+        case timeIntent = "time_intent"
+        case timeframe
+        case needsClarification = "needs_clarification"
+        case suggestions
+    }
+}
+
+// MARK: - Entries (om/när backend returnerar data)
 
 struct BackendQueryEntryDTO: Codable, Sendable, Equatable {
     let id: String
@@ -61,16 +88,20 @@ struct BackendQueryEntryDTO: Codable, Sendable, Equatable {
     let date: Date?
 }
 
-struct BackendQueryResponseDTO: Codable, Sendable, Equatable {
-    let answer: String
-    let timeframe: BackendResolvedTimeframeDTO?
-    let entries: [BackendQueryEntryDTO]
+// MARK: - Response (stöder både "plan-only" och framtida "answer/entries")
 
-    // valfritt för UX/debug
+struct BackendQueryResponseDTO: Codable, Sendable, Equatable {
+    let intentPlan: BackendIntentPlanDTO
+
+    // valfria fält (om du senare låter backend även returnera svar + items)
+    let answer: String?
+    let entries: [BackendQueryEntryDTO]?
     let missingAccess: [String]?
 
     enum CodingKeys: String, CodingKey {
-        case answer, timeframe, entries
+        case intentPlan = "intent_plan"
+        case answer
+        case entries
         case missingAccess = "missing_access"
     }
 }
