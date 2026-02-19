@@ -44,6 +44,23 @@ class DomainClassifier:
         self.min_confidence = min_confidence
         self.min_margin = min_margin
 
+        # Guardrails: queries that often get misclassified but are out-of-scope for your domains.
+        self._out_of_scope_keywords = {
+            "personnummer",
+            "bank",
+            "bankid",
+            "bank-id",
+            "lösenord",
+            "password",
+            "pin",
+            "pinkod",
+            "kortnummer",
+            "kreditkort",
+            "skatt",
+            "deklaration",
+            "ssn",
+        }
+
         self._domain_cards: Dict[Domain, str] = {
             "calendar": (
                 "Domän: kalender. Händelser, möten, bokningar, agenda, tider, heldag.\n"
@@ -90,7 +107,6 @@ class DomainClassifier:
                 "Har jag några återkommande påminnelser?\n"
                 "Nyckelord: påminnelse, uppgift, todo, att göra, deadline, förfaller, försenad, klar."
             ),
-
             "notes": (
                 "Domän: anteckningar/noter/memory. Textanteckningar, mappar, nyligen, innehåll.\n"
                 "Typiska frågor:\n"
@@ -106,9 +122,8 @@ class DomainClassifier:
                 "Vilka anteckningar ligger i mappen \"[namn]\"?\n"
                 "Nyckelord: anteckning, notes, text, mapp, öppnat, ändrades, bilaga, titel."
             ),
-
             "files": (
-                "Domän: filer/dokument – informationsfrågor.\n"
+                "Domän: filer/dokument. Dokument, mappar, metadata (skapad/ändrad/storlek), sök på namn.\n"
                 "Typiska frågor:\n"
                 "Vilka dokument har jag öppnat idag?\n"
                 "När ändrades filen \"[filnamn]\" senast?\n"
@@ -120,9 +135,10 @@ class DomainClassifier:
                 "När skapades dokumentet \"[filnamn]\"?\n"
                 "Har jag några filer jag inte öppnat på över ett år?\n"
                 "Vilka filer har jag importerat via dokumentväljaren?\n"
+                "Nyckelord: fil, dokument, pdf, mapp, öppna, ladda ner, importera, storlek."
             ),
             "location": (
-                "Domän: plats/position (förutsatt behovsstyrd och godkänd åtkomst).\n"
+                "Domän: plats/position. Besökta platser, var jag var, tid på plats, senaste plats.\n"
                 "Typiska frågor:\n"
                 "Var befinner jag mig just nu?\n"
                 "Vilka platser har jag besökt idag?\n"
@@ -134,10 +150,11 @@ class DomainClassifier:
                 "Har jag varit på \"[plats]\" fler än en gång den här veckan?\n"
                 "Hur lång tid tog det att resa till jobbet idag?\n"
                 "Vilken plats besökte jag senast?\n"
+                "Nyckelord: plats, position, var, besökt, resa, hem, jobb, kontor."
             ),
             "photos": (
-                "Domän: bilder/foton (PhotoKit – begränsad åtkomst).\n"
-                "Informationsfrågor:\n"
+                "Domän: bilder/foton. Bilder, videor, album, favoriter, metadata (datum/plats).\n"
+                "Typiska frågor:\n"
                 "Hur många bilder har jag tagit idag?\n"
                 "När tog jag den senaste bilden?\n"
                 "Hur många bilder tog jag förra veckan?\n"
@@ -148,10 +165,11 @@ class DomainClassifier:
                 "Hur många bilder finns i albumet \"[namn]\"?\n"
                 "När togs den äldsta bilden i mitt bibliotek?\n"
                 "Har jag importerat några nya bilder den här veckan?\n"
+                "Nyckelord: bild, foto, bilder, video, album, favorit, kamerarulle, import."
             ),
             "contacts": (
-                "Domän: kontakter (CNContactStore).\n"
-                "Informationsfrågor:\n"
+                "Domän: kontakter. Personer, telefonnummer, e-post, dubletter, saknade fält.\n"
+                "Typiska frågor:\n"
                 "Hur många kontakter har jag totalt?\n"
                 "Har jag en kontakt sparad för \"[namn]\"?\n"
                 "När lades kontakten \"[namn]\" till?\n"
@@ -162,28 +180,77 @@ class DomainClassifier:
                 "Hur många kontakter har jag lagt till den här månaden?\n"
                 "Vilka kontakter är markerade som favoriter?\n"
                 "Vad är telefonnumret eller e-postadressen till \"[namn]\"?\n"
+                "Nyckelord: kontakt, telefonnummer, e-post, adressbok, person, dublett."
             ),
         }
 
     def classify(self, query: str) -> DomainResult:
+        q = (query or "").strip()
+        if not q:
+            return DomainResult(
+                domain=None,
+                confidence=0.0,
+                ranked=[],
+                needs_clarification=True,
+                suggestions=[],
+            )
+
+        lower = q.lower()
+        forced_clarification = any(k in lower for k in self._out_of_scope_keywords)
+
+        # Quick explicit keyword matching before running embeddings.
+        # This handles high-confidence intent keywords and short queries.
+        explicit_map: Dict[Domain, List[str]] = {
+            "calendar": ["kalender", "möte", "möten", "händelse", "bokning", "agenda"],
+            "mail": ["mejl", "mail", "inkorg", "epost", "e-post"],
+            "reminders": ["påminn", "påminnelse", "uppgift", "uppgifter", "todo", "att göra"],
+            "notes": ["anteckning", "anteckningar", "notes", "notering"],
+            "files": ["fil", "filer", "dokument", "pdf", "mapp"],
+            "photos": ["bild", "bilder", "foto", "foton", "album", "video", "videor"],
+            "contacts": ["kontakt", "kontakter", "telefonnummer", "adressbok"],
+            "location": ["plats", "position", "var är jag", "var var jag", "besökt", "resa"],
+        }
+
+        for domain, keys in explicit_map.items():
+            if any(k in lower for k in keys):
+                return DomainResult(
+                    domain=domain,
+                    confidence=1.0,
+                    ranked=[(domain, 1.0)],
+                    needs_clarification=False,
+                    suggestions=[],
+                )
+
         candidates: List[Tuple[Domain, str]] = list(self._domain_cards.items())
         texts = [card for _, card in candidates]
-
-        ranked_text = self._embed.similarity_batch(query, texts)
-
-        # build reverse map card->domain (unique because we control cards)
         card_to_domain = {card: domain for domain, card in candidates}
 
-        ranked: List[Tuple[Domain, float]] = [
-            (card_to_domain[text], float(score)) for text, score in ranked_text
-        ]
+        ranked_text = self._embed.similarity_batch(q, texts)
+
+        ranked: List[Tuple[Domain, float]] = []
+        for text, score in ranked_text:
+            domain = card_to_domain.get(text)
+            if domain is None:
+                continue
+            ranked.append((domain, float(score)))
+
+        if not ranked:
+            # extremely defensive fallback
+            return DomainResult(
+                domain=None,
+                confidence=0.0,
+                ranked=[],
+                needs_clarification=True,
+                suggestions=list(self._domain_cards.keys())[:3],
+            )
+
         ranked.sort(key=lambda x: x[1], reverse=True)
 
         top_domain, top_score = ranked[0]
         second_score = ranked[1][1] if len(ranked) > 1 else -1.0
         margin = top_score - second_score
 
-        needs = (top_score < self.min_confidence) or (margin < self.min_margin)
+        needs = forced_clarification or (top_score < self.min_confidence) or (margin < self.min_margin)
         suggestions = [d for d, _ in ranked[:3]] if needs else []
 
         return DomainResult(
