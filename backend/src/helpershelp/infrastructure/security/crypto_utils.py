@@ -4,12 +4,15 @@ import base64
 import json
 import os
 from hashlib import pbkdf2_hmac
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TYPE_CHECKING
 
 try:
     from cryptography.fernet import Fernet  # type: ignore
 except Exception:  # pragma: no cover
     Fernet = None
+
+if TYPE_CHECKING:
+    from cryptography.fernet import Fernet as _Fernet  # type: ignore
 
 
 def _derive_fernet_key_from_passphrase(passphrase: str, salt: bytes) -> bytes:
@@ -17,7 +20,7 @@ def _derive_fernet_key_from_passphrase(passphrase: str, salt: bytes) -> bytes:
     return base64.urlsafe_b64encode(raw)
 
 
-def get_fernet() -> Optional["Fernet"]:
+def get_fernet() -> Optional["_Fernet"]:
     if Fernet is None:
         return None
 

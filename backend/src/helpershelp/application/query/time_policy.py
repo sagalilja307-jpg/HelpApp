@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Dict, Literal, Optional
+from typing import Dict, Literal, Optional, cast
 from zoneinfo import ZoneInfo
 
 from helpershelp.domain.value_objects.time_utils import ensure_utc, utcnow_aware
@@ -103,8 +103,8 @@ class TimePolicy:
 
     def _clamp(self, domain: Domain, timeframe: Dict[str, object]) -> Dict[str, object]:
         # Clamp by absolute maximums (simple MVP, domain-agnostic)
-        start_utc = ensure_utc(timeframe["start"])
-        end_utc = ensure_utc(timeframe["end"])
+        start_utc = ensure_utc(cast(datetime, timeframe["start"]))
+        end_utc = ensure_utc(cast(datetime, timeframe["end"]))
 
         start_local = start_utc.astimezone(self._tz)
         end_local = end_utc.astimezone(self._tz)
@@ -121,7 +121,8 @@ class TimePolicy:
         if end_local > max_end_local:
             end_local = max_end_local
 
-        return self._window(start_local, end_local, timeframe.get("granularity", "custom"))
+        granularity = cast(str, timeframe.get("granularity", "custom"))
+        return self._window(start_local, end_local, granularity)
 
     def _window(self, start_local: datetime, end_local: datetime, granularity: str) -> Dict[str, object]:
         return {

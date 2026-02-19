@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, cast
 
 from helpershelp.application.query.domain_classifier import DomainClassifier
 from helpershelp.application.query.timeframe_resolver import QueryTimeframeResolver
 from helpershelp.application.query.time_policy import TimePolicy, TimePolicyConfig
-from helpershelp.application.intent.intent_plan import IntentPlanDTO, TimeIntentDTO, TimeframeDTO
+from helpershelp.application.intent.intent_plan import IntentPlanDTO, TimeIntentDTO, TimeframeDTO, Granularity
 
 def _to_iso_z(dt: datetime) -> str:
     # ensure_utc ger tz-aware; här vill vi “Z”
@@ -54,9 +54,9 @@ class IntentBuilder:
                 payload=parsed.time_intent.payload,
             ),
             timeframe=TimeframeDTO(
-                start=_to_iso_z(tf["start"]),
-                end=_to_iso_z(tf["end"]),
-                granularity=tf["granularity"],
+                start=_to_iso_z(cast(datetime, tf["start"])),
+                end=_to_iso_z(cast(datetime, tf["end"])),
+                granularity=cast(Granularity, tf["granularity"]),
             ),
             needs_clarification=False,
             suggestions=[],

@@ -57,6 +57,9 @@ def _email_is_followup_candidate(item: UnifiedItem, now: datetime, follow_up_day
     if is_replied is True:
         return False, "already_replied"
 
+    if item.created_at is None:
+        return False, "no_created_at"
+
     created = _as_utc_naive(item.created_at)
     age_days = (now - created).total_seconds() / 86400.0
     if age_days < follow_up_days:

@@ -6,7 +6,9 @@ import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Iterable, cast
+from helpershelp.domain.models.unified_item import UnifiedItem as DomainUnifiedItem, ItemEdge as DomainItemEdge
+from helpershelp.assistant.models import UnifiedItem as AssistantUnifiedItem
 
 from helpershelp.assistant.linking import link_emails_to_events
 from helpershelp.assistant.sources.gcal import GCalAdapter
@@ -21,7 +23,7 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class SyncConfig:
     interval_seconds: int = 15 * 60
-    sources: List[str] = None  # ["gmail", "gcal"]
+    sources: Optional[List[str]] = None  # ["gmail", "gcal"]
 
     def __post_init__(self):
         if self.sources is None:
@@ -64,11 +66,11 @@ def run_sync_once(store: SqliteStore, sources: List[str]) -> Dict[str, int]:
         try:
             if src == "gmail":
                 items = GmailAdapter(access_token=access_token).fetch_items(days=90, max_results=50)
-                ins, upd = store.upsert_items(items)
+                ins, upd = store.upsert_items(cast(Iterable[DomainUnifiedItem], items))
                 store.audit("sync_loop_gmail", {"fetched": len(items), "inserted": ins, "updated": upd})
             elif src == "gcal":
                 items = GCalAdapter(access_token=access_token).fetch_items(days_forward=14, days_back=7, max_results=250)
-                ins, upd = store.upsert_items(items)
+                ins, upd = store.upsert_items(cast(Iterable[DomainUnifiedItem], items))
                 store.audit("sync_loop_gcal", {"fetched": len(items), "inserted": ins, "updated": upd})
             else:
                 continue
@@ -84,8 +86,8 @@ def run_sync_once(store: SqliteStore, sources: List[str]) -> Dict[str, int]:
     # Linking pass
     try:
         all_recent = store.list_items(since=utcnow() - timedelta(days=30), limit=5000)
-        edges = link_emails_to_events(all_recent)
-        e_ins, e_upd = store.upsert_edges(edges)
+        edges = link_emails_to_events(cast(List[AssistantUnifiedItem], all_recent))
+        e_ins, e_upd = store.upsert_edges(cast(Iterable[DomainItemEdge], edges))
         counts["edges_inserted"] += e_ins
         counts["edges_updated"] += e_upd
     except Exception as e:

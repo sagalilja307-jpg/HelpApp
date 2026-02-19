@@ -3,7 +3,7 @@
 import logging
 
 try:
-    from pyngrok import ngrok
+    from pyngrok import ngrok  # type: ignore
 except Exception as exc:
     raise SystemExit(
         "pyngrok is not installed. Install it with: pip install pyngrok"

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Literal, Tuple
+from typing import Dict, List, Literal, Tuple, cast
 
 from helpershelp.infrastructure.llm import get_embedding_service
 
@@ -232,7 +232,7 @@ class DomainClassifier:
             domain = card_to_domain.get(text)
             if domain is None:
                 continue
-            ranked.append((domain, float(score)))
+            ranked.append((cast(Domain, domain), float(score)))
 
         if not ranked:
             # extremely defensive fallback
@@ -241,7 +241,7 @@ class DomainClassifier:
                 confidence=0.0,
                 ranked=[],
                 needs_clarification=True,
-                suggestions=list(self._domain_cards.keys())[:3],
+                suggestions=cast(List[Domain], list(self._domain_cards.keys())[:3]),
             )
 
         ranked.sort(key=lambda x: x[1], reverse=True)
@@ -258,5 +258,5 @@ class DomainClassifier:
             confidence=top_score,
             ranked=ranked,
             needs_clarification=needs,
-            suggestions=suggestions,
+            suggestions=cast(List[Domain], suggestions),
         )
