@@ -1,14 +1,5 @@
 import Foundation
 
-protocol BackendQuerying {
-    func query(
-        text: String,
-        days: Int,
-        sources: [String],
-        dataFilter: [String: AnyCodable]?
-    ) async throws -> BackendDataIntentResponseDTO
-}
-
 enum BackendQueryAPIError: LocalizedError {
     case invalidBaseURL
     case invalidResponse
@@ -38,29 +29,19 @@ final class BackendQueryAPIService: BackendQuerying {
         self.session = session
     }
 
-    func query(
-        text: String,
-        days: Int,
-        sources: [String],
-        dataFilter: [String: AnyCodable]? = nil
-    ) async throws -> BackendDataIntentResponseDTO {
+    func query(text: String) async throws -> BackendQueryResponseDTO {
         let payload = BackendQueryRequestDTO(
             query: text,
-            question: text,
-            language: "sv",
-            sources: sources,
-            days: days,
-            dataFilter: dataFilter
+            language: "sv", // kan göras nil om backend sätter själv
+            timezone: TimeZone.current.identifier // hint
         )
 
         let body = try Self.encoder.encode(payload)
         let data = try await performRequest(path: "/query", method: "POST", body: body)
 
-        guard !data.isEmpty else {
-            throw BackendQueryAPIError.invalidResponse
-        }
+        guard !data.isEmpty else { throw BackendQueryAPIError.invalidResponse }
 
-        guard let decoded = try? Self.decoder.decode(BackendDataIntentResponseDTO.self, from: data) else {
+        guard let decoded = try? Self.decoder.decode(BackendQueryResponseDTO.self, from: data) else {
             throw BackendQueryAPIError.decodingFailed
         }
 
@@ -75,9 +56,7 @@ final class BackendQueryAPIService: BackendQuerying {
 
         var lastConnectivityError: URLError?
         for baseURL in baseURLs {
-            guard let endpoint = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
-                continue
-            }
+            guard let endpoint = URL(string: path, relativeTo: baseURL)?.absoluteURL else { continue }
 
             var request = URLRequest(url: endpoint)
             request.httpMethod = method
@@ -106,9 +85,7 @@ final class BackendQueryAPIService: BackendQuerying {
             }
         }
 
-        if let lastConnectivityError {
-            throw lastConnectivityError
-        }
+        if let lastConnectivityError { throw lastConnectivityError }
         throw BackendQueryAPIError.invalidResponse
     }
 
@@ -123,9 +100,7 @@ final class BackendQueryAPIService: BackendQuerying {
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
             let rawValue = try container.decode(String.self)
-            if let date = parseDate(rawValue) {
-                return date
-            }
+            if let date = parseDate(rawValue) { return date }
             throw DecodingError.dataCorruptedError(
                 in: container,
                 debugDescription: "Unsupported date format: \(rawValue)"
@@ -140,12 +115,8 @@ final class BackendQueryAPIService: BackendQuerying {
 
     private static func shouldTryNextBaseURL(_ error: URLError) -> Bool {
         switch error.code {
-        case .cannotFindHost,
-             .cannotConnectToHost,
-             .dnsLookupFailed,
-             .timedOut,
-             .networkConnectionLost,
-             .notConnectedToInternet:
+        case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed, .timedOut,
+             .networkConnectionLost, .notConnectedToInternet:
             return true
         default:
             return false
@@ -156,19 +127,13 @@ final class BackendQueryAPIService: BackendQuerying {
         guard
             let object = try? JSONSerialization.jsonObject(with: data, options: []),
             let dict = object as? [String: Any]
-        else {
-            return nil
-        }
+        else { return nil }
 
-        if let detail = dict["detail"] as? String {
-            return detail
-        }
+        if let detail = dict["detail"] as? String { return detail }
 
         if let detailEntries = dict["detail"] as? [[String: Any]] {
             let messages = detailEntries.compactMap { $0["msg"] as? String }
-            if !messages.isEmpty {
-                return messages.joined(separator: ", ")
-            }
+            if !messages.isEmpty { return messages.joined(separator: ", ") }
         }
 
         if let errorDict = dict["error"] as? [String: Any],
@@ -176,28 +141,17 @@ final class BackendQueryAPIService: BackendQuerying {
             return message
         }
 
-        if let error = dict["error"] as? String {
-            return error
-        }
-
-        if let message = dict["message"] as? String {
-            return message
-        }
+        if let error = dict["error"] as? String { return error }
+        if let message = dict["message"] as? String { return message }
 
         return nil
     }
 
     private static func parseDate(_ rawValue: String) -> Date? {
-        if let date = DateService.shared.parseISO8601(rawValue) {
-            return date
-        }
-
+        if let date = DateService.shared.parseISO8601(rawValue) { return date }
         for formatter in fallbackDateFormatters {
-            if let date = formatter.date(from: rawValue) {
-                return date
-            }
+            if let date = formatter.date(from: rawValue) { return date }
         }
-
         return nil
     }
 
