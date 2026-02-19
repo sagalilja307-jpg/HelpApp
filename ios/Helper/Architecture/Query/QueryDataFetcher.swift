@@ -130,12 +130,12 @@ final class QueryDataFetcher: QueryDataFetching {
     #endif
 
     func collect(days: Int, access: QuerySourceAccessing) async throws -> QueryCollectedData {
-        let range = Self.timeRange(days: days, now: nowProvider())
-        return try await collect(in: range, access: access, options: .default)
+        // Removed: iOS should use collect(in: DateInterval, access:)
+        throw QueryCollectionError.unsupportedAPI
     }
     func collect(days: Int, access: QuerySourceAccessing, options: QueryCollectionOptions) async throws -> QueryCollectedData {
-        let range = Self.timeRange(days: days, now: nowProvider())
-        return try await collect(in: range, access: access, options: options)
+        // Removed: iOS should use collect(in: DateInterval, access:options:)
+        throw QueryCollectionError.unsupportedAPI
     }
 
     /// New API: collect exactly within the provided `DateInterval`.
@@ -341,12 +341,7 @@ final class QueryDataFetcher: QueryDataFetching {
 
     /// ✅ Viktig fix: inkludera framtid, annars får du aldrig “imorgon/nästa vecka”
     private static func timeRange(days: Int, now: Date) -> DateInterval {
-        let clamped = max(1, min(3650, days))
-
-        let start = DateService.shared.date(byAdding: .day, value: -clamped, to: now) ?? now
-        let end = DateService.shared.date(byAdding: .day, value: clamped, to: now) ?? now
-
-        return DateInterval(start: start, end: end)
+        fatalError("timeRange(days:) removed. Use explicit DateInterval with collect(in:).")
     }
 }
 
