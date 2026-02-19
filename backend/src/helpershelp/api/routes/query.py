@@ -55,7 +55,9 @@ async def unified_query(request: QueryRequest) -> QueryResponse:
         router_service = DataIntentRouter(timezone_name=tz)
         plan = router_service.route(user_query, language=request.language)
 
-        return QueryResponse(data_intent=plan)
+        # Convert router result (dict) into a DataIntent model instance
+        data_intent = DataIntent.model_validate(plan)
+        return QueryResponse(data_intent=data_intent)
 
     except HTTPException:
         raise

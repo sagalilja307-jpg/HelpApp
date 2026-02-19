@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import secrets
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Dict
 from urllib.parse import urlencode
 
@@ -20,7 +20,7 @@ router = APIRouter()
 _GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 _GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 _STATE_TTL = timedelta(minutes=10)
-_state_cache: Dict[str, object] = {}
+_state_cache: Dict[str, datetime] = {}
 
 
 def _client_id() -> str:

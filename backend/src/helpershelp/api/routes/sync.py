@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import Iterable, cast, List
 
 import requests
 from fastapi import APIRouter, HTTPException
 
 from helpershelp.api.deps import get_assistant_store
 from helpershelp.assistant.linking import link_emails_to_events
-from helpershelp.assistant.models import SyncGCalRequest, SyncGmailRequest
+from helpershelp.assistant.models import SyncGCalRequest, SyncGmailRequest, UnifiedItem as AssistantUnifiedItem
 from helpershelp.assistant.sources.gcal import GCalAdapter
 from helpershelp.assistant.sources.gmail import GmailAdapter
+from helpershelp.domain.models.unified_item import UnifiedItem as DomainUnifiedItem, ItemEdge as DomainItemEdge
 from helpershelp.domain.value_objects.time_utils import utcnow
 
 router = APIRouter()
@@ -35,7 +37,8 @@ def sync_gmail(request: SyncGmailRequest):
     except requests.RequestException as exc:
         store.audit("sync_gmail_fail", {"status": 502, "detail": "network_error"})
         raise HTTPException(status_code=502, detail="gmail_sync_network_error") from exc
-    inserted, updated = store.upsert_items(items)
+    domain_items = cast(Iterable[DomainUnifiedItem], items)
+    inserted, updated = store.upsert_items(domain_items)
     store.audit(
         "sync_gmail",
         {
@@ -48,8 +51,8 @@ def sync_gmail(request: SyncGmailRequest):
     )
 
     all_recent = store.list_items(since=utcnow() - timedelta(days=30), limit=5000)
-    edges = link_emails_to_events(all_recent)
-    e_ins, e_upd = store.upsert_edges(edges)
+    edges = link_emails_to_events(cast(List[AssistantUnifiedItem], all_recent))
+    e_ins, e_upd = store.upsert_edges(cast(Iterable[DomainItemEdge], edges))
     return {
         "status": "ok",
         "fetched": len(items),
@@ -69,7 +72,8 @@ def sync_gcal(request: SyncGCalRequest):
         days_back=request.days_back,
         max_results=request.max_results,
     )
-    inserted, updated = store.upsert_items(items)
+    domain_items = cast(Iterable[DomainUnifiedItem], items)
+    inserted, updated = store.upsert_items(domain_items)
     store.audit(
         "sync_gcal",
         {
@@ -83,8 +87,8 @@ def sync_gcal(request: SyncGCalRequest):
     )
 
     all_recent = store.list_items(since=utcnow() - timedelta(days=30), limit=5000)
-    edges = link_emails_to_events(all_recent)
-    e_ins, e_upd = store.upsert_edges(edges)
+    edges = link_emails_to_events(cast(List[AssistantUnifiedItem], all_recent))
+    e_ins, e_upd = store.upsert_edges(cast(Iterable[DomainItemEdge], edges))
     return {
         "status": "ok",
         "fetched": len(items),

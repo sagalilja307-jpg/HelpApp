@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 from fastapi import APIRouter, HTTPException, Query, status
 
 from helpershelp.api.deps import get_assistant_store
 from helpershelp.assistant.models import (
     DashboardResponse,
+    UnifiedItem,
+    Proposal,
     IngestRequest,
     LearningEvent,
     LearningPauseRequest,
@@ -159,9 +161,9 @@ def dashboard(days: int = Query(default=90, ge=1, le=365)):
 
     return DashboardResponse(
         now=now,
-        important_now=important,
-        upcoming=upcoming,
-        proposals=pending,
+        important_now=cast(List[UnifiedItem], important),
+        upcoming=cast(List[UnifiedItem], upcoming),
+        proposals=cast(List[Proposal], pending),
     )
 
 
@@ -169,7 +171,11 @@ def dashboard(days: int = Query(default=90, ge=1, le=365)):
 def ingest(request: IngestRequest):
     store = get_assistant_store()
     items = list(request.items or [])
-    inserted, updated = store.upsert_items(items) if items else (0, 0)
+    # convert assistant.models.UnifiedItem -> domain.models.unified_item.UnifiedItem for store API
+    from helpershelp.domain.models.unified_item import UnifiedItem as DomainUnifiedItem
+
+    domain_items = [DomainUnifiedItem(**item.dict()) for item in items] if items else []
+    inserted, updated = store.upsert_items(domain_items) if domain_items else (0, 0)
     notes_count = sum(
         1
         for item in items
