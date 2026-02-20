@@ -6,7 +6,7 @@ final class QueryPipelineIntegrationTests: XCTestCase {
     struct MockBackend: BackendQuerying {
         let plan: BackendIntentPlanDTO
         func query(text: String) async throws -> BackendQueryResponseDTO {
-            return BackendQueryResponseDTO(intentPlan: plan, raw: [:])
+            return BackendQueryResponseDTO(intentPlan: plan)
         }
     }
 
@@ -26,8 +26,24 @@ final class QueryPipelineIntegrationTests: XCTestCase {
     func testPipelineUsesBackendTimeAndReturnsAnswer() async throws {
         // Arrange
         let now = Date()
-        let tf = BackendIntentTimeframeDTO(start: now, end: now.addingTimeInterval(3600))
-        let plan = BackendIntentPlanDTO(domain: "calendar", timeframe: tf, needsClarification: false, suggestions: [])
+        let scope = BackendTimeScopeDTO(
+            type: .relative,
+            value: .today,
+            start: now,
+            end: now.addingTimeInterval(3600)
+        )
+        let plan = BackendIntentPlanDTO(
+            domain: .calendar,
+            mode: .info,
+            operation: .count,
+            timeScope: scope,
+            filters: [:],
+            grouping: .none,
+            sort: .none,
+            needsClarification: false,
+            clarificationMessage: nil,
+            suggestions: []
+        )
         let backend = MockBackend(plan: plan)
         let access = MockAccess()
         let collector = MockCollector()

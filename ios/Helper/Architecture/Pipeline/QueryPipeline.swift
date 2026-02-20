@@ -51,7 +51,7 @@ struct QueryPipeline {
 
         // 2) Domain -> QuerySource (MVP: alla utom memory/mail)
         guard let source = Self.mapDomainToSource(plan.domain) else {
-            let domain = plan.domain ?? "okänd"
+            let domain = plan.domain?.rawValue ?? "okänd"
             return QueryResult(
                 timeRange: nil,
                 entries: [],
@@ -60,7 +60,10 @@ struct QueryPipeline {
         }
 
         // 3) Time range (du sa att datafetcher redan kan tid)
-        let timeRange: DateInterval? = plan.timeframe.map { DateInterval(start: $0.start, end: $0.end) }
+        let timeRange: DateInterval? = {
+            guard let start = plan.timeScope.start, let end = plan.timeScope.end else { return nil }
+            return DateInterval(start: start, end: end)
+        }()
 
         // 4) Access gate (din regel: stoppa direkt om saknas)
         if !accessGate.isEnabled(source) {
@@ -139,21 +142,16 @@ protocol QuerySourceAccessChecking {
 
 private extension QueryPipeline {
 
-    nonisolated static func mapDomainToSource(_ domain: String?) -> QuerySource? {
-        guard let d = domain?.lowercased() else { return nil }
-        switch d {
-        case "calendar": return .calendar
-        case "reminders", "tasks": return .reminders
-        case "contacts": return .contacts
-        case "photos": return .photos
-        case "files": return .files
-        case "location", "locations": return .location
-
-        // explicit out-of-scope for MVP (enligt dig)
-        case "mail", "email": return nil
-        case "notes", "memory": return nil
-
-        default: return nil
+    nonisolated static func mapDomainToSource(_ domain: BackendIntentDomain?) -> QuerySource? {
+        switch domain {
+        case .calendar: return .calendar
+        case .reminders: return .reminders
+        case .contacts: return .contacts
+        case .photos: return .photos
+        case .files: return .files
+        case .location: return .location
+        case .mail, .notes, .memory, .none:
+            return nil
         }
     }
 
@@ -208,17 +206,17 @@ private extension QueryPipeline {
         }
     }
 
-    nonisolated static func localizedDomain(_ domain: String) -> String {
+    nonisolated static func localizedDomain(_ domain: BackendIntentDomain) -> String {
         switch domain {
-        case "calendar": return "kalender"
-        case "reminders": return "påminnelser"
-        case "mail": return "mejl"
-        case "notes": return "anteckningar"
-        case "files": return "filer"
-        case "location": return "plats"
-        case "photos": return "bilder"
-        case "contacts": return "kontakter"
-        default: return domain
+        case .calendar: return "kalender"
+        case .reminders: return "påminnelser"
+        case .mail: return "mejl"
+        case .notes: return "anteckningar"
+        case .files: return "filer"
+        case .location: return "plats"
+        case .photos: return "bilder"
+        case .contacts: return "kontakter"
+        case .memory: return "minne"
         }
     }
 

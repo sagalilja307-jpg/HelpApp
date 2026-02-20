@@ -1,40 +1,94 @@
 from __future__ import annotations
 
 """
-Deterministisk router som mappar användarfrågor till DataIntent v1.
-
-Historik: Den fanns refererad i API-deps och tester men hade raderats.
-Denna version är en tunn wrapper runt befintliga komponenter:
-  - DomainClassifier (embeddings-baserad när den finns)
-  - QueryTimeframeResolver + TimePolicy (samma som IntentBuilder)
-
-Fallbacks finns för att inte krascha när embeddings‑tjänsten saknas:
-  - Vid klassificeringsfel returneras clarification med suggested_domains.
-  - Enkel heuristik för olästa mejl ("oläst"/"unread") sätter filters.status.
-
-Router returnerar ett enkelt dict som backend/tests förväntar sig:
-  {
-    "domain": str | None,
-    "operation": str,
-    "time_intent": {"category": str, "payload": ...},
-    "timeframe": {"start": datetime, "end": datetime, "granularity": str} | None,
-    "filters": dict | None,
-    "needs_clarification": bool,
-    "suggestions": list[str]
-  }
+Deterministisk router som mappar användarfrågor till IntentPlanDTO-liknande DataIntent payload.
 """
 
-from typing import Dict, Optional
+from datetime import datetime
+from typing import Dict, Optional, cast
 
-from helpershelp.application.intent.intent_plan import TimeIntentCategory
+from helpershelp.application.intent.intent_plan import (
+    Domain,
+    IntentPlanDTO,
+    Operation,
+    TimeScopeDTO,
+    TimeScopeType,
+    TimeScopeValue,
+)
 from helpershelp.application.query.domain_classifier import DomainClassifier
 from helpershelp.application.query.time_policy import TimePolicy, TimePolicyConfig
-from helpershelp.application.query.timeframe_resolver import QueryTimeframeResolver
+from helpershelp.application.query.timeframe_resolver import QueryTimeframeResolver, TimeIntent
 from helpershelp.domain.value_objects.time_utils import utcnow_aware
 
 
-def _safe_time_intent(category: TimeIntentCategory, payload: Optional[Dict[str, object]]):
-    return {"category": category, "payload": payload}
+def _map_relative_n_value(n: int) -> Optional[TimeScopeValue]:
+    if n == 7:
+        return "7d"
+    if n == 30:
+        return "30d"
+    if n == 90:
+        return "3m"
+    if n == 365:
+        return "1y"
+    return None
+
+
+def _time_scope_from_time_intent(time_intent: TimeIntent, timeframe: Optional[Dict[str, object]]) -> TimeScopeDTO:
+    category = time_intent.category
+    payload = time_intent.payload or {}
+
+    scope_type: TimeScopeType = "all"
+    scope_value: Optional[TimeScopeValue] = None
+
+    if category == "REL_TODAY":
+        scope_type = "relative"
+        scope_value = "today"
+    elif category in {"REL_THIS_WEEK", "REL_NEXT_WEEK", "REL_LAST_WEEK"}:
+        scope_type = "relative"
+        scope_value = "7d"
+    elif category in {"REL_THIS_MONTH", "REL_NEXT_MONTH"}:
+        scope_type = "relative"
+        scope_value = "30d"
+    elif category == "REL_LAST_N_UNITS":
+        n = int(payload.get("n", 0)) # pyright: ignore[reportArgumentType]
+        mapped_value = _map_relative_n_value(n)
+        if mapped_value is not None:
+            scope_type = "relative"
+            scope_value = mapped_value
+        else:
+            scope_type = "absolute"
+    elif category == "ABS_DATE_SINGLE":
+        scope_type = "absolute"
+    elif category in {"REL_TOMORROW", "REL_YESTERDAY"}:
+        scope_type = "absolute"
+    elif category == "NONE":
+        scope_type = "all"
+
+    start = cast(Optional[datetime], timeframe.get("start") if timeframe else None)
+    end = cast(Optional[datetime], timeframe.get("end") if timeframe else None)
+
+    return TimeScopeDTO(
+        type=scope_type,
+        value=scope_value,
+        start=start,
+        end=end,
+    )
+
+
+def _operation_for_query(domain: Domain, query: str) -> Operation:
+    lower_q = query.lower()
+    if domain == "calendar" and ("nästa" in lower_q or "next" in lower_q):
+        return "latest"
+
+    if domain in {"notes", "files", "photos", "contacts", "mail", "memory"} and (
+        "sök" in lower_q or "search" in lower_q or "find" in lower_q
+    ):
+        return "list"
+
+    if domain in {"contacts", "photos", "location"}:
+        return "list"
+
+    return "count"
 
 
 class DataIntentRouter:
@@ -57,62 +111,52 @@ class DataIntentRouter:
         try:
             dom = self.domain_classifier.classify(q)
         except Exception:
-            # Embeddings kan saknas lokalt; gör ett tryggt fallback-svar
+            parsed = self.time_resolver.resolve(q)
             return self._clarification_response(
                 suggestions=["calendar", "mail"],
-                time_intent=self.time_resolver.resolve(q).time_intent,
+                time_scope=_time_scope_from_time_intent(parsed.time_intent, parsed.timeframe),
             )
 
-        # Tidsintent + ev timeframe
         parsed = self.time_resolver.resolve(q)
-
-        # Enkel heuristik för olästa mejl
         lower_q = q.lower()
+
         if dom.domain == "mail" and ("oläst" in lower_q or "olästa" in lower_q or "unread" in lower_q):
             filters["status"] = "unread"
 
-        # Operation-heuristik (MVP)
-        operation = "count"
-        if dom.domain == "calendar" and ("nästa" in lower_q or "next" in lower_q):
-            operation = "next"
-        elif dom.domain in {"notes", "files", "photos", "contacts", "mail"} and (
-            "sök" in lower_q or "search" in lower_q or "find" in lower_q
-        ):
-            operation = "search"
-        elif dom.domain == "contacts":
-            operation = "list"
-        elif dom.domain == "photos":
-            operation = "list"
-        elif dom.domain == "location":
-            operation = "list"
-
-        # Clarification
         if dom.needs_clarification or dom.domain is None:
             return self._clarification_response(
                 suggestions=list(dom.suggestions) if dom.suggestions else ["calendar", "mail"],
-                time_intent=parsed.time_intent,
+                time_scope=_time_scope_from_time_intent(parsed.time_intent, parsed.timeframe),
             )
 
-        # Policy -> timeframe (alltid satt efter policy)
         timeframe = self.time_policy.apply(dom.domain, parsed)
+        time_scope = _time_scope_from_time_intent(parsed.time_intent, timeframe)
+        operation = _operation_for_query(dom.domain, q)
 
-        return {
-            "domain": dom.domain,
-            "operation": operation,
-            "time_intent": _safe_time_intent(parsed.time_intent.category, parsed.time_intent.payload),
-            "timeframe": timeframe,
-            "filters": filters or None,
-            "needs_clarification": False,
-            "suggestions": [],
-        }
+        plan = IntentPlanDTO(
+            domain=dom.domain,
+            mode="info",
+            operation=operation,
+            time_scope=time_scope,
+            filters=filters,
+            grouping="none",
+            sort="none",
+            needs_clarification=False,
+            clarification_message=None,
+            suggestions=[],
+        )
+        return plan.model_dump(mode="python")
 
-    def _clarification_response(self, *, suggestions, time_intent) -> Dict[str, object]:
+    def _clarification_response(self, *, suggestions, time_scope: TimeScopeDTO) -> Dict[str, object]:
         return {
             "domain": "system",
+            "mode": "info",
             "operation": "needs_clarification",
-            "time_intent": _safe_time_intent(time_intent.category, time_intent.payload),
-            "timeframe": None,
-            "filters": {"suggested_domains": list(suggestions)},
+            "time_scope": time_scope.model_dump(mode="python"),
+            "filters": {},
+            "grouping": "none",
+            "sort": "none",
             "needs_clarification": True,
+            "clarification_message": "Kan du förtydliga vilken datakälla du menar?",
             "suggestions": list(suggestions),
         }

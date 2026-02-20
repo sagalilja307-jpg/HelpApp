@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from typing import Dict, Literal, Optional, List, Any
-from pydantic import BaseModel, Field
+from datetime import datetime
+from typing import Any, Dict, List, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Domain = Literal[
     "calendar",
@@ -9,45 +11,57 @@ Domain = Literal[
     "mail",
     "notes",
     "files",
-    "location",
     "photos",
     "contacts",
+    "location",
+    "memory",
 ]
 
-Operation = Literal["count"]  # MVP: bara count just nu
-
-TimeIntentCategory = Literal[
-    "NONE",
-    "REL_TODAY",
-    "REL_TOMORROW",
-    "REL_YESTERDAY",
-    "REL_THIS_WEEK",
-    "REL_NEXT_WEEK",
-    "REL_LAST_WEEK",
-    "REL_THIS_MONTH",
-    "REL_NEXT_MONTH",
-    "REL_LAST_N_UNITS",
-    "ABS_DATE_SINGLE",
+Operation = Literal[
+    "count",
+    "list",
+    "sum_duration",
+    "group_by_day",
+    "group_by_type",
+    "latest",
+    "exists",
 ]
-
-Granularity = Literal["day", "week", "month", "custom"]
-
-
-class TimeIntentDTO(BaseModel):
-    category: TimeIntentCategory
-    payload: Optional[Dict[str, Any]] = None
+Mode = Literal["info"]
+TimeScopeType = Literal["relative", "absolute", "all"]
+TimeScopeValue = Literal["today", "7d", "30d", "3m", "1y"]
+Grouping = Literal["day", "week", "month", "type", "location", "status", "none"]
+SortOption = Literal["date_desc", "date_asc", "duration", "name", "priority", "none"]
 
 
-class TimeframeDTO(BaseModel):
-    start: str = Field(..., description="UTC ISO8601 datetime")
-    end: str = Field(..., description="UTC ISO8601 datetime")
-    granularity: Granularity
+class TimeScopeDTO(BaseModel):
+    type: TimeScopeType
+    value: Optional[TimeScopeValue] = None
+    start: Optional[datetime] = Field(default=None, description="UTC ISO8601 datetime")
+    end: Optional[datetime] = Field(default=None, description="UTC ISO8601 datetime")
 
 
 class IntentPlanDTO(BaseModel):
-    domain: Optional[Domain] = None
-    operation: Operation
-    time_intent: TimeIntentDTO
-    timeframe: Optional[TimeframeDTO] = None  # efter policy bör den alltid vara satt
+    model_config = ConfigDict(extra="forbid")
+
+    domain: Domain
+    mode: Mode = "info"
+    operation: Operation = "count"
+    time_scope: TimeScopeDTO
+    filters: Dict[str, Any] = Field(default_factory=dict)
+    grouping: Optional[Grouping] = "none"
+    sort: Optional[SortOption] = "none"
     needs_clarification: bool = False
-    suggestions: List[Domain] = []
+    clarification_message: Optional[str] = None
+    suggestions: List[Domain] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_clarification_state(self) -> "IntentPlanDTO":
+        if self.time_scope.type == "relative" and self.time_scope.value is None:
+            raise ValueError("time_scope.value is required when time_scope.type is 'relative'")
+        if self.time_scope.type != "relative" and self.time_scope.value is not None:
+            raise ValueError("time_scope.value must be null unless time_scope.type is 'relative'")
+        if self.needs_clarification and not self.clarification_message:
+            raise ValueError("clarification_message is required when needs_clarification is true")
+        if not self.needs_clarification and self.clarification_message is not None:
+            raise ValueError("clarification_message must be null when needs_clarification is false")
+        return self

@@ -2,22 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Dict, Literal, Optional, cast
+from typing import Dict, Optional, cast
 from zoneinfo import ZoneInfo
 
+from helpershelp.application.intent.intent_plan import Domain
 from helpershelp.domain.value_objects.time_utils import ensure_utc, utcnow_aware
 from helpershelp.application.query.timeframe_resolver import TimeParseResult
-
-Domain = Literal[
-    "calendar",
-    "reminders",
-    "mail",
-    "notes",
-    "files",
-    "location",
-    "photos",
-    "contacts",
-]
 
 
 @dataclass(frozen=True)
@@ -84,6 +74,9 @@ class TimePolicy:
             return self._window(now_local - timedelta(days=self.cfg.default_past_days_mail), now_local, "custom")
 
         if domain == "notes":
+            return self._window(now_local - timedelta(days=self.cfg.default_past_days_notes), now_local, "custom")
+
+        if domain == "memory":
             return self._window(now_local - timedelta(days=self.cfg.default_past_days_notes), now_local, "custom")
 
         if domain == "files":
