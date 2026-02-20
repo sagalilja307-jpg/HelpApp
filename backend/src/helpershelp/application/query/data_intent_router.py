@@ -76,18 +76,39 @@ def _time_scope_from_time_intent(time_intent: TimeIntent, timeframe: Optional[Di
 
 
 def _operation_for_query(domain: Domain, query: str) -> Operation:
-    lower_q = query.lower()
-    if domain == "calendar" and ("nästa" in lower_q or "next" in lower_q):
+    q = (query or "").lower().strip()
+
+    # ---- Exists ----
+    if q.startswith("finns det") or q.startswith("finns det någon") or q.startswith("har jag några") or q.startswith("har jag någon"):
+        return "exists"
+
+    # ---- Count ----
+    if q.startswith("hur många") or "antal" in q:
+        return "count"
+
+    # ---- Sum duration ----
+    if q.startswith("hur länge") or "hur lång tid" in q:
+        return "sum_duration"
+
+    # ---- Latest ----
+    # Only treat as 'latest' when the question is explicitly asking *when* (starts with "när")
+    # e.g. "När är nästa...", "När tog jag den senaste..."
+    if q.startswith("när") and any(k in q for k in ("nästa", "när är nästa", "senaste", "senast", "next", "last")):
         return "latest"
 
-    if domain in {"notes", "files", "photos", "contacts", "mail", "memory"} and (
-        "sök" in lower_q or "search" in lower_q or "find" in lower_q
-    ):
+    # ---- Explicit list phrasing ----
+    if q.startswith("vilka") or q.startswith("vad har jag") or q.startswith("vad är") or q.startswith("vad händer") or q.startswith("var"):
         return "list"
 
-    if domain in {"contacts", "photos", "location"}:
+    # ---- Search-like phrasing ----
+    if any(word in q for word in ["sök", "söker", "search", "find", "hitta", "visa"]):
         return "list"
 
+    # ---- Domain-aware fallback ----
+    if domain == "calendar":
+        return "list"
+
+    # Safe fallback
     return "count"
 
 
