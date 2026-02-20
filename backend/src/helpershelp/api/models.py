@@ -1,40 +1,26 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from helpershelp.application.intent.intent_plan import Domain, Grouping, Operation, SortOption, TimeScopeDTO
 
-class DataIntentTimeframe(BaseModel):
-    start: datetime
-    end: datetime
-    granularity: Literal["day", "week", "month", "custom"]
-
-
-class DataIntentSort(BaseModel):
-    field: str
-    direction: Literal["asc", "desc"]
+DataIntentDomain = Domain | Literal["system"]
+DataIntentOperation = Operation | Literal["needs_clarification"]
 
 
 class DataIntent(BaseModel):
-    domain: Literal[
-        "calendar",
-        "reminders",
-        "mail",
-        "contacts",
-        "photos",
-        "files",
-        "location",
-        "notes",
-        "system",
-    ]
-    operation: Literal["list", "count", "next", "details", "search", "needs_clarification"]
-    timeframe: Optional[DataIntentTimeframe] = None
-    filters: Optional[Dict[str, Any]] = None
-    sort: Optional[DataIntentSort] = None
-    limit: Optional[int] = Field(default=None, ge=1)
-    fields: Optional[List[str]] = None
+    domain: DataIntentDomain
+    mode: Literal["info"] = "info"
+    operation: DataIntentOperation
+    time_scope: TimeScopeDTO
+    filters: Dict[str, Any] = Field(default_factory=dict)
+    grouping: Optional[Grouping] = "none"
+    sort: Optional[SortOption] = "none"
+    needs_clarification: bool = False
+    clarification_message: Optional[str] = None
+    suggestions: List[Domain] = Field(default_factory=list)
 
 
 class QueryDataIntentResponse(BaseModel):

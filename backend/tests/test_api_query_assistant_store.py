@@ -44,6 +44,21 @@ class APIQueryAssistantStoreTests(unittest.TestCase):
         self.assertEqual(set(payload.keys()), {"data_intent"})
         data_intent = payload.get("data_intent")
         self.assertIsInstance(data_intent, dict)
+        self.assertEqual(
+            set(data_intent.keys()),
+            {
+                "domain",
+                "mode",
+                "operation",
+                "time_scope",
+                "filters",
+                "grouping",
+                "sort",
+                "needs_clarification",
+                "clarification_message",
+                "suggestions",
+            },
+        )
         self.assertEqual(data_intent.get("domain"), "mail")
         self.assertEqual(data_intent.get("operation"), "count")
         self.assertEqual((data_intent.get("filters") or {}).get("status"), "unread")

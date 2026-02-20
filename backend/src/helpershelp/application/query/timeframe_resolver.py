@@ -135,8 +135,8 @@ class QueryTimeframeResolver:
 
     def _day_window(self, d: date) -> Dict[str, object]:
         start_local = datetime.combine(d, time.min, tzinfo=self._tz)
-        # Use inclusive end within same calendar day to satisfy downstream expectations.
-        end_local = start_local + timedelta(days=1) - timedelta(seconds=1)
+        # Day windows are half-open: [start, end).
+        end_local = start_local + timedelta(days=1)
         return self._window(start_local, end_local, "day")
 
     def _week_window(self, d: date) -> Dict[str, object]:

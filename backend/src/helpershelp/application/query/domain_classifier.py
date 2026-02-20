@@ -1,20 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Literal, Tuple, cast
+from typing import Dict, List, Tuple, cast
 
+from helpershelp.application.intent.intent_plan import Domain
 from helpershelp.infrastructure.llm import get_embedding_service
-
-Domain = Literal[
-    "calendar",
-    "reminders",
-    "mail",
-    "notes",
-    "files",
-    "location",
-    "photos",
-    "contacts",
-]
 
 
 @dataclass(frozen=True)
@@ -69,6 +59,16 @@ class DomainClassifier:
                 "När börjar mitt nästa möte?\n"
                 "Hur många aktiviteter har jag den här veckan?\n"
                 "När är mitt första möte imorgon?\n"
+                "Vad händer?\n"
+                "Vad är på gång?\n"
+                "Hur ser det ut?\n"
+                "Är det något idag?\n"
+                "Är jag upptagen?\n"
+                "Har jag något sen?\n"
+                "Vad har jag framför mig?\n"
+                "Är det lugnt?\n"
+                "Vad har jag den här tiden?\n"
+                "Är det något jag missar?\n"
                 "Vilka tider är lediga på fredag?\n"
                 "Hur länge är mötet med [person]?\n"
                 "Har jag något bokat på söndag?\n"
@@ -108,7 +108,7 @@ class DomainClassifier:
                 "Nyckelord: påminnelse, uppgift, todo, att göra, deadline, förfaller, försenad, klar."
             ),
             "notes": (
-                "Domän: anteckningar/noter/memory. Textanteckningar, mappar, nyligen, innehåll.\n"
+                "Domän: anteckningar/noter. Textanteckningar, mappar, nyligen, innehåll.\n"
                 "Typiska frågor:\n"
                 "Hur många anteckningar har jag totalt?\n"
                 "När skapade jag min senaste anteckning?\n"
@@ -121,6 +121,16 @@ class DomainClassifier:
                 "Finns det anteckningar med bilagor eller bilder?\n"
                 "Vilka anteckningar ligger i mappen \"[namn]\"?\n"
                 "Nyckelord: anteckning, notes, text, mapp, öppnat, ändrades, bilaga, titel."
+            ),
+            "memory": (
+                "Domän: minne/memory. Sammanfattningar av vad jag gjort, nyckelhändelser, mönster över tid.\n"
+                "Typiska frågor:\n"
+                "Vad minns jag från förra veckan?\n"
+                "Vad har jag gjort den senaste månaden?\n"
+                "Vad brukar jag göra på morgonen?\n"
+                "Vilka återkommande mönster ser du i min historik?\n"
+                "Har jag gjort något relaterat till [ämne] nyligen?\n"
+                "Nyckelord: minne, minnen, memory, historik, mönster, sammanfattning, kom ihåg."
             ),
             "files": (
                 "Domän: filer/dokument. Dokument, mappar, metadata (skapad/ändrad/storlek), sök på namn.\n"
@@ -205,6 +215,7 @@ class DomainClassifier:
             "mail": ["mejl", "mail", "inkorg", "epost", "e-post"],
             "reminders": ["påminn", "påminnelse", "uppgift", "uppgifter", "todo", "att göra"],
             "notes": ["anteckning", "anteckningar", "notes", "notering"],
+            "memory": ["minne", "minnen", "memory", "historik", "mönster", "kom ihåg", "remember"],
             "files": ["fil", "filer", "dokument", "pdf", "mapp"],
             "photos": ["bild", "bilder", "foto", "foton", "album", "video", "videor"],
             "contacts": ["kontakt", "kontakter", "telefonnummer", "adressbok"],

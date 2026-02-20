@@ -37,7 +37,7 @@ class QueryDataIntentTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         payload = resp.json().get("data_intent") or {}
         self.assertEqual(payload.get("domain"), "calendar")
-        self.assertEqual(payload.get("operation"), "next")
+        self.assertEqual(payload.get("operation"), "latest")
 
     def test_search_notes_query_returns_data_intent(self):
         resp = self.client.post(
@@ -47,7 +47,7 @@ class QueryDataIntentTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         payload = resp.json().get("data_intent") or {}
         self.assertEqual(payload.get("domain"), "notes")
-        self.assertEqual(payload.get("operation"), "search")
+        self.assertEqual(payload.get("operation"), "list")
 
     def test_ambiguous_query_returns_needs_clarification(self):
         resp = self.client.post(
