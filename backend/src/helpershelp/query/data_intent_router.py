@@ -20,7 +20,7 @@ from helpershelp.query.timeframe_resolver import QueryTimeframeResolver, TimeInt
 from helpershelp.core.time_utils import utcnow_aware
 
 
-def _map_relative_n_value(n: int) -> Optional[str]:
+def _map_relative_n_value(n: int) -> str:
     if n == 7:
         return "7d"
     if n == 30:
@@ -29,7 +29,7 @@ def _map_relative_n_value(n: int) -> Optional[str]:
         return "3m"
     if n == 365:
         return "1y"
-    return None
+    return f"{n}d"
 
 
 def _time_scope_from_time_intent(time_intent: TimeIntent, timeframe: Optional[Dict[str, object]]) -> TimeScopeDTO:
@@ -65,16 +65,17 @@ def _time_scope_from_time_intent(time_intent: TimeIntent, timeframe: Optional[Di
         scope_value = "30d"
     elif category == "REL_LAST_N_UNITS":
         n = int(payload.get("n", 0)) # pyright: ignore[reportArgumentType]
-        mapped_value = _map_relative_n_value(n)
-        if mapped_value is not None:
-            scope_type = "relative"
-            scope_value = mapped_value
-        else:
-            scope_type = "absolute"
+        scope_type = "relative"
+        scope_value = _map_relative_n_value(n)
     elif category == "ABS_DATE_SINGLE":
         scope_type = "absolute"
-    elif category in {"REL_TOMORROW", "REL_YESTERDAY"}:
-        scope_type = "absolute"
+        scope_value = str(payload.get("date")) if payload else "unknown"
+    elif category == "REL_TOMORROW":
+        scope_type = "relative"
+        scope_value = "tomorrow"
+    elif category == "REL_YESTERDAY":
+        scope_type = "relative"
+        scope_value = "yesterday"
     elif category == "NONE":
         scope_type = "all"
 

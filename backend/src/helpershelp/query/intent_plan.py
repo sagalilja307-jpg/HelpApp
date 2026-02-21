@@ -44,6 +44,12 @@ class TimeScopeDTO(BaseModel):
     type: TimeScopeType
     value: Optional[str] = None
 
+    @model_validator(mode="after")
+    def validate_value_required(self) -> "TimeScopeDTO":
+        if self.type != "all" and self.value is None:
+            raise ValueError(f"time value cannot be null when type is '{self.type}'")
+        return self
+
 
 class IntentPlanDTO(BaseModel):
     model_config = ConfigDict(extra="forbid")
