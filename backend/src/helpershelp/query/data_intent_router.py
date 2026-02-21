@@ -7,17 +7,17 @@ Deterministisk router som mappar användarfrågor till IntentPlanDTO-liknande Da
 from datetime import datetime
 from typing import Dict, Optional, cast
 
-from helpershelp.application.intent.intent_plan import (
+from helpershelp.query.intent_plan import (
     Domain,
     IntentPlanDTO,
     Operation,
     TimeScopeDTO,
     TimeScopeType,
 )
-from helpershelp.application.query.domain_classifier import DomainClassifier
-from helpershelp.application.query.time_policy import TimePolicy, TimePolicyConfig
-from helpershelp.application.query.timeframe_resolver import QueryTimeframeResolver, TimeIntent
-from helpershelp.domain.value_objects.time_utils import utcnow_aware
+from helpershelp.query.domain_classifier import DomainClassifier
+from helpershelp.query.time_policy import TimePolicy, TimePolicyConfig
+from helpershelp.query.timeframe_resolver import QueryTimeframeResolver, TimeIntent
+from helpershelp.core.time_utils import utcnow_aware
 
 
 def _map_relative_n_value(n: int) -> Optional[str]:
@@ -42,6 +42,21 @@ def _time_scope_from_time_intent(time_intent: TimeIntent, timeframe: Optional[Di
     if category == "REL_TODAY":
         scope_type = "relative"
         scope_value = "today"
+    elif category == "REL_TODAY_MORNING":
+        scope_type = "relative"
+        scope_value = "today_morning"
+    elif category == "REL_TODAY_DAY":
+        scope_type = "relative"
+        scope_value = "today_day"
+    elif category == "REL_TODAY_AFTERNOON":
+        scope_type = "relative"
+        scope_value = "today_afternoon"
+    elif category == "REL_TODAY_EVENING":
+        scope_type = "relative"
+        scope_value = "today_evening"
+    elif category == "REL_TOMORROW_MORNING":
+        scope_type = "relative"
+        scope_value = "tomorrow_morning"
     elif category in {"REL_THIS_WEEK", "REL_NEXT_WEEK", "REL_LAST_WEEK"}:
         scope_type = "relative"
         scope_value = "7d"

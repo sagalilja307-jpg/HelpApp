@@ -4,8 +4,8 @@ import os
 
 from fastapi import APIRouter
 
-from helpershelp.domain.value_objects.time_utils import utcnow
-from helpershelp.config import DEFAULT_DB_PATH
+from helpershelp.core.time_utils import utcnow
+from helpershelp.core.config import DEFAULT_DB_PATH
 
 router = APIRouter()
 

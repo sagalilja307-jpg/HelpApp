@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import cast
 
-from helpershelp.application.intent.intent_plan import IntentPlanDTO
-from helpershelp.application.query.data_intent_router import DataIntentRouter
+from helpershelp.query.intent_plan import IntentPlanDTO
+from helpershelp.query.data_intent_router import DataIntentRouter
 
 
 class IntentBuilder:

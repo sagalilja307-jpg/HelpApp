@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from helpershelp.config import OLLAMA_HOST
+from helpershelp.core.config import OLLAMA_HOST
 
 try:
     import requests

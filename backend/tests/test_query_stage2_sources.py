@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from helpershelp.infrastructure.persistence.sqlite_storage import SqliteStore, StoreConfig
+from helpershelp.store.sqlite_storage import SqliteStore, StoreConfig
 
 
 class QueryStage2SourcesTests(unittest.TestCase):

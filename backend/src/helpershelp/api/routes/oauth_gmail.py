@@ -10,7 +10,7 @@ import requests
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
 
-from helpershelp.domain.value_objects.time_utils import utcnow
+from helpershelp.core.time_utils import utcnow
 from helpershelp.mail.oauth_models import OAuthToken
 
 router = APIRouter()

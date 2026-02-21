@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-from helpershelp.application.mail.mail_query_service import MailQueryService
-from helpershelp.application.query.data_intent_router import DataIntentRouter
-from helpershelp.infrastructure.security.oauth_adapter import OAuthService
+from helpershelp.mail.mail_query_service import MailQueryService
+from helpershelp.query.data_intent_router import DataIntentRouter
+from helpershelp.auth.oauth_adapter import OAuthService
 from helpershelp.mail.provider import mail_provider
 
 mail_queries = MailQueryService(mail_provider)

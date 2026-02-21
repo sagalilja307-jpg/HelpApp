@@ -5,7 +5,7 @@ import math
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from helpershelp.config import OLLAMA_EMBED_MODEL  # single source of truth
+from helpershelp.core.config import OLLAMA_EMBED_MODEL  # single source of truth
 
 from .ollama_adapter import OllamaClient, OllamaUnavailable
 
@@ -45,7 +45,7 @@ class EmbeddingService:
         # OllamaClient has .host (we removed OllamaConfig)
         self.ollama_host = getattr(self.ollama, "host", "").rstrip("/") or "http://localhost:11434"
 
-        # single source of truth is helpershelp.config, but allow override for tests
+        # single source of truth is helpershelp.core.config, but allow override for tests
         self.ollama_embed_model = (embed_model or OLLAMA_EMBED_MODEL).strip() or "bge-m3"
 
         self.ollama_reachable = False

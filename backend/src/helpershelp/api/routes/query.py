@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, model_validator
 
 from helpershelp.api.models import DataIntent
-from helpershelp.application.query.data_intent_router import DataIntentRouter
+from helpershelp.query.data_intent_router import DataIntentRouter
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

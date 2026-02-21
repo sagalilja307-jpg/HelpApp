@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from helpershelp.application.intent.intent_plan import Domain, Operation, TimeScopeDTO
+from helpershelp.query.intent_plan import Domain, Operation, TimeScopeDTO
 
 DataIntentDomain = Domain | Literal["system"]
 DataIntentOperation = Operation | Literal["needs_clarification"]

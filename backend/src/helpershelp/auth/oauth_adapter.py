@@ -3,7 +3,7 @@ from typing import Optional, Dict
 import jwt
 import logging
 
-from helpershelp.domain.value_objects.time_utils import utcnow
+from helpershelp.core.time_utils import utcnow
 from helpershelp.mail.oauth_models import OAuthToken, TokenValidationResponse, TokenRefreshRequest
 
 logger = logging.getLogger(__name__)

@@ -26,7 +26,18 @@ Operation = Literal[
 ]
 Mode = Literal["info"]
 TimeScopeType = Literal["relative", "absolute", "all"]
-TimeScopeValue = Literal["today", "7d", "30d", "3m", "1y"]
+TimeScopeValue = Literal[
+    "today",
+    "today_morning",
+    "today_day",
+    "today_afternoon",
+    "today_evening",
+    "tomorrow_morning",
+    "7d",
+    "30d",
+    "3m",
+    "1y",
+]
 
 
 class TimeScopeDTO(BaseModel):

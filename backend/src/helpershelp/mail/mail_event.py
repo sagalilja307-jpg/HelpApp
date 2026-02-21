@@ -2,7 +2,7 @@ from datetime import datetime
 from email.utils import parseaddr
 from typing import Dict, Any
 
-from helpershelp.domain.value_objects.time_utils import parse_iso_datetime
+from helpershelp.core.time_utils import parse_iso_datetime
 from helpershelp.mail.content_object import ContentObject, MailSender
 
 

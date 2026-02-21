@@ -5,7 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Query
 
 from helpershelp.api.deps import mail_queries
-from helpershelp.domain.value_objects.time_utils import parse_iso_datetime
+from helpershelp.core.time_utils import parse_iso_datetime
 from helpershelp.mail.content_object import ContentObject
 
 router = APIRouter()

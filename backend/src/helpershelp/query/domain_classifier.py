@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, cast
 
-from helpershelp.application.intent.intent_plan import Domain
-from helpershelp.infrastructure.llm import get_embedding_service
+from helpershelp.query.intent_plan import Domain
+from helpershelp.llm import get_embedding_service
 
 
 @dataclass(frozen=True)

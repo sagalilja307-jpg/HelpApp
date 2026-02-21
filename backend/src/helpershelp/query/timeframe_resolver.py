@@ -6,12 +6,17 @@ from datetime import date, datetime, time, timedelta
 from typing import Callable, Dict, Literal, Optional
 from zoneinfo import ZoneInfo
 
-from helpershelp.domain.value_objects.time_utils import ensure_utc, utcnow_aware
+from helpershelp.core.time_utils import ensure_utc, utcnow_aware
 
 TimeIntentCategory = Literal[
     "NONE",
     "REL_TODAY",
+    "REL_TODAY_MORNING",
+    "REL_TODAY_DAY",
+    "REL_TODAY_AFTERNOON",
+    "REL_TODAY_EVENING",
     "REL_TOMORROW",
+    "REL_TOMORROW_MORNING",
     "REL_YESTERDAY",
     "REL_THIS_WEEK",
     "REL_NEXT_WEEK",
@@ -76,6 +81,21 @@ class QueryTimeframeResolver:
         if "igår" in q or "yesterday" in q:
             return self._result("REL_YESTERDAY", self._day_window(today - timedelta(days=1)))
 
+        # 1.5) Parts of day
+        if "imorgon bitti" in q or "tomorrow morning" in q:
+            return self._result("REL_TOMORROW_MORNING", self._part_of_day_window(today + timedelta(days=1), 6, 10))
+        if "i morse" in q or "imorse" in q or "this morning" in q or "morgon" in q:
+            return self._result("REL_TODAY_MORNING", self._part_of_day_window(today, 6, 10))
+        if "i eftermiddag" in q or "eftermiddagen" in q or "eftermiddag" in q or "afternoon" in q:
+            return self._result("REL_TODAY_AFTERNOON", self._part_of_day_window(today, 13, 17))
+        if "i kväll" in q or "ikväll" in q or "kvällen" in q or "kväll" in q or "evening" in q:
+            return self._result("REL_TODAY_EVENING", self._part_of_day_window(today, 17, 23))
+        if "på dagen" in q or "idag" in q or "day" in q:
+            # Overlap protection: handled earlier by 'idag', but allows a 'dag' fallback
+            # 'dag' commonly refers to working hours or the whole local day.
+            if "dag" in q and not ("idag" in q or "today" in q):
+                return self._result("REL_TODAY_DAY", self._part_of_day_window(today, 10, 16))
+
         # 2) Week
         if "denna vecka" in q or "this week" in q or "veckan" in q:
             return self._result("REL_THIS_WEEK", self._week_window(today))
@@ -138,6 +158,11 @@ class QueryTimeframeResolver:
         # Day windows are half-open: [start, end).
         end_local = start_local + timedelta(days=1)
         return self._window(start_local, end_local, "day")
+
+    def _part_of_day_window(self, d: date, start_hour: int, end_hour: int) -> Dict[str, object]:
+        start_local = datetime.combine(d, time(hour=start_hour), tzinfo=self._tz)
+        end_local = datetime.combine(d, time(hour=end_hour), tzinfo=self._tz)
+        return self._window(start_local, end_local, "custom")
 
     def _week_window(self, d: date) -> Dict[str, object]:
         week_start = d - timedelta(days=d.weekday())
