@@ -1,11 +1,11 @@
-from __future__ import annotations
-
 """
 Deterministisk router som mappar användarfrågor till IntentPlanDTO-liknande DataIntent payload.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
-from typing import Dict, Optional, cast
+from typing import Callable, Dict, Optional
 
 from helpershelp.query.intent_plan import (
     Domain,
@@ -32,7 +32,9 @@ def _map_relative_n_value(n: int) -> str:
     return f"{n}d"
 
 
-def _time_scope_from_time_intent(time_intent: TimeIntent, timeframe: Optional[Dict[str, object]]) -> TimeScopeDTO:
+def _time_scope_from_time_intent(
+    time_intent: TimeIntent, _timeframe: Optional[Dict[str, object]]
+) -> TimeScopeDTO:
     category = time_intent.category
     payload = time_intent.payload or {}
 
@@ -64,7 +66,7 @@ def _time_scope_from_time_intent(time_intent: TimeIntent, timeframe: Optional[Di
         scope_type = "relative"
         scope_value = "30d"
     elif category == "REL_LAST_N_UNITS":
-        n = int(payload.get("n", 0)) # pyright: ignore[reportArgumentType]
+        n = int(payload.get("n", 0))  # pyright: ignore[reportArgumentType]
         scope_type = "relative"
         scope_value = _map_relative_n_value(n)
     elif category == "ABS_DATE_SINGLE":
@@ -85,11 +87,16 @@ def _time_scope_from_time_intent(time_intent: TimeIntent, timeframe: Optional[Di
     )
 
 
-def _operation_for_query(domain: Domain, query: str) -> Operation:
+def _operation_for_query(_domain: Domain, query: str) -> Operation:
     q = (query or "").lower().strip()
 
     # ---- Exists ----
-    if q.startswith("finns det") or q.startswith("finns det någon") or q.startswith("har jag några") or q.startswith("har jag någon"):
+    if (
+        q.startswith("finns det")
+        or q.startswith("finns det någon")
+        or q.startswith("har jag några")
+        or q.startswith("har jag någon")
+    ):
         return "exists"
 
     # ---- Count ----
@@ -103,11 +110,19 @@ def _operation_for_query(domain: Domain, query: str) -> Operation:
     # ---- Latest ----
     # Only treat as 'latest' when the question is explicitly asking *when* (starts with "när")
     # e.g. "När är nästa...", "När tog jag den senaste..."
-    if q.startswith("när") and any(k in q for k in ("nästa", "när är nästa", "senaste", "senast", "next", "last")):
+    if q.startswith("när") and any(
+        k in q for k in ("nästa", "när är nästa", "senaste", "senast", "next", "last")
+    ):
         return "latest"
 
     # ---- Explicit list phrasing ----
-    if q.startswith("vilka") or q.startswith("vad har jag") or q.startswith("vad är") or q.startswith("vad händer") or q.startswith("var"):
+    if (
+        q.startswith("vilka")
+        or q.startswith("vad har jag")
+        or q.startswith("vad är")
+        or q.startswith("vad händer")
+        or q.startswith("var")
+    ):
         return "list"
 
     # ---- Search-like phrasing ----
@@ -123,13 +138,17 @@ class DataIntentRouter:
         self,
         *,
         timezone_name: str = "Europe/Stockholm",
-        now_provider=None,
+        now_provider: Optional[Callable[[], datetime]] = None,
     ) -> None:
         _now = now_provider or utcnow_aware
 
         self.domain_classifier = DomainClassifier()
-        self.time_resolver = QueryTimeframeResolver(timezone_name=timezone_name, now_provider=_now)
-        self.time_policy = TimePolicy(TimePolicyConfig(timezone_name=timezone_name), now_provider=_now)
+        self.time_resolver = QueryTimeframeResolver(
+            timezone_name=timezone_name, now_provider=_now
+        )
+        self.time_policy = TimePolicy(
+            TimePolicyConfig(timezone_name=timezone_name), now_provider=_now
+        )
 
     def route(self, query: str, language: str = "sv") -> Dict[str, object]:
         q = (query or "").strip()
@@ -139,15 +158,20 @@ class DataIntentRouter:
             dom = self.domain_classifier.classify(q)
         except Exception:
             parsed = self.time_resolver.resolve(q)
-            return self._clarification_response(
-                suggestions=["calendar", "mail"],
-                time_scope=_time_scope_from_time_intent(parsed.time_intent, parsed.timeframe),
-            )
+            return {
+                "needs_clarification": True,
+                "suggestions": ["calendar", "mail"],
+                "time_scope": _time_scope_from_time_intent(
+                    parsed.time_intent, parsed.timeframe
+                ).model_dump(mode="python"),
+            }
 
         parsed = self.time_resolver.resolve(q)
         lower_q = q.lower()
 
-        if dom.domain == "mail" and ("oläst" in lower_q or "olästa" in lower_q or "unread" in lower_q):
+        if dom.domain == "mail" and (
+            "oläst" in lower_q or "olästa" in lower_q or "unread" in lower_q
+        ):
             filters["status"] = "unread"
 
         # Always definitively resolve domain, default to calendar

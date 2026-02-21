@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -59,4 +58,3 @@ class IntentPlanDTO(BaseModel):
     operation: Operation = "count"
     time_scope: TimeScopeDTO
     filters: Dict[str, Any] = Field(default_factory=dict)
-

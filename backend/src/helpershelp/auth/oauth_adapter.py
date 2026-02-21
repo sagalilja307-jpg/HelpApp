@@ -1,10 +1,10 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Optional, Dict
 import jwt
 import logging
 
 from helpershelp.core.time_utils import utcnow
-from helpershelp.mail.oauth_models import OAuthToken, TokenValidationResponse, TokenRefreshRequest
+from helpershelp.mail.oauth_models import OAuthToken, TokenValidationResponse
 
 logger = logging.getLogger(__name__)
 
