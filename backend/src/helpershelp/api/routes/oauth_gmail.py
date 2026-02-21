@@ -10,9 +10,7 @@ import requests
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
 
-from helpershelp.api.deps import get_assistant_store
 from helpershelp.domain.value_objects.time_utils import utcnow
-from helpershelp.infrastructure.security.token_manager import store_oauth_token
 from helpershelp.mail.oauth_models import OAuthToken
 
 router = APIRouter()
@@ -104,9 +102,6 @@ def gmail_start(
     }
     auth_url = f"{_GOOGLE_AUTH_URL}?{urlencode(query)}"
 
-    store = get_assistant_store()
-    store.audit("oauth_gmail_start", {"provider": "gmail"})
-
     return GmailStartResponse(
         authorization_url=auth_url,
         state=state,
@@ -139,12 +134,7 @@ def gmail_exchange(request: GmailExchangeRequest):
                 detail = payload.get("error", detail)
             except Exception:
                 detail = exc.response.text or detail
-        store = get_assistant_store()
-        store.audit("oauth_gmail_exchange_fail", {"status": status_code, "detail": detail})
         raise HTTPException(status_code=status_code, detail=detail) from exc
-    except requests.RequestException as exc:
-        store = get_assistant_store()
-        store.audit("oauth_gmail_exchange_fail", {"status": 502, "detail": "network_error"})
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Network error while exchanging Gmail code",
@@ -156,16 +146,6 @@ def gmail_exchange(request: GmailExchangeRequest):
         refresh_token=payload.get("refresh_token"),
         expires_in=int(payload.get("expires_in", 3600)),
         token_type=payload.get("token_type", "Bearer"),
-    )
-
-    store = get_assistant_store()
-    persisted = store_oauth_token(store, provider="gmail", token=token)
-    store.audit(
-        "oauth_gmail_exchange_ok",
-        {
-            "provider": "gmail",
-            "persisted": bool(persisted.get("stored", False)),
-        },
     )
 
     return token
@@ -192,12 +172,7 @@ def gmail_refresh(request: GmailRefreshRequest):
                 detail = payload.get("error", detail)
             except Exception:
                 detail = exc.response.text or detail
-        store = get_assistant_store()
-        store.audit("oauth_gmail_refresh_fail", {"status": status_code, "detail": detail})
         raise HTTPException(status_code=status_code, detail=detail) from exc
-    except requests.RequestException as exc:
-        store = get_assistant_store()
-        store.audit("oauth_gmail_refresh_fail", {"status": 502, "detail": "network_error"})
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Network error while refreshing Gmail token",
@@ -209,16 +184,6 @@ def gmail_refresh(request: GmailRefreshRequest):
         refresh_token=payload.get("refresh_token") or request.refresh_token,
         expires_in=int(payload.get("expires_in", 3600)),
         token_type=payload.get("token_type", "Bearer"),
-    )
-
-    store = get_assistant_store()
-    persisted = store_oauth_token(store, provider="gmail", token=token)
-    store.audit(
-        "oauth_gmail_refresh_ok",
-        {
-            "provider": "gmail",
-            "persisted": bool(persisted.get("stored", False)),
-        },
     )
 
     return token

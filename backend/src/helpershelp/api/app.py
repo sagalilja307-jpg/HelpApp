@@ -8,23 +8,17 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from helpershelp.api.deps import get_assistant_store
-from helpershelp.api.routes.assistant import router as assistant_router
 from helpershelp.api.routes.auth import router as auth_router
 from helpershelp.api.routes.health import router as health_router
 from helpershelp.api.routes.mail import router as mail_router
 from helpershelp.api.routes.oauth_gmail import router as oauth_gmail_router
 from helpershelp.api.routes.query import router as query_router
-from helpershelp.api.routes.sync import router as sync_router
-from helpershelp.application.assistant.sync import start_sync_loop
 
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    store = get_assistant_store()
-    start_sync_loop(store)
     yield
 
 
@@ -88,5 +82,3 @@ app.include_router(auth_router)
 app.include_router(oauth_gmail_router)
 app.include_router(mail_router)
 app.include_router(health_router)
-app.include_router(assistant_router)
-app.include_router(sync_router)

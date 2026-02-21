@@ -13,7 +13,6 @@ from helpershelp.application.intent.intent_plan import (
     Operation,
     TimeScopeDTO,
     TimeScopeType,
-    TimeScopeValue,
 )
 from helpershelp.application.query.domain_classifier import DomainClassifier
 from helpershelp.application.query.time_policy import TimePolicy, TimePolicyConfig
@@ -21,7 +20,7 @@ from helpershelp.application.query.timeframe_resolver import QueryTimeframeResol
 from helpershelp.domain.value_objects.time_utils import utcnow_aware
 
 
-def _map_relative_n_value(n: int) -> Optional[TimeScopeValue]:
+def _map_relative_n_value(n: int) -> Optional[str]:
     if n == 7:
         return "7d"
     if n == 30:
@@ -38,7 +37,7 @@ def _time_scope_from_time_intent(time_intent: TimeIntent, timeframe: Optional[Di
     payload = time_intent.payload or {}
 
     scope_type: TimeScopeType = "all"
-    scope_value: Optional[TimeScopeValue] = None
+    scope_value: Optional[str] = None
 
     if category == "REL_TODAY":
         scope_type = "relative"
@@ -64,14 +63,9 @@ def _time_scope_from_time_intent(time_intent: TimeIntent, timeframe: Optional[Di
     elif category == "NONE":
         scope_type = "all"
 
-    start = cast(Optional[datetime], timeframe.get("start") if timeframe else None)
-    end = cast(Optional[datetime], timeframe.get("end") if timeframe else None)
-
     return TimeScopeDTO(
         type=scope_type,
         value=scope_value,
-        start=start,
-        end=end,
     )
 
 
@@ -86,9 +80,9 @@ def _operation_for_query(domain: Domain, query: str) -> Operation:
     if q.startswith("hur många") or "antal" in q:
         return "count"
 
-    # ---- Sum duration ----
+    # ---- Sum ----
     if q.startswith("hur länge") or "hur lång tid" in q:
-        return "sum_duration"
+        return "sum"
 
     # ---- Latest ----
     # Only treat as 'latest' when the question is explicitly asking *when* (starts with "när")
@@ -102,10 +96,6 @@ def _operation_for_query(domain: Domain, query: str) -> Operation:
 
     # ---- Search-like phrasing ----
     if any(word in q for word in ["sök", "söker", "search", "find", "hitta", "visa"]):
-        return "list"
-
-    # ---- Domain-aware fallback ----
-    if domain == "calendar":
         return "list"
 
     # Safe fallback
@@ -144,40 +134,22 @@ class DataIntentRouter:
         if dom.domain == "mail" and ("oläst" in lower_q or "olästa" in lower_q or "unread" in lower_q):
             filters["status"] = "unread"
 
-        if dom.needs_clarification or dom.domain is None:
-            return self._clarification_response(
-                suggestions=list(dom.suggestions) if dom.suggestions else ["calendar", "mail"],
-                time_scope=_time_scope_from_time_intent(parsed.time_intent, parsed.timeframe),
-            )
+        # Always definitively resolve domain, default to calendar
+        resolved_domain: Domain = "calendar"
+        if dom.domain is not None:
+            resolved_domain = dom.domain
+        elif dom.suggestions:
+            resolved_domain = dom.suggestions[0]
 
-        timeframe = self.time_policy.apply(dom.domain, parsed)
+        timeframe = self.time_policy.apply(resolved_domain, parsed)
         time_scope = _time_scope_from_time_intent(parsed.time_intent, timeframe)
-        operation = _operation_for_query(dom.domain, q)
+        operation = _operation_for_query(resolved_domain, q)
 
         plan = IntentPlanDTO(
-            domain=dom.domain,
+            domain=resolved_domain,
             mode="info",
             operation=operation,
             time_scope=time_scope,
             filters=filters,
-            grouping="none",
-            sort="none",
-            needs_clarification=False,
-            clarification_message=None,
-            suggestions=[],
         )
         return plan.model_dump(mode="python")
-
-    def _clarification_response(self, *, suggestions, time_scope: TimeScopeDTO) -> Dict[str, object]:
-        return {
-            "domain": "system",
-            "mode": "info",
-            "operation": "needs_clarification",
-            "time_scope": time_scope.model_dump(mode="python"),
-            "filters": {},
-            "grouping": "none",
-            "sort": "none",
-            "needs_clarification": True,
-            "clarification_message": "Kan du förtydliga vilken datakälla du menar?",
-            "suggestions": list(suggestions),
-        }

@@ -38,10 +38,8 @@ class OAuthGmailFlowTests(unittest.TestCase):
         os.environ["HELPERSHELP_GMAIL_CLIENT_SECRET"] = "test-client-secret"
 
         from helpershelp.api.app import app  # noqa: PLC0415
-        from helpershelp.api.deps import reset_assistant_store  # noqa: PLC0415
-
+        
         self.app = app
-        reset_assistant_store()
 
         store = SqliteStore(StoreConfig(db_path=self.db_path))
         store.init()

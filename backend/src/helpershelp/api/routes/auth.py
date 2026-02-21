@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from helpershelp.api.deps import get_assistant_store, oauth_service
-from helpershelp.infrastructure.security.token_manager import store_oauth_token
+from helpershelp.api.deps import oauth_service
 from helpershelp.mail.oauth_models import (
     OAuthToken,
     TokenRefreshRequest,
@@ -46,6 +45,4 @@ def refresh_token(request: TokenRefreshRequest):
 @router.post("/auth/store", tags=["auth"])
 def store_token(token: OAuthToken, provider: str = Query(default="gmail")):
     oauth_service.store_token(provider, token)
-    store = get_assistant_store()
-    persisted = store_oauth_token(store, provider=provider, token=token)
-    return {"status": "stored", "provider": provider, "persisted": persisted}
+    return {"status": "stored", "provider": provider, "persisted": False}

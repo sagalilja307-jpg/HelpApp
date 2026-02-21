@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from helpershelp.application.intent.intent_plan import Domain, Grouping, Operation, SortOption, TimeScopeDTO
+from helpershelp.application.intent.intent_plan import Domain, Operation, TimeScopeDTO
 
 DataIntentDomain = Domain | Literal["system"]
 DataIntentOperation = Operation | Literal["needs_clarification"]
@@ -16,11 +16,6 @@ class DataIntent(BaseModel):
     operation: DataIntentOperation
     time_scope: TimeScopeDTO
     filters: Dict[str, Any] = Field(default_factory=dict)
-    grouping: Optional[Grouping] = "none"
-    sort: Optional[SortOption] = "none"
-    needs_clarification: bool = False
-    clarification_message: Optional[str] = None
-    suggestions: List[Domain] = Field(default_factory=list)
 
 
 class QueryDataIntentResponse(BaseModel):

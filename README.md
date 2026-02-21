@@ -1,27 +1,10 @@
 # Helper Monorepo
 
-Monorepot innehåller iOS-appen, backend och dokumentation i en tydlig struktur.
+Monorepot innehåller iOS-appen och backend i en tydlig struktur. Systemet är nu renodlat till att enbart hantera "query" och "mail".
 
 ## Struktur
 - `ios/` – iOS-projektet (`ios/Helper.xcodeproj`)
-- `backend/` – FastAPI-backend (`uvicorn api:app --reload`)
-- `docs/` – arkitektur och gemensam dokumentation
-- `00_START_HERE/` – Finder-genvägar till de viktigaste delarna
-
-## Stabilitetsstandard (v1)
-- Stödnivåer `0..3` styr intervention (backend är source-of-truth, iOS cachar lokalt).
-- Default för ny användare: nivå `1`, adaptation på inom vald nivå.
-- Tidskritisk signal följer 24h-fönster (event start, task/reminder due/overdue).
-- Daglig nudgetak per nivå: `0/2/3/5`.
-- Externa handlingar ska fortsätta följa `propose -> confirm -> execute`.
-
-## Snapshot DataIntent v1 (query)
-- Regler och kontrakt för backend-only intent finns i:
-  - `docs/architecture/SNAPSHOT_DATAINTENT_V1_REGLER.md`
-- Arkitektur-låsning (normativt):
-  - `docs/architecture/SNAPSHOT_DATAINTENT_V1.md`
-  - `docs/architecture/SNAPSHOT_DATAINTENT_V1_SEQUENCE.md`
-- Använd dokumentet som normativ källa vid alla ändringar i `/query`-flödet.
+- `backend/` – FastAPI-backend för query och mail (`uvicorn api:app --reload`)
 
 ## Snabbstart: iOS
 1. Öppna `ios/Helper.xcodeproj` i Xcode.
@@ -39,7 +22,7 @@ uvicorn api:app --reload
 
 ## Start/Stop: backend
 
-Starta backend (lyssna pa alla interfaces):
+Starta backend (lyssna på alla interfaces):
 ```bash
 cd backend
 source .venv/bin/activate

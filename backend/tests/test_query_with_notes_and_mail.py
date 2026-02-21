@@ -17,9 +17,6 @@ class QueryNotesAndMailTests(unittest.TestCase):
         os.environ["HELPERSHELP_ENABLE_SYNC_LOOP"] = "0"
 
         from helpershelp.api.app import app  # noqa: PLC0415
-        from helpershelp.api.deps import reset_assistant_store  # noqa: PLC0415
-
-        reset_assistant_store()
         store = SqliteStore(StoreConfig(db_path=self.db_path))
         store.init()
 
