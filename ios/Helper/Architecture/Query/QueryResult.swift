@@ -11,7 +11,7 @@ struct QueryResult: Codable, Equatable, Sendable {
         let latitude: Double?
         let longitude: Double?
 
-        init(
+        nonisolated init(
             id: UUID,
             source: QuerySource,
             title: String,
@@ -33,5 +33,5 @@ struct QueryResult: Codable, Equatable, Sendable {
     let timeRange: DateInterval?
     var entries: [Entry]
     var answer: String?
-    var intentPlan: BackendIntentPlanDTO? = nil
+    let intentPlan: BackendIntentPlanDTO?
 }
