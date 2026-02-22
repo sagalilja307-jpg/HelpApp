@@ -16,6 +16,14 @@ final class SourceConnectionStore: SourceConnectionStoring, @unchecked Sendable 
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        // On first run, ensure the source-enabled keys exist and default to true
+        // so sources are opt-in enabled in app settings (OS permissions still required).
+        let enabledKeys = [Self.contactsEnabledKey, Self.photosEnabledKey, Self.filesEnabledKey, Self.locationEnabledKey]
+        for key in enabledKeys {
+            if defaults.object(forKey: key) == nil {
+                defaults.set(true, forKey: key)
+            }
+        }
     }
 
     func isEnabled(_ source: QuerySource) -> Bool {
