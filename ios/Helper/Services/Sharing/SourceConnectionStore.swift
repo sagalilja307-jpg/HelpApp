@@ -27,11 +27,18 @@ final class SourceConnectionStore: SourceConnectionStoring, @unchecked Sendable 
     }
 
     func isEnabled(_ source: QuerySource) -> Bool {
+        if source == .photos {
+            return true
+        }
         guard let key = enabledKey(for: source) else { return false }
         return defaults.bool(forKey: key)
     }
 
     func setEnabled(_ enabled: Bool, for source: QuerySource) {
+        if source == .photos {
+            defaults.set(true, forKey: Self.photosEnabledKey)
+            return
+        }
         guard let key = enabledKey(for: source) else { return }
         defaults.set(enabled, forKey: key)
     }

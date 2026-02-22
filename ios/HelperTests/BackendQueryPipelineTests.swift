@@ -30,6 +30,7 @@ final class BackendQueryPipelineTests: XCTestCase {
         XCTAssertEqual(decoded.intentPlan.timeScope.type, .relative)
         XCTAssertEqual(decoded.intentPlan.timeScope.value, "today_morning")
         XCTAssertEqual(decoded.intentPlan.filters["query"], AnyCodable("standup"))
+        XCTAssertTrue(decoded.hasDataIntent)
     }
 
     func testBackendQueryResponseDecodesAllWithNilValue() throws {
@@ -54,6 +55,30 @@ final class BackendQueryPipelineTests: XCTestCase {
         XCTAssertEqual(decoded.intentPlan.domain, .reminders)
         XCTAssertEqual(decoded.intentPlan.timeScope.type, .all)
         XCTAssertNil(decoded.intentPlan.timeScope.value)
+        XCTAssertTrue(decoded.hasDataIntent)
+    }
+
+    func testBackendQueryResponseDecodesIntentPlanWithoutDataIntentFlag() throws {
+        let json = """
+        {
+          "intent_plan": {
+            "domain": "calendar",
+            "mode": "info",
+            "operation": "count",
+            "time_scope": {
+              "type": "relative",
+              "value": "today"
+            },
+            "filters": {}
+          }
+        }
+        """
+
+        let data = try XCTUnwrap(json.data(using: .utf8))
+        let decoded = try BackendQueryAPIService.decoder.decode(BackendQueryResponseDTO.self, from: data)
+
+        XCTAssertEqual(decoded.intentPlan.domain, .calendar)
+        XCTAssertFalse(decoded.hasDataIntent)
     }
 
     func testPipelinePassesThroughIntentPlan() async throws {
@@ -94,6 +119,61 @@ final class BackendQueryPipelineTests: XCTestCase {
         _ = try await pipeline.run(UserQuery(text: "visa mina anteckningar"))
 
         XCTAssertEqual(collector.lastSource, .memory)
+    }
+
+    func testMailWithDataIntentUsesBackendQueryResponseAndSkipsCollector() async throws {
+        let collector = RecordingCollector()
+        let plan = makePlan(domain: .mail, operation: .count, type: .all, value: nil)
+        let response = BackendQueryResponseDTO(
+            intentPlan: plan,
+            answer: "3 olästa mejl.",
+            entries: [
+                BackendQueryEntryDTO(
+                    id: UUID().uuidString,
+                    source: "mail",
+                    type: .email,
+                    title: "Välkommen",
+                    body: "Hej",
+                    date: Date(timeIntervalSince1970: 1_700_000_000)
+                )
+            ],
+            hasDataIntent: true
+        )
+        let pipeline = QueryPipeline(
+            backendQueryService: MockBackendQueryService(response: response),
+            localCollector: collector,
+            accessGate: AllowingAccess()
+        )
+
+        let result = try await pipeline.run(UserQuery(text: "hur många olästa mejl har jag?"))
+
+        XCTAssertEqual(result.answer, "3 olästa mejl.")
+        XCTAssertEqual(result.intentPlan, plan)
+        XCTAssertEqual(result.entries.count, 1)
+        XCTAssertEqual(result.entries.first?.source, .memory)
+        XCTAssertNil(collector.lastSource)
+    }
+
+    func testMailWithoutDataIntentReturnsTextOnlyAndSkipsCollector() async throws {
+        let collector = RecordingCollector()
+        let plan = makePlan(domain: .mail, operation: .count, type: .all, value: nil)
+        let response = BackendQueryResponseDTO(
+            intentPlan: plan,
+            answer: "Det här ska vara text-only.",
+            hasDataIntent: false
+        )
+        let pipeline = QueryPipeline(
+            backendQueryService: MockBackendQueryService(response: response),
+            localCollector: collector,
+            accessGate: AllowingAccess()
+        )
+
+        let result = try await pipeline.run(UserQuery(text: "mail"))
+
+        XCTAssertEqual(result.answer, "Det här ska vara text-only.")
+        XCTAssertNil(result.intentPlan)
+        XCTAssertTrue(result.entries.isEmpty)
+        XCTAssertNil(collector.lastSource)
     }
 
     private func makePlan(

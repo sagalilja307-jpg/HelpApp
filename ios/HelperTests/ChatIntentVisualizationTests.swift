@@ -111,12 +111,36 @@ final class ChatIntentVisualizationTests: XCTestCase {
             timeScopeType: .all,
             timeScopeValue: nil
         )
-        let vm = makeViewModel(plan: plan)
+        let vm = makeViewModel(
+            plan: plan,
+            hasDataIntent: true,
+            answer: "3 olästa mejl."
+        )
 
         vm.query = "hur många olästa mejl har jag?"
         await vm.send()
 
         XCTAssertEqual(vm.messages.last?.visualizationComponent, .narrative)
+    }
+
+    func testMailWithoutDataIntentRendersTextOnly() async {
+        let plan = makePlan(
+            domain: .mail,
+            operation: .count,
+            timeScopeType: .all,
+            timeScopeValue: nil
+        )
+        let vm = makeViewModel(
+            plan: plan,
+            hasDataIntent: false,
+            answer: "Text-only fallback."
+        )
+
+        vm.query = "mail"
+        await vm.send()
+
+        XCTAssertNil(vm.messages.last?.visualizationComponent)
+        XCTAssertEqual(vm.messages.last?.text, "Text-only fallback.")
     }
 
     func testMissingDataIntentRendersTextOnly() async {
@@ -181,16 +205,36 @@ final class ChatIntentVisualizationTests: XCTestCase {
         XCTAssertEqual(assistant.filters["place"], AnyCodable("stockholm"))
     }
 
-    private func makeViewModel(plan: BackendIntentPlanDTO) -> ChatViewModel {
-        makeViewModel(plan: plan, collector: EmptyCollector())
+    private func makeViewModel(
+        plan: BackendIntentPlanDTO,
+        hasDataIntent: Bool = true,
+        answer: String? = nil,
+        entries: [BackendQueryEntryDTO]? = nil
+    ) -> ChatViewModel {
+        makeViewModel(
+            plan: plan,
+            collector: EmptyCollector(),
+            hasDataIntent: hasDataIntent,
+            answer: answer,
+            entries: entries
+        )
     }
 
     private func makeViewModel<C: LocalQueryCollecting>(
         plan: BackendIntentPlanDTO,
-        collector: C
+        collector: C,
+        hasDataIntent: Bool = true,
+        answer: String? = nil,
+        entries: [BackendQueryEntryDTO]? = nil
     ) -> ChatViewModel {
+        let response = BackendQueryResponseDTO(
+            intentPlan: plan,
+            answer: answer,
+            entries: entries,
+            hasDataIntent: hasDataIntent
+        )
         let pipeline = QueryPipeline(
-            backendQueryService: StaticBackend(plan: plan),
+            backendQueryService: StaticBackend(response: response),
             localCollector: collector,
             accessGate: AllowingAccess()
         )
@@ -227,10 +271,10 @@ final class ChatIntentVisualizationTests: XCTestCase {
 }
 
 private struct StaticBackend: BackendQuerying {
-    let plan: BackendIntentPlanDTO
+    let response: BackendQueryResponseDTO
 
     func query(text: String) async throws -> BackendQueryResponseDTO {
-        BackendQueryResponseDTO(intentPlan: plan)
+        response
     }
 }
 

@@ -64,6 +64,8 @@ struct DataSourcesSheetView: View {
                         title: "Bilder",
                         subtitle: "Inkrementell indexering med valbar OCR.",
                         isOn: $photosEnabled,
+                        isToggleEnabled: false,
+                        statusBadgeText: "Always enabled",
                         onToggle: { enabled in
                             Task { await togglePhotos(enabled) }
                         }
@@ -223,8 +225,9 @@ private extension DataSourcesSheetView {
 
     func togglePhotos(_ enabled: Bool) async {
         guard enabled else {
-            sourceConnectionStore.setEnabled(false, for: .photos)
-            photosEnabled = false
+            sourceConnectionStore.setEnabled(true, for: .photos)
+            photosEnabled = true
+            message = "Bilder är alltid aktiverad."
             return
         }
 

@@ -20,6 +20,7 @@ public struct ChatView: View {
     @State private var supportSettingsViewModel = SupportSettingsViewModel()
     @State private var gmailSyncCoordinator = GmailSyncCoordinator()
     @State private var gmailOAuthService = GmailOAuthService()
+    @State private var gmailConnected = false
     @State private var syncStatusMessage: String?
     @State private var noteTitle = ""
     @State private var noteBody = ""
@@ -79,6 +80,31 @@ public struct ChatView: View {
                         .overlay(RoundedRectangle(cornerRadius: 12).stroke(.quaternary))
                 }
                 .padding([.horizontal, .top])
+            }
+
+            if !gmailConnected {
+                HStack(alignment: .center, spacing: 10) {
+                    Image(systemName: "envelope.badge.person.crop")
+                        .foregroundStyle(.secondary)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Gmail är inte anslutet")
+                            .font(.subheadline.weight(.semibold))
+                        Text("Logga in för att aktivera mejlsvar i chatten.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Button("Logga in") {
+                        Task { await handleGmailLogin() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 4)
             }
 
             HStack(spacing: 8) {
@@ -201,6 +227,9 @@ public struct ChatView: View {
             Button("OK") { syncStatusMessage = nil }
         } message: {
             Text(syncStatusMessage ?? "")
+        }
+        .task {
+            await refreshGmailConnectionState()
         }
     }
 
@@ -450,10 +479,13 @@ public struct ChatView: View {
     private func handleGmailSync() async {
         do {
             _ = try await OAuthTokenManager.shared.loadToken()
+            gmailConnected = true
         } catch {
             do {
                 _ = try await gmailOAuthService.startAuthorization()
+                gmailConnected = true
             } catch {
+                gmailConnected = false
                 syncStatusMessage = "Kunde inte ansluta Gmail: \(error.localizedDescription)"
                 return
             }
@@ -461,9 +493,39 @@ public struct ChatView: View {
 
         do {
             try await gmailSyncCoordinator.syncInbox()
+            gmailConnected = true
             syncStatusMessage = "Gmail synkades."
         } catch {
             syncStatusMessage = "Gmail-synk misslyckades: \(error.localizedDescription)"
+        }
+    }
+
+    private func handleGmailLogin() async {
+        do {
+            _ = try await OAuthTokenManager.shared.loadToken()
+            gmailConnected = true
+            syncStatusMessage = "Gmail är redan ansluten."
+            return
+        } catch {
+            // Ingen giltig token finns - fortsätt med OAuth-flödet.
+        }
+
+        do {
+            _ = try await gmailOAuthService.startAuthorization()
+            gmailConnected = true
+            syncStatusMessage = "Gmail anslöts."
+        } catch {
+            gmailConnected = false
+            syncStatusMessage = "Kunde inte ansluta Gmail: \(error.localizedDescription)"
+        }
+    }
+
+    private func refreshGmailConnectionState() async {
+        do {
+            _ = try await OAuthTokenManager.shared.loadToken()
+            gmailConnected = true
+        } catch {
+            gmailConnected = false
         }
     }
 

@@ -45,6 +45,24 @@ struct QueryPipeline {
         }
         let plan = response.intentPlan
 
+        if plan.domain == .mail && response.hasDataIntent {
+            return QueryResult(
+                timeRange: Self.timeRange(from: plan.timeScope),
+                entries: Self.mapBackendEntries(response.entries),
+                answer: response.answer ?? "Jag hittar ingen mejldata att visa just nu.",
+                intentPlan: plan
+            )
+        }
+
+        if plan.domain == .mail && !response.hasDataIntent {
+            return QueryResult(
+                timeRange: nil,
+                entries: [],
+                answer: response.answer ?? "Jag kunde inte tolka mejlfrågan ännu.",
+                intentPlan: nil
+            )
+        }
+
         // 1) Clarification flow (källa)
         if plan.needsClarification || plan.domain == nil {
             return QueryResult(
@@ -152,6 +170,23 @@ protocol QuerySourceAccessChecking {
 // MARK: - Helpers
 
 private extension QueryPipeline {
+
+    nonisolated static func mapBackendEntries(_ entries: [BackendQueryEntryDTO]?) -> [QueryResult.Entry] {
+        (entries ?? []).map { entry in
+            QueryResult.Entry(
+                id: UUID(uuidString: entry.id) ?? UUID(),
+                source: .memory,
+                title: entry.title,
+                body: entry.body,
+                date: entry.date
+            )
+        }
+    }
+
+    nonisolated static func timeRange(from scope: BackendTimeScopeDTO) -> DateInterval? {
+        guard let start = scope.start, let end = scope.end else { return nil }
+        return DateInterval(start: start, end: end)
+    }
 
     nonisolated static func mapDomainToSource(_ domain: BackendIntentDomain?) -> QuerySource? {
         switch domain {
