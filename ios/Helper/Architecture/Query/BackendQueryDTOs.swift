@@ -60,6 +60,7 @@ enum BackendIntentMode: String, Codable, Sendable, Equatable {
 enum BackendIntentOperation: String, Codable, Sendable, Equatable {
     case count
     case list
+    case sum
     case sumDuration = "sum_duration"
     case groupByDay = "group_by_day"
     case groupByType = "group_by_type"
@@ -103,7 +104,7 @@ enum BackendIntentSortOption: String, Codable, Sendable, Equatable {
 
 struct BackendTimeScopeDTO: Codable, Sendable, Equatable {
     let type: BackendTimeScopeType
-    let value: BackendTimeScopeValue?
+    let value: String?
     let start: Date?
     let end: Date?
 }

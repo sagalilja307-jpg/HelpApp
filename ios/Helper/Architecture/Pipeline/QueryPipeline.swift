@@ -36,7 +36,12 @@ struct QueryPipeline {
         do {
             response = try await backendQueryService.query(text: query.text)
         } catch {
-            return QueryResult(timeRange: nil, entries: [], answer: "Förlåt, kunde inte kontakta servern: \(error.localizedDescription)")
+            return QueryResult(
+                timeRange: nil,
+                entries: [],
+                answer: "Förlåt, kunde inte kontakta servern: \(error.localizedDescription)",
+                intentPlan: nil
+            )
         }
         let plan = response.intentPlan
 
@@ -45,7 +50,8 @@ struct QueryPipeline {
             return QueryResult(
                 timeRange: nil,
                 entries: [],
-                answer: Self.clarificationMessage(from: plan)
+                answer: Self.clarificationMessage(from: plan),
+                intentPlan: plan
             )
         }
 
@@ -55,7 +61,8 @@ struct QueryPipeline {
             return QueryResult(
                 timeRange: nil,
                 entries: [],
-                answer: "Jag kan inte hämta data för \"\(domain)\" än."
+                answer: "Jag kan inte hämta data för \"\(domain)\" än.",
+                intentPlan: plan
             )
         }
 
@@ -70,14 +77,16 @@ struct QueryPipeline {
             return QueryResult(
                 timeRange: timeRange,
                 entries: [],
-                answer: "Källan \(Self.localizedSource(source)) är inte aktiverad."
+                answer: "Källan \(Self.localizedSource(source)) är inte aktiverad.",
+                intentPlan: plan
             )
         }
         if !accessGate.isAllowed(source) {
             return QueryResult(
                 timeRange: timeRange,
                 entries: [],
-                answer: accessGate.deniedMessage(for: source) ?? "Jag har inte access till \(Self.localizedSource(source))."
+                answer: accessGate.deniedMessage(for: source) ?? "Jag har inte access till \(Self.localizedSource(source)).",
+                intentPlan: plan
             )
         }
 
@@ -93,7 +102,8 @@ struct QueryPipeline {
             return QueryResult(
                 timeRange: timeRange,
                 entries: [],
-                answer: "Kunde inte hämta data lokalt: \(error.localizedDescription)"
+                answer: "Kunde inte hämta data lokalt: \(error.localizedDescription)",
+                intentPlan: plan
             )
         }
 
@@ -103,7 +113,8 @@ struct QueryPipeline {
         return QueryResult(
             timeRange: timeRange,
             entries: collected.entries,
-            answer: answer
+            answer: answer,
+            intentPlan: plan
         )
     }
 }
@@ -150,7 +161,9 @@ private extension QueryPipeline {
         case .photos: return .photos
         case .files: return .files
         case .location: return .location
-        case .mail, .notes, .memory, .none:
+        case .notes, .memory:
+            return .memory
+        case .mail, .none:
             return nil
         }
     }

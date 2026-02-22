@@ -1,6 +1,7 @@
 import XCTest
 @testable import Helper
 
+@MainActor
 final class QueryPipelineIntegrationTests: XCTestCase {
 
     struct MockBackend: BackendQuerying {
@@ -28,7 +29,7 @@ final class QueryPipelineIntegrationTests: XCTestCase {
         let now = Date()
         let scope = BackendTimeScopeDTO(
             type: .relative,
-            value: .today,
+            value: "today",
             start: now,
             end: now.addingTimeInterval(3600)
         )
@@ -38,8 +39,8 @@ final class QueryPipelineIntegrationTests: XCTestCase {
             operation: .count,
             timeScope: scope,
             filters: [:],
-            grouping: .none,
-            sort: .none,
+            grouping: nil,
+            sort: nil,
             needsClarification: false,
             clarificationMessage: nil,
             suggestions: []
@@ -59,5 +60,6 @@ final class QueryPipelineIntegrationTests: XCTestCase {
         XCTAssertNotNil(result.answer)
         XCTAssertEqual(result.entries.count, 1)
         XCTAssertNotNil(result.timeRange)
+        XCTAssertEqual(result.intentPlan, plan)
     }
 }

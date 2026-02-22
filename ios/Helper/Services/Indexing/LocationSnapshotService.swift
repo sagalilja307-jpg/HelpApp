@@ -194,7 +194,7 @@ final class LocationSnapshotService: NSObject, LocationSnapshoting {
             timestamp: location.timestamp
         )
 
-        var descriptor = FetchDescriptor<IndexedLocationSnapshot>(
+        let descriptor = FetchDescriptor<IndexedLocationSnapshot>(
             predicate: #Predicate { $0.id == snapshotId }
         )
 

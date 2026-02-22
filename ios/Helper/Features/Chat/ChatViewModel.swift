@@ -16,6 +16,11 @@ final class ChatViewModel {
         let id = UUID()
         let role: Role
         let text: String
+        let visualizationComponent: VisualizationComponent?
+        let filters: [String: AnyCodable]
+        let entries: [QueryResult.Entry]
+        let timeRange: DateInterval?
+        let intentPlan: BackendIntentPlanDTO?
         let timestamp: Date = .now
     }
 
@@ -44,7 +49,15 @@ final class ChatViewModel {
         isSending = true
         error = nil
 
-        messages.append(.init(role: .user, text: trimmed))
+        messages.append(.init(
+            role: .user,
+            text: trimmed,
+            visualizationComponent: nil,
+            filters: [:],
+            entries: [],
+            timeRange: nil,
+            intentPlan: nil
+        ))
         query = ""
 
         let fullPrompt: String
@@ -64,12 +77,102 @@ final class ChatViewModel {
             let userQuery = UserQuery(text: fullPrompt, source: .userTyped)
             let result = try await pipeline.run(userQuery)
             let responseText = result.answer ?? "Jag hittar ingen data att svara på ännu."
-            messages.append(.init(role: .assistant, text: responseText))
+            messages.append(.init(
+                role: .assistant,
+                text: responseText,
+                visualizationComponent: resolveVisualizationComponent(from: result.intentPlan),
+                filters: result.intentPlan?.filters ?? [:],
+                entries: result.entries,
+                timeRange: result.timeRange,
+                intentPlan: result.intentPlan
+            ))
         } catch {
             self.error = error.localizedDescription
-            messages.append(.init(role: .assistant, text: "Förlåt, något gick fel (\(error.localizedDescription))."))
+            messages.append(.init(
+                role: .assistant,
+                text: "Förlåt, något gick fel (\(error.localizedDescription)).",
+                visualizationComponent: nil,
+                filters: [:],
+                entries: [],
+                timeRange: nil,
+                intentPlan: nil
+            ))
         }
 
         isSending = false
+    }
+
+    private func resolveVisualizationComponent(from plan: BackendIntentPlanDTO?) -> VisualizationComponent? {
+        guard
+            let plan,
+            let domain = mapDomain(plan.domain),
+            let operation = mapOperation(plan.operation)
+        else {
+            return nil
+        }
+
+        if domain == .mail {
+            return .narrative
+        }
+
+        let timeScope = mapTimeScope(plan.timeScope)
+        return VisualizationPolicy.resolve(
+            domain: domain,
+            operation: operation,
+            timeScope: timeScope
+        )
+    }
+
+    private func mapDomain(_ domain: BackendIntentDomain?) -> Domain? {
+        guard let domain else { return nil }
+
+        switch domain {
+        case .calendar:
+            return .calendar
+        case .reminders:
+            return .reminders
+        case .mail:
+            return .mail
+        case .contacts:
+            return .contacts
+        case .files:
+            return .files
+        case .photos:
+            return .photos
+        case .location:
+            return .location
+        case .notes:
+            return .notes
+        case .memory:
+            return .memory
+        }
+    }
+
+    private func mapOperation(_ operation: BackendIntentOperation) -> Operation? {
+        switch operation {
+        case .count:
+            return .count
+        case .list:
+            return .list
+        case .exists:
+            return .exists
+        case .sum, .sumDuration:
+            return .sum
+        case .latest:
+            return .latest
+        case .groupByDay, .groupByType, .needsClarification:
+            return nil
+        }
+    }
+
+    private func mapTimeScope(_ scope: BackendTimeScopeDTO) -> TimeScope {
+        switch scope.type {
+        case .all:
+            return TimeScope(type: .all)
+        case .absolute:
+            return TimeScope(type: .absolute)
+        case .relative:
+            return TimeScope(type: .relative(scope.value ?? ""))
+        }
     }
 }
