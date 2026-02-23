@@ -8,10 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from helpershelp.api.routes.auth import router as auth_router
 from helpershelp.api.routes.health import router as health_router
-from helpershelp.api.routes.mail import router as mail_router
-from helpershelp.api.routes.oauth_gmail import router as oauth_gmail_router
 from helpershelp.api.routes.query import router as query_router
 
 logger = logging.getLogger(__name__)
@@ -78,7 +75,4 @@ async def unhandled_exception_handler(_: Request, exc: Exception):
 
 
 app.include_router(query_router)
-app.include_router(auth_router)
-app.include_router(oauth_gmail_router)
-app.include_router(mail_router)
 app.include_router(health_router)

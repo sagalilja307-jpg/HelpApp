@@ -46,16 +46,15 @@ class QueryDataIntentTests(unittest.TestCase):
         self.assertEqual(payload.get("domain"), "notes")
         self.assertEqual(payload.get("operation"), "list")
 
-    def test_ambiguous_query_returns_needs_clarification(self):
+    def test_ambiguous_query_uses_deterministic_fallback_domain(self):
         resp = self.client.post(
             "/query",
             json={"query": "Vad händer?", "language": "sv"},
         )
         self.assertEqual(resp.status_code, 200)
         payload = resp.json().get("data_intent") or {}
-        # Since 'Vad händer?' maps to 'list' via implicit phrasing
-        # and has no explicit domain, it falls back to 'reminders' from embedding suggestions
-        self.assertEqual(payload.get("domain"), "reminders")
+        # No analysis/clarification payload: ambiguous queries fall back deterministically.
+        self.assertEqual(payload.get("domain"), "calendar")
         self.assertEqual(payload.get("operation"), "list")
 
 

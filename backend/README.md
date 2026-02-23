@@ -1,12 +1,12 @@
 # HelpersHelp Backend
 
-FastAPI-backend i monorepot, paketerad som `helpershelp` med `src/`-layout. Systemet hanterar enbart `query` och `mail` integration. All tidigare assistent-infrastruktur är borttagen.
+FastAPI-backend i monorepot, paketerad som `helpershelp` med `src/`-layout. Systemet hanterar deterministisk query-routing och supportinställningar. All tidigare assistent-infrastruktur är borttagen.
 
 ## Core Features
 
 - **Query**: Deterministisk intent-routing (`POST /query`) för kalender, mail, kontakter, etc.
-- **Mail**: API:er för e-posthämtning.
-- **Auth**: OAuth Authorization code exchange och token hantering (`oauth_gmail`).
+- **System**: Health-endpoints (`/health`, `/healthz`, `/health/details`).
+- **Settings**: Support- och lärinställningar (`/settings/*`).
 
 ## Struktur
 

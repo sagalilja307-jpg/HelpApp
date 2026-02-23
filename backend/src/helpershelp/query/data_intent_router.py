@@ -133,6 +133,30 @@ def _operation_for_query(_domain: Domain, query: str) -> Operation:
     return "count"
 
 
+def _fallback_domain_for_query(query: str) -> Domain:
+    lower_q = (query or "").lower()
+
+    if any(word in lower_q for word in ("mejl", "mail", "inkorg", "epost", "e-post")):
+        return "mail"
+    if any(word in lower_q for word in ("anteckning", "anteckningar", "notes", "notering")):
+        return "notes"
+    if any(word in lower_q for word in ("påminn", "påminnelse", "uppgift", "todo", "att göra")):
+        return "reminders"
+    if any(word in lower_q for word in ("kontakt", "kontakter", "telefonnummer", "adressbok")):
+        return "contacts"
+    if any(word in lower_q for word in ("bild", "bilder", "foto", "foton", "album", "video")):
+        return "photos"
+    if any(word in lower_q for word in ("fil", "filer", "dokument", "pdf", "mapp")):
+        return "files"
+    if any(word in lower_q for word in ("plats", "position", "var är jag", "var var jag", "besökt", "resa")):
+        return "location"
+    if any(word in lower_q for word in ("minne", "minnen", "memory", "historik", "mönster", "kom ihåg")):
+        return "memory"
+
+    # Deterministic default instead of clarification/analysis payload.
+    return "calendar"
+
+
 class DataIntentRouter:
     def __init__(
         self,
@@ -157,28 +181,21 @@ class DataIntentRouter:
         try:
             dom = self.domain_classifier.classify(q)
         except Exception:
-            parsed = self.time_resolver.resolve(q)
-            return {
-                "needs_clarification": True,
-                "suggestions": ["calendar", "mail"],
-                "time_scope": _time_scope_from_time_intent(
-                    parsed.time_intent, parsed.timeframe
-                ).model_dump(mode="python"),
-            }
+            dom = None
 
         parsed = self.time_resolver.resolve(q)
         lower_q = q.lower()
 
-        if dom.domain == "mail" and (
+        if dom is not None and dom.domain == "mail" and (
             "oläst" in lower_q or "olästa" in lower_q or "unread" in lower_q
         ):
             filters["status"] = "unread"
 
         # Always definitively resolve domain, default to calendar
-        resolved_domain: Domain = "calendar"
-        if dom.domain is not None:
+        resolved_domain: Domain = _fallback_domain_for_query(q)
+        if dom is not None and dom.domain is not None:
             resolved_domain = dom.domain
-        elif dom.suggestions:
+        elif dom is not None and dom.suggestions:
             resolved_domain = dom.suggestions[0]
 
         timeframe = self.time_policy.apply(resolved_domain, parsed)

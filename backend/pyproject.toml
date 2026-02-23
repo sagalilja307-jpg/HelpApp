@@ -12,10 +12,7 @@ dependencies = [
   "fastapi",
   "uvicorn[standard]",
   "pydantic",
-  "requests",
-  "PyJWT",
   "python-dotenv",
-  "cryptography",
 ]
 
 [tool.setuptools]

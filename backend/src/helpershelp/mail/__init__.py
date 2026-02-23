@@ -1,1 +1,0 @@
-# MailSource package marker
