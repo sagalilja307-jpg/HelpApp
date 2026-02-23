@@ -177,7 +177,9 @@ struct LocationCollectorService: LocationCollecting {
             source: .location,
             title: snapshot.title,
             body: snapshot.bodySnippet,
-            date: snapshot.observedAt
+            date: snapshot.observedAt,
+            latitude: snapshot.roundedLat,
+            longitude: snapshot.roundedLon
         )
     }
 }

@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import UIKit
 
 struct DataSourcesSheetView: View {
     private let sourceConnectionStore: SourceConnectionStore
@@ -10,11 +11,21 @@ struct DataSourcesSheetView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
 
+    @State private var calendarStatus: AppPermissionStatus = .notDetermined
+    @State private var remindersStatus: AppPermissionStatus = .notDetermined
+    @State private var notificationStatus: AppPermissionStatus = .notDetermined
+    @State private var calendarEnabled = false
+    @State private var remindersEnabled = false
+    @State private var notificationsEnabled = false
     @State private var contactsEnabled: Bool
     @State private var photosEnabled: Bool
     @State private var filesEnabled: Bool
     @State private var locationEnabled: Bool
+    @State private var mailEnabled: Bool
+    @State private var mailConnected: Bool
+    @State private var isMailWorking = false
     @State private var photosOCREnabled: Bool
     @State private var filesOCREnabled: Bool
     @State private var hasImportedFiles: Bool
@@ -38,6 +49,8 @@ struct DataSourcesSheetView: View {
         _photosEnabled = State(initialValue: sourceConnectionStore.isEnabled(.photos))
         _filesEnabled = State(initialValue: sourceConnectionStore.isEnabled(.files))
         _locationEnabled = State(initialValue: sourceConnectionStore.isEnabled(.location))
+        _mailEnabled = State(initialValue: sourceConnectionStore.isEnabled(.mail))
+        _mailConnected = State(initialValue: OAuthTokenManager.shared.hasStoredToken())
         _photosOCREnabled = State(initialValue: sourceConnectionStore.isOCREnabled(for: .photos))
         _filesOCREnabled = State(initialValue: sourceConnectionStore.isOCREnabled(for: .files))
         _hasImportedFiles = State(initialValue: sourceConnectionStore.hasImportedFiles())
@@ -47,6 +60,107 @@ struct DataSourcesSheetView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    Text("Systembehörigheter")
+                        .font(.headline)
+                        .padding(.bottom, 2)
+
+                    SourceCardView(
+                        icon: "calendar",
+                        title: "Kalender",
+                        subtitle: "Läs kalenderhändelser för bättre svar om din dag.",
+                        isOn: $calendarEnabled,
+                        statusBadgeText: permissionBadgeText(for: calendarStatus),
+                        onToggle: { enabled in
+                            Task { await toggleCalendar(enabled) }
+                        }
+                    ) {
+                        if calendarStatus == .denied {
+                            Button("Öppna Inställningar") {
+                                openSettings()
+                            }
+                            .buttonStyle(.bordered)
+                        } else {
+                            EmptyView()
+                        }
+                    }
+
+                    SourceCardView(
+                        icon: "checklist",
+                        title: "Påminnelser",
+                        subtitle: "Läs aktiva påminnelser för uppgifter och listor.",
+                        isOn: $remindersEnabled,
+                        statusBadgeText: permissionBadgeText(for: remindersStatus),
+                        onToggle: { enabled in
+                            Task { await toggleReminders(enabled) }
+                        }
+                    ) {
+                        if remindersStatus == .denied {
+                            Button("Öppna Inställningar") {
+                                openSettings()
+                            }
+                            .buttonStyle(.bordered)
+                        } else {
+                            EmptyView()
+                        }
+                    }
+
+                    SourceCardView(
+                        icon: "bell.fill",
+                        title: "Notiser",
+                        subtitle: "Tillåt notiser för uppföljningar och viktiga påminnelser.",
+                        isOn: $notificationsEnabled,
+                        statusBadgeText: permissionBadgeText(for: notificationStatus),
+                        onToggle: { enabled in
+                            Task { await toggleNotifications(enabled) }
+                        }
+                    ) {
+                        if notificationStatus == .denied {
+                            Button("Öppna Inställningar") {
+                                openSettings()
+                            }
+                            .buttonStyle(.bordered)
+                        } else {
+                            EmptyView()
+                        }
+                    }
+
+                    Text("Datakällor")
+                        .font(.headline)
+                        .padding(.top, 8)
+                        .padding(.bottom, 2)
+
+                    SourceCardView(
+                        icon: "envelope.fill",
+                        title: "Mejl",
+                        subtitle: "Koppla Gmail för mejlsvar i chatten.",
+                        isOn: $mailEnabled,
+                        statusBadgeText: mailConnected ? "Ansluten" : "Ej ansluten",
+                        onToggle: { enabled in
+                            Task { await toggleMail(enabled) }
+                        }
+                    ) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            if !mailConnected {
+                                Button("Logga in") {
+                                    Task { await connectMail() }
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(!mailEnabled || isMailWorking)
+                            } else {
+                                Button("Synka nu") {
+                                    Task { await syncMailNow() }
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(!mailEnabled || isMailWorking)
+                            }
+
+                            if isMailWorking {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                        }
+                    }
+
                     SourceCardView(
                         icon: "person.2.fill",
                         title: "Kontakter",
@@ -64,6 +178,8 @@ struct DataSourcesSheetView: View {
                         title: "Bilder",
                         subtitle: "Inkrementell indexering med valbar OCR.",
                         isOn: $photosEnabled,
+                        isToggleEnabled: false,
+                        statusBadgeText: "Always enabled",
                         onToggle: { enabled in
                             Task { await togglePhotos(enabled) }
                         }
@@ -83,13 +199,13 @@ struct DataSourcesSheetView: View {
                                     Task { await runPhotoIndex(fullScan: false) }
                                 }
                                 .buttonStyle(.bordered)
-                                .disabled(!photosEnabled || isWorking)
+                                .disabled(!photosEnabled || isWorking || isMailWorking)
 
                                 Button("Fullscan") {
                                     Task { await runPhotoIndex(fullScan: true) }
                                 }
                                 .buttonStyle(.bordered)
-                                .disabled(!photosEnabled || isWorking)
+                                .disabled(!photosEnabled || isWorking || isMailWorking)
                             }
                         }
                     }
@@ -117,7 +233,7 @@ struct DataSourcesSheetView: View {
                                 showFileImporter = true
                             }
                             .buttonStyle(.bordered)
-                            .disabled(!filesEnabled || isWorking)
+                            .disabled(!filesEnabled || isWorking || isMailWorking)
 
                             if !hasImportedFiles {
                                 Text("Ingen fil-data importerad an.")
@@ -141,7 +257,7 @@ struct DataSourcesSheetView: View {
                                 Task { await refreshLocation() }
                             }
                             .buttonStyle(.bordered)
-                            .disabled(!locationEnabled || isWorking)
+                            .disabled(!locationEnabled || isWorking || isMailWorking)
 
                             if let lastUpdate = lastLocationUpdate {
                                 Text("Senast uppdaterad: \(Self.formatRelativeDate(lastUpdate))")
@@ -181,6 +297,16 @@ struct DataSourcesSheetView: View {
             }
             .task {
                 await refreshImportedFilesState()
+                await refreshPermissionStatuses()
+                refreshSourceToggles()
+            }
+            .onChange(of: scenePhase) { _, newValue in
+                guard newValue == .active else { return }
+                Task {
+                    await refreshPermissionStatuses()
+                    await refreshImportedFilesState()
+                    refreshSourceToggles()
+                }
             }
         }
     }
@@ -223,8 +349,9 @@ private extension DataSourcesSheetView {
 
     func togglePhotos(_ enabled: Bool) async {
         guard enabled else {
-            sourceConnectionStore.setEnabled(false, for: .photos)
-            photosEnabled = false
+            sourceConnectionStore.setEnabled(true, for: .photos)
+            photosEnabled = true
+            message = "Bilder är alltid aktiverad."
             return
         }
 
@@ -384,5 +511,179 @@ private extension DataSourcesSheetView {
         formatter.locale = DateService.shared.locale
         formatter.unitsStyle = .short
         return formatter.localizedString(for: date, relativeTo: DateService.shared.now())
+    }
+
+    func refreshPermissionStatuses() async {
+        let calendar = await PermissionManager.shared.status(for: .calendar)
+        let reminders = await PermissionManager.shared.status(for: .reminder)
+        let notifications = await PermissionManager.shared.status(for: .notification)
+
+        calendarStatus = calendar
+        remindersStatus = reminders
+        notificationStatus = notifications
+
+        calendarEnabled = calendar == .granted
+        remindersEnabled = reminders == .granted
+        notificationsEnabled = notifications == .granted
+    }
+
+    func refreshSourceToggles() {
+        contactsEnabled = sourceConnectionStore.isEnabled(.contacts)
+        photosEnabled = sourceConnectionStore.isEnabled(.photos)
+        filesEnabled = sourceConnectionStore.isEnabled(.files)
+        locationEnabled = sourceConnectionStore.isEnabled(.location)
+        mailEnabled = sourceConnectionStore.isEnabled(.mail)
+        mailConnected = OAuthTokenManager.shared.hasStoredToken()
+    }
+
+    // MARK: - System Permissions
+
+    func toggleCalendar(_ enabled: Bool) async {
+        guard enabled else {
+            calendarEnabled = calendarStatus == .granted
+            message = "Kalenderbehörighet återkallas i iOS Inställningar."
+            return
+        }
+        await requestCalendarAccessFromSheet()
+    }
+
+    func toggleReminders(_ enabled: Bool) async {
+        guard enabled else {
+            remindersEnabled = remindersStatus == .granted
+            message = "Påminnelsebehörighet återkallas i iOS Inställningar."
+            return
+        }
+        await requestReminderAccessFromSheet()
+    }
+
+    func toggleNotifications(_ enabled: Bool) async {
+        guard enabled else {
+            notificationsEnabled = notificationStatus == .granted
+            message = "Notisbehörighet återkallas i iOS Inställningar."
+            return
+        }
+        await requestNotificationAccessFromSheet()
+    }
+
+    func requestCalendarAccessFromSheet() async {
+        do {
+            try await PermissionManager.shared.requestAccess(for: .calendar)
+            calendarStatus = await PermissionManager.shared.status(for: .calendar)
+            calendarEnabled = calendarStatus == .granted
+            if !calendarEnabled {
+                message = "Kalender kunde inte aktiveras: behörighet saknas."
+            }
+        } catch {
+            calendarEnabled = false
+            calendarStatus = .denied
+            message = "Kalender kunde inte aktiveras: \(error.localizedDescription)"
+        }
+    }
+
+    func requestReminderAccessFromSheet() async {
+        do {
+            try await PermissionManager.shared.requestAccess(for: .reminder)
+            remindersStatus = await PermissionManager.shared.status(for: .reminder)
+            remindersEnabled = remindersStatus == .granted
+            if !remindersEnabled {
+                message = "Påminnelser kunde inte aktiveras: behörighet saknas."
+            }
+        } catch {
+            remindersEnabled = false
+            remindersStatus = .denied
+            message = "Påminnelser kunde inte aktiveras: \(error.localizedDescription)"
+        }
+    }
+
+    func requestNotificationAccessFromSheet() async {
+        do {
+            try await PermissionManager.shared.requestAccess(for: .notification)
+            notificationStatus = await PermissionManager.shared.status(for: .notification)
+            notificationsEnabled = notificationStatus == .granted
+            if !notificationsEnabled {
+                message = "Notiser kunde inte aktiveras: behörighet saknas."
+            }
+        } catch {
+            notificationsEnabled = false
+            notificationStatus = .denied
+            message = "Notiser kunde inte aktiveras: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Mail
+
+    func toggleMail(_ enabled: Bool) async {
+        sourceConnectionStore.setEnabled(enabled, for: .mail)
+        mailEnabled = sourceConnectionStore.isEnabled(.mail)
+
+        guard enabled else {
+            message = "Mejl är avstängd som datakälla."
+            return
+        }
+
+        if !mailConnected {
+            message = "Mejl aktiverad. Logga in på Gmail för att börja synka."
+        }
+    }
+
+    func connectMail() async {
+        guard mailEnabled else {
+            message = "Aktivera mejl först."
+            return
+        }
+        if mailConnected {
+            message = "Gmail är redan ansluten."
+            return
+        }
+
+        isMailWorking = true
+        defer { isMailWorking = false }
+
+        do {
+            _ = try await GmailOAuthService().startAuthorization()
+            mailConnected = OAuthTokenManager.shared.hasStoredToken()
+            message = mailConnected ? "Gmail anslöts." : "Gmail kunde inte bekräftas."
+        } catch {
+            mailConnected = false
+            message = "Kunde inte ansluta Gmail: \(error.localizedDescription)"
+        }
+    }
+
+    func syncMailNow() async {
+        guard mailEnabled else {
+            message = "Aktivera mejl först."
+            return
+        }
+
+        if !mailConnected {
+            await connectMail()
+            guard mailConnected else { return }
+        }
+
+        isMailWorking = true
+        defer { isMailWorking = false }
+
+        do {
+            try await GmailSyncCoordinator().syncInbox()
+            message = "Gmail synkades."
+        } catch {
+            message = "Gmail-synk misslyckades: \(error.localizedDescription)"
+        }
+    }
+
+    func permissionBadgeText(for status: AppPermissionStatus) -> String {
+        switch status {
+        case .granted:
+            return "Tillåten"
+        case .denied:
+            return "Nekad"
+        case .notDetermined:
+            return "Ej vald"
+        }
+    }
+
+    func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 }

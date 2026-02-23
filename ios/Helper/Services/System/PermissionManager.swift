@@ -107,7 +107,7 @@ final class PermissionManager: NSObject {
             try await requestContactsAccess()
 
         case .photos:
-            try await requestPhotosAccess()
+            _ = try await requestPhotosAccess()
 
         case .location:
             try await requestLocationAccess()
@@ -155,15 +155,31 @@ final class PermissionManager: NSObject {
 
     // MARK: Photos
 
-    private func requestPhotosAccess() async throws {
+    private func requestPhotosAccess() async throws -> AppPermissionStatus {
         #if canImport(PhotoKit)
-        _ = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+        let current = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        switch current {
+        case .authorized, .limited:
+            return mapPhotosStatus(current)
+        case .notDetermined:
+            let newStatus = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+            return mapPhotosStatus(newStatus)
+        case .denied, .restricted:
+            return mapPhotosStatus(current)
+        @unknown default:
+            return mapPhotosStatus(current)
+        }
+        #else
+        return .denied
         #endif
     }
 
     // MARK: Location (Correct Async Implementation)
 
     private func requestLocationAccess() async throws {
+        let current = locationManager.authorizationStatus
+        guard current == .notDetermined else { return }
+
         try await withCheckedThrowingContinuation { continuation in
             locationContinuation = continuation
             locationManager.requestWhenInUseAuthorization()

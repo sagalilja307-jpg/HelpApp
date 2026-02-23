@@ -22,6 +22,7 @@ enum QuerySource: String, Sendable, Codable {
     case rawEvents
     case calendar
     case reminders
+    case mail
     case contacts
     case photos
     case files
@@ -67,6 +68,8 @@ struct QuerySourceAccess: QuerySourceAccessing, Sendable {
             return calendarReadAuthorized()
         case .reminders:
             return remindersReadAuthorized()
+        case .mail:
+            return sourceConnectionStore.isEnabled(.mail) && OAuthTokenManager.shared.hasStoredToken()
         case .contacts:
             return sourceConnectionStore.isEnabled(.contacts) && contactsAuthorized()
         case .photos:
@@ -112,6 +115,12 @@ struct QuerySourceAccess: QuerySourceAccessing, Sendable {
                 return "Jag kan inte läsa påminnelser utan full åtkomst. Ändra till Full åtkomst i Inställningar."
             }
             return "Jag kan inte se påminnelser – du har inte godkänt åtkomst."
+
+        case .mail:
+            if !sourceConnectionStore.isEnabled(.mail) {
+                return "Mejl är inte aktiverad som datakälla."
+            }
+            return "Logga in på Gmail för att aktivera mejlsvar."
 
         case .contacts:
             if !sourceConnectionStore.isEnabled(.contacts) {
@@ -242,4 +251,3 @@ private extension QuerySourceAccess {
 #endif
     }
 }
-

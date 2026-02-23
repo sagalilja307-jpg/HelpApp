@@ -11,9 +11,12 @@ import SwiftUI
 struct PermissionOnboardingView: View {
 
     let type: AppPermissionType
+    let isLastStep: Bool
+    let onContinue: () -> Void
 
     @State private var status: AppPermissionStatus = .notDetermined
     @State private var isLoading = false
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         VStack(spacing: 0) {
@@ -65,6 +68,18 @@ struct PermissionOnboardingView: View {
                     .opacity(0.7)
                     .padding(.horizontal, 16)
 
+                if type == .photos {
+                    HStack(spacing: 8) {
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(.secondary)
+                        Text("Rekommenderat: tillåt Bilder för att aktivera bildsvar i chatten.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 16)
+                }
+
                 actionArea
                     .padding(.horizontal, 16)
                     .padding(.bottom, 16)
@@ -81,6 +96,12 @@ struct PermissionOnboardingView: View {
         .task {
             status = await PermissionManager.shared.status(for: type)
         }
+        .onChange(of: scenePhase) { _, newValue in
+            guard newValue == .active else { return }
+            Task {
+                status = await PermissionManager.shared.status(for: type)
+            }
+        }
         .animation(.easeInOut(duration: 0.2), value: status)
     }
 
@@ -88,46 +109,73 @@ struct PermissionOnboardingView: View {
     private var actionArea: some View {
         switch status {
         case .granted:
-            HStack(spacing: 10) {
-                Image(systemName: "checkmark.circle.fill")
-                Text("Beviljad")
-            }
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, minHeight: 44)
-
-        case .denied:
             Button {
-                openSettings()
-            } label: {
-                Text("Öppna Inställningar")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-
-        case .notDetermined:
-            Button {
-                request()
+                onContinue()
             } label: {
                 HStack(spacing: 10) {
-                    if isLoading {
-                        ProgressView().controlSize(.small)
-                    }
-                    Text(isLoading ? "Begär åtkomst…" : "Ge tillgång")
+                    Image(systemName: "checkmark.circle.fill")
+                    Text(isLastStep ? "Börja använda appen" : "Fortsätt")
                 }
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(isLoading)
+
+        case .denied:
+            VStack(spacing: 10) {
+                Button {
+                    openSettings()
+                } label: {
+                    Text("Öppna Inställningar")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button(isLastStep ? "Fortsätt utan tillgång" : "Inte nu") {
+                    onContinue()
+                }
+                .buttonStyle(.bordered)
+            }
+
+        case .notDetermined:
+            VStack(spacing: 10) {
+                Button {
+                    request()
+                } label: {
+                    HStack(spacing: 10) {
+                        if isLoading {
+                            ProgressView().controlSize(.small)
+                        }
+                        Text(isLoading ? "Begär åtkomst…" : "Tillåt åtkomst")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isLoading)
+
+                Button(isLastStep ? "Fortsätt utan tillgång" : "Inte nu") {
+                    onContinue()
+                }
+                .buttonStyle(.bordered)
+            }
         }
     }
 
     private func request() {
         isLoading = true
         Task {
+            defer { isLoading = false }
             try? await PermissionManager.shared.requestAccess(for: type)
-            status = await PermissionManager.shared.status(for: type)
-            isLoading = false
+
+            var latestStatus = await PermissionManager.shared.status(for: type)
+            if latestStatus == .notDetermined && requiresDelayedRecheck {
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                latestStatus = await PermissionManager.shared.status(for: type)
+            }
+
+            status = latestStatus
+            if latestStatus != .notDetermined {
+                onContinue()
+            }
         }
     }
 
@@ -151,7 +199,7 @@ struct PermissionOnboardingView: View {
     private var description: String {
         switch type {
         case .notification: return "Få viktiga uppdateringar och påminnelser."
-        case .photos: return "Välj bilder för att dela eller spara innehåll."
+        case .photos: return "Tillåt bilder för att kunna indexera och svara på bildfrågor."
         case .camera: return "Ta bilder direkt i appen när du behöver det."
         case .contacts: return "Hitta och bjuda in personer snabbare."
         case .location: return "Används för bättre resultat nära dig."
@@ -169,6 +217,15 @@ struct PermissionOnboardingView: View {
         case .contacts: return "person.crop.circle"
         case .photos: return "photo.on.rectangle"
         case .location: return "location"
+        }
+    }
+
+    private var requiresDelayedRecheck: Bool {
+        switch type {
+        case .calendar, .notification:
+            return true
+        default:
+            return false
         }
     }
 }

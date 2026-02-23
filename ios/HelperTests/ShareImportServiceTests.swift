@@ -1,6 +1,7 @@
 import XCTest
 @testable import Helper
 
+@MainActor
 final class ShareImportServiceTests: XCTestCase {
 
     func testSharedItemsEnvelopeCodableRoundTrip() throws {

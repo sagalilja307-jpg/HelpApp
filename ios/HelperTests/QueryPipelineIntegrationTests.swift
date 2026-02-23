@@ -1,6 +1,7 @@
 import XCTest
 @testable import Helper
 
+@MainActor
 final class QueryPipelineIntegrationTests: XCTestCase {
 
     struct MockBackend: BackendQuerying {
@@ -17,7 +18,12 @@ final class QueryPipelineIntegrationTests: XCTestCase {
     }
 
     struct MockCollector: LocalQueryCollecting {
-        func collect(source: QuerySource, timeRange: DateInterval?, userQuery: UserQuery) async throws -> LocalCollectedResult {
+        func collect(
+            source: QuerySource,
+            timeRange: DateInterval?,
+            intentPlan: BackendIntentPlanDTO,
+            userQuery: UserQuery
+        ) async throws -> LocalCollectedResult {
             let entry = QueryResult.Entry(id: UUID(), source: source, title: "one", body: nil, date: Date())
             return LocalCollectedResult(entries: [entry])
         }
@@ -28,7 +34,7 @@ final class QueryPipelineIntegrationTests: XCTestCase {
         let now = Date()
         let scope = BackendTimeScopeDTO(
             type: .relative,
-            value: .today,
+            value: "today",
             start: now,
             end: now.addingTimeInterval(3600)
         )
@@ -38,8 +44,8 @@ final class QueryPipelineIntegrationTests: XCTestCase {
             operation: .count,
             timeScope: scope,
             filters: [:],
-            grouping: .none,
-            sort: .none,
+            grouping: nil,
+            sort: nil,
             needsClarification: false,
             clarificationMessage: nil,
             suggestions: []
@@ -59,5 +65,6 @@ final class QueryPipelineIntegrationTests: XCTestCase {
         XCTAssertNotNil(result.answer)
         XCTAssertEqual(result.entries.count, 1)
         XCTAssertNotNil(result.timeRange)
+        XCTAssertEqual(result.intentPlan, plan)
     }
 }

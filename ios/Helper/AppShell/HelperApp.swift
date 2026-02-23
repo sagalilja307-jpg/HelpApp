@@ -88,6 +88,7 @@ struct HelperApp: App {
                 locationCollector: locationCollector,
                 sourceConnectionStore: sourceConnectionStore
             )
+            let mailQueryFetcher = MailQueryFetcher(memoryService: service)
             let backendQueryService = BackendQueryAPIService.shared
             // Adapter: wrap existing QueryDataFetcher and QuerySourceAccess into
             // the smaller interfaces expected by the updated `QueryPipeline`.
@@ -97,7 +98,7 @@ struct HelperApp: App {
 
                 func isEnabled(_ source: QuerySource) -> Bool {
                     switch source {
-                    case .contacts, .photos, .files, .location:
+                    case .contacts, .photos, .files, .location, .mail:
                         return sourceConnectionStore.isEnabled(source)
                     default:
                         return true
@@ -117,12 +118,22 @@ struct HelperApp: App {
             struct LocalCollectorAdapter: LocalQueryCollecting {
                 let fetcher: QueryDataFetcher
                 let access: QuerySourceAccessing
+                let mailFetcher: MailQueryFetcher
 
                 func collect(
                     source: QuerySource,
                     timeRange: DateInterval?,
+                    intentPlan: BackendIntentPlanDTO,
                     userQuery: UserQuery
                 ) async throws -> LocalCollectedResult {
+                    if source == .mail {
+                        return try await mailFetcher.collect(
+                            for: intentPlan,
+                            timeRange: timeRange,
+                            userQuery: userQuery
+                        )
+                    }
+
                     // Prefer exact range API when pipeline supplies a timeframe.
                     var options = QueryCollectionOptions.default
                     if source == .location {
@@ -147,7 +158,11 @@ struct HelperApp: App {
             }
 
             let accessAdapter = AccessAdapter(access: access, sourceConnectionStore: sourceConnectionStore)
-            let localCollectorAdapter = LocalCollectorAdapter(fetcher: fetcher, access: access)
+            let localCollectorAdapter = LocalCollectorAdapter(
+                fetcher: fetcher,
+                access: access,
+                mailFetcher: mailQueryFetcher
+            )
 
             self.queryPipeline = QueryPipeline(
                 backendQueryService: backendQueryService,

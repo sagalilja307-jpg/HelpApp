@@ -26,7 +26,7 @@ final class GmailSyncCoordinator {
     }
 
     private func ensureValidToken() async throws -> OAuthToken {
-        let token = try await tokenManager.loadToken()
+        let token = try tokenManager.loadStoredToken()
         guard token.isExpired else { return token }
 
         guard let refreshToken = token.refreshToken, !refreshToken.isEmpty else {

@@ -60,6 +60,7 @@ enum BackendIntentMode: String, Codable, Sendable, Equatable {
 enum BackendIntentOperation: String, Codable, Sendable, Equatable {
     case count
     case list
+    case sum
     case sumDuration = "sum_duration"
     case groupByDay = "group_by_day"
     case groupByType = "group_by_type"
@@ -103,7 +104,7 @@ enum BackendIntentSortOption: String, Codable, Sendable, Equatable {
 
 struct BackendTimeScopeDTO: Codable, Sendable, Equatable {
     let type: BackendTimeScopeType
-    let value: BackendTimeScopeValue?
+    let value: String?
     let start: Date?
     let end: Date?
 }
@@ -218,6 +219,7 @@ struct BackendQueryResponseDTO: Codable, Sendable, Equatable {
     let answer: String?
     let entries: [BackendQueryEntryDTO]?
     let missingAccess: [String]?
+    let hasDataIntent: Bool
 
     enum CodingKeys: String, CodingKey {
         case intentPlan = "intent_plan"
@@ -227,11 +229,18 @@ struct BackendQueryResponseDTO: Codable, Sendable, Equatable {
         case missingAccess = "missing_access"
     }
 
-    init(intentPlan: BackendIntentPlanDTO, answer: String? = nil, entries: [BackendQueryEntryDTO]? = nil, missingAccess: [String]? = nil) {
+    init(
+        intentPlan: BackendIntentPlanDTO,
+        answer: String? = nil,
+        entries: [BackendQueryEntryDTO]? = nil,
+        missingAccess: [String]? = nil,
+        hasDataIntent: Bool = false
+    ) {
         self.intentPlan = intentPlan
         self.answer = answer
         self.entries = entries
         self.missingAccess = missingAccess
+        self.hasDataIntent = hasDataIntent
     }
 
     init(from decoder: Decoder) throws {
@@ -239,8 +248,10 @@ struct BackendQueryResponseDTO: Codable, Sendable, Equatable {
 
         if let plan = try container.decodeIfPresent(BackendIntentPlanDTO.self, forKey: .intentPlan) {
             self.intentPlan = plan
+            self.hasDataIntent = false
         } else if let dataIntent = try container.decodeIfPresent(BackendIntentPlanDTO.self, forKey: .dataIntent) {
             self.intentPlan = dataIntent
+            self.hasDataIntent = true
         } else {
             throw DecodingError.keyNotFound(
                 CodingKeys.intentPlan,
