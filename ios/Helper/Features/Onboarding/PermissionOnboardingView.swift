@@ -165,13 +165,7 @@ struct PermissionOnboardingView: View {
         Task {
             defer { isLoading = false }
             try? await PermissionManager.shared.requestAccess(for: type)
-
-            var latestStatus = await PermissionManager.shared.status(for: type)
-            if latestStatus == .notDetermined && requiresDelayedRecheck {
-                try? await Task.sleep(nanoseconds: 300_000_000)
-                latestStatus = await PermissionManager.shared.status(for: type)
-            }
-
+            let latestStatus = await settleStatusAfterRequest()
             status = latestStatus
             if latestStatus != .notDetermined {
                 onContinue()
@@ -220,9 +214,25 @@ struct PermissionOnboardingView: View {
         }
     }
 
-    private var requiresDelayedRecheck: Bool {
+    private func settleStatusAfterRequest() async -> AppPermissionStatus {
+        var latestStatus = await PermissionManager.shared.status(for: type)
+        guard latestStatus == .notDetermined else { return latestStatus }
+
+        let maxPollCount = needsPostRequestPolling ? 10 : 3
+        for _ in 0..<maxPollCount {
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            latestStatus = await PermissionManager.shared.status(for: type)
+            if latestStatus != .notDetermined {
+                return latestStatus
+            }
+        }
+
+        return latestStatus
+    }
+
+    private var needsPostRequestPolling: Bool {
         switch type {
-        case .calendar, .notification:
+        case .calendar, .reminder, .notification:
             return true
         default:
             return false

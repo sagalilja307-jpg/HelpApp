@@ -117,16 +117,38 @@ final class PermissionManager: NSObject {
     // MARK: Calendar
 
     private func requestCalendarAccess() async throws {
+        let currentStatus = EKEventStore.authorizationStatus(for: .event)
+        guard currentStatus == .notDetermined else { return }
+
         if #available(iOS 17.0, *) {
-            _ = try await eventStore.requestFullAccessToEvents()
+            do {
+                _ = try await eventStore.requestFullAccessToEvents()
+            } catch {
+                // Keep compatibility with setups that still rely on legacy key paths.
+                try? await eventStore.requestAccess(to: .event)
+            }
+            if EKEventStore.authorizationStatus(for: .event) == .notDetermined {
+                try? await eventStore.requestAccess(to: .event)
+            }
         } else {
             try await eventStore.requestAccess(to: .event)
         }
     }
 
     private func requestReminderAccess() async throws {
+        let currentStatus = EKEventStore.authorizationStatus(for: .reminder)
+        guard currentStatus == .notDetermined else { return }
+
         if #available(iOS 17.0, *) {
-            _ = try await eventStore.requestFullAccessToReminders()
+            do {
+                _ = try await eventStore.requestFullAccessToReminders()
+            } catch {
+                // Keep compatibility with setups that still rely on legacy key paths.
+                try? await eventStore.requestAccess(to: .reminder)
+            }
+            if EKEventStore.authorizationStatus(for: .reminder) == .notDetermined {
+                try? await eventStore.requestAccess(to: .reminder)
+            }
         } else {
             try await eventStore.requestAccess(to: .reminder)
         }

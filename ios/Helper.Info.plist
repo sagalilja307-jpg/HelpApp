@@ -2,111 +2,78 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-
-    <key>CFBundleDevelopmentRegion</key>
-    <string>$(DEVELOPMENT_LANGUAGE)</string>
-
-    <key>CFBundleDisplayName</key>
-    <string>Helper</string>
-
-    <key>CFBundleExecutable</key>
-    <string>$(EXECUTABLE_NAME)</string>
-
-    <key>CFBundleIdentifier</key>
-    <string>saga.com.Helper</string>
-
-    <key>GMAIL_IOS_CLIENT_ID</key>
-    <string>30704240302-fjskhosjebrbm3ssn6ap0qvo2mqo7hk3.apps.googleusercontent.com</string>
-
-    <key>GMAIL_IOS_REVERSED_CLIENT_ID</key>
-    <string>com.googleusercontent.apps.30704240302-fjskhosjebrbm3ssn6ap0qvo2mqo7hk3</string>
-
-    <key>CFBundleURLTypes</key>
-    <array>
-        <dict>
-            <key>CFBundleTypeRole</key>
-            <string>Editor</string>
-            <key>CFBundleURLName</key>
-            <string>saga.com.Helper.oauth</string>
-            <key>CFBundleURLSchemes</key>
-            <array>
-                <string>helper-oauth</string>
-                <string>com.googleusercontent.apps.30704240302-fjskhosjebrbm3ssn6ap0qvo2mqo7hk3</string>
-            </array>
-        </dict>
-    </array>
-
-    <key>CFBundleInfoDictionaryVersion</key>
-    <string>6.0</string>
-
-    <key>CFBundleName</key>
-    <string>Helper</string>
-
-    <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
-
-    <key>CFBundleVersion</key>
-    <string>1</string>
-
-    <key>NSAppTransportSecurity</key>
-    <dict>
-        <key>NSAllowsLocalNetworking</key>
-        <true/>
-    </dict>
-
-    <key>LSApplicationCategoryType</key>
-    <string>public.app-category.productivity</string>
-
-    <!-- Permissions -->
-    <!-- Calendar -->
-    <key>NSCalendarsUsageDescription</key>
-    <string>Helper behöver läsa din kalender för att ge smarta förslag och sammanfattningar.</string>
-
-    <!-- Reminders -->
-    <key>NSRemindersUsageDescription</key>
-    <string>Helper behöver läsa dina påminnelser för att hjälpa dig komma ihåg saker.</string>
-
-    <!-- Camera (document scanner, OCR) -->
-    <key>NSCameraUsageDescription</key>
-    <string>Helper använder kameran för att skanna dokument och text du väljer.</string>
-
-    <!-- Microphone (voice input, future use) -->
-    <key>NSMicrophoneUsageDescription</key>
-    <string>Helper använder mikrofonen om du väljer att prata med appen.</string>
-
-    <!-- Photos (if you allow image import) -->
-    <key>NSPhotoLibraryUsageDescription</key>
-    <string>Helper behöver tillgång till bilder du väljer att analysera.</string>
-
-    <!-- Contacts -->
-    <key>NSContactsUsageDescription</key>
-    <string>Helper behöver tillgång till kontakter för att kunna svara med kontaktbaserad kontext.</string>
-
-    <!-- Location (When In Use) -->
-    <key>NSLocationWhenInUseUsageDescription</key>
-    <string>Helper använder din plats för att ge relevanta svar på platsfrågor, t.ex. "vad finns nära mig?".</string>
-
-    <!-- Local network for backend on same Wi-Fi -->
-    <key>NSLocalNetworkUsageDescription</key>
-    <string>Helper behöver lokal nätverksåtkomst för att ansluta till backend på samma Wi-Fi.</string>
-
-    <!-- Notifications (optional, but recommended text shown in system sheet) -->
-    <key>NSUserNotificationUsageDescription</key>
-    <string>Helper skickar notiser för viktiga påminnelser och förslag.</string>
-
-    <!-- UI -->
-    <key>UILaunchStoryboardName</key>
-    <string>LaunchScreen</string>
-
-    <key>UIStatusBarHidden</key>
-    <false/>
-
-    <key>UISupportedInterfaceOrientations</key>
-    <array>
-        <string>UIInterfaceOrientationPortrait</string>
-        <string>UIInterfaceOrientationLandscapeLeft</string>
-        <string>UIInterfaceOrientationLandscapeRight</string>
-    </array>
-
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Helper</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>saga.com.Helper</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Helper</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>saga.com.Helper.oauth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>helper-oauth</string>
+				<string>com.googleusercontent.apps.30704240302-fjskhosjebrbm3ssn6ap0qvo2mqo7hk3</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>GMAIL_IOS_CLIENT_ID</key>
+	<string>30704240302-fjskhosjebrbm3ssn6ap0qvo2mqo7hk3.apps.googleusercontent.com</string>
+	<key>GMAIL_IOS_REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.30704240302-fjskhosjebrbm3ssn6ap0qvo2mqo7hk3</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Helper behöver läsa din kalender för att ge smarta förslag och sammanfattningar.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Helper behöver läsa din kalender för att ge smarta förslag och sammanfattningar.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Helper använder kameran för att skanna dokument och text du väljer.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Helper behöver tillgång till kontakter för att kunna svara med kontaktbaserad kontext.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Helper behöver lokal nätverksåtkomst för att ansluta till backend på samma Wi-Fi.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Helper använder din plats för att ge relevanta svar på platsfrågor, t.ex. "vad finns nära mig?".</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Helper använder mikrofonen om du väljer att prata med appen.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Helper behöver tillgång till bilder du väljer att analysera.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Helper behöver läsa dina påminnelser för att hjälpa dig komma ihåg saker.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>Helper behöver läsa dina påminnelser för att hjälpa dig komma ihåg saker.</string>
+	<key>NSUserNotificationUsageDescription</key>
+	<string>Helper skickar notiser för viktiga påminnelser och förslag.</string>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIStatusBarHidden</key>
+	<false/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
 </dict>
 </plist>
