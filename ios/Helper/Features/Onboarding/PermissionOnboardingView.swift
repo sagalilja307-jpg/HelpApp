@@ -68,18 +68,6 @@ struct PermissionOnboardingView: View {
                     .opacity(0.7)
                     .padding(.horizontal, 16)
 
-                if type == .photos {
-                    HStack(spacing: 8) {
-                        Image(systemName: "sparkles")
-                            .foregroundStyle(.secondary)
-                        Text("Rekommenderat: tillåt Bilder för att aktivera bildsvar i chatten.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 16)
-                }
-
                 actionArea
                     .padding(.horizontal, 16)
                     .padding(.bottom, 16)

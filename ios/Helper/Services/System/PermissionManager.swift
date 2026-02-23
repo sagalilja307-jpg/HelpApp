@@ -121,15 +121,7 @@ final class PermissionManager: NSObject {
         guard currentStatus == .notDetermined else { return }
 
         if #available(iOS 17.0, *) {
-            do {
-                _ = try await eventStore.requestFullAccessToEvents()
-            } catch {
-                // Keep compatibility with setups that still rely on legacy key paths.
-                try? await eventStore.requestAccess(to: .event)
-            }
-            if EKEventStore.authorizationStatus(for: .event) == .notDetermined {
-                try? await eventStore.requestAccess(to: .event)
-            }
+            _ = try await eventStore.requestFullAccessToEvents()
         } else {
             try await eventStore.requestAccess(to: .event)
         }
@@ -140,15 +132,7 @@ final class PermissionManager: NSObject {
         guard currentStatus == .notDetermined else { return }
 
         if #available(iOS 17.0, *) {
-            do {
-                _ = try await eventStore.requestFullAccessToReminders()
-            } catch {
-                // Keep compatibility with setups that still rely on legacy key paths.
-                try? await eventStore.requestAccess(to: .reminder)
-            }
-            if EKEventStore.authorizationStatus(for: .reminder) == .notDetermined {
-                try? await eventStore.requestAccess(to: .reminder)
-            }
+            _ = try await eventStore.requestFullAccessToReminders()
         } else {
             try await eventStore.requestAccess(to: .reminder)
         }
