@@ -18,7 +18,12 @@ final class QueryPipelineIntegrationTests: XCTestCase {
     }
 
     struct MockCollector: LocalQueryCollecting {
-        func collect(source: QuerySource, timeRange: DateInterval?, userQuery: UserQuery) async throws -> LocalCollectedResult {
+        func collect(
+            source: QuerySource,
+            timeRange: DateInterval?,
+            intentPlan: BackendIntentPlanDTO,
+            userQuery: UserQuery
+        ) async throws -> LocalCollectedResult {
             let entry = QueryResult.Entry(id: UUID(), source: source, title: "one", body: nil, date: Date())
             return LocalCollectedResult(entries: [entry])
         }

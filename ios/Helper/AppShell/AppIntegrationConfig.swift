@@ -4,8 +4,20 @@ enum AppIntegrationConfig {
     static let appGroupIdentifier = "group.saga.com.Helper"
     static let sharedItemsKey = "shared_items_v1"
 
-    static let oauthCallbackScheme = "helper-oauth"
-    static let gmailRedirectURI = "helper-oauth://oauth/gmail/callback"
+    static var oauthCallbackScheme: String {
+        if let reversedClientID = infoPlistString(forKey: "GMAIL_IOS_REVERSED_CLIENT_ID") {
+            return reversedClientID
+        }
+        if let clientID = infoPlistString(forKey: "GMAIL_IOS_CLIENT_ID"),
+           let derived = derivedReversedClientID(from: clientID) {
+            return derived
+        }
+        return "helper-oauth"
+    }
+
+    static var gmailRedirectURI: String {
+        "\(oauthCallbackScheme):/oauth2redirect"
+    }
 
     static let legacyBackendBaseURLDefaultsKey = "helper.backend.base_url"
 
@@ -87,5 +99,21 @@ enum AppIntegrationConfig {
             return true
         }
         return normalizedHost.hasPrefix("127.")
+    }
+
+    private static func infoPlistString(forKey key: String) -> String? {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String else {
+            return nil
+        }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func derivedReversedClientID(from clientID: String) -> String? {
+        let suffix = ".apps.googleusercontent.com"
+        guard clientID.hasSuffix(suffix) else { return nil }
+        let base = String(clientID.dropLast(suffix.count))
+        guard !base.isEmpty else { return nil }
+        return "com.googleusercontent.apps.\(base)"
     }
 }

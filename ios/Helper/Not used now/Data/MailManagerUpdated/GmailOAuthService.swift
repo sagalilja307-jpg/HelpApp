@@ -9,40 +9,6 @@ struct OAuthAuthorizationResult: Sendable {
     let expiresAt: Date
 }
 
-private struct GmailOAuthStartResponse: Codable {
-    let authorizationURL: String
-    let state: String
-    let expiresIn: Int
-
-    enum CodingKeys: String, CodingKey {
-        case authorizationURL = "authorization_url"
-        case state
-        case expiresIn = "expires_in"
-    }
-}
-
-private struct GmailOAuthExchangeRequest: Codable {
-    let code: String
-    let codeVerifier: String
-    let state: String
-    let redirectURI: String
-
-    enum CodingKeys: String, CodingKey {
-        case code
-        case codeVerifier = "code_verifier"
-        case state
-        case redirectURI = "redirect_uri"
-    }
-}
-
-private struct GmailOAuthRefreshRequest: Codable {
-    let refreshToken: String
-
-    enum CodingKeys: String, CodingKey {
-        case refreshToken = "refresh_token"
-    }
-}
-
 private struct GmailOAuthTokenResponse: Codable {
     let accessToken: String
     let refreshToken: String?
@@ -56,22 +22,28 @@ private struct GmailOAuthTokenResponse: Codable {
 }
 
 enum GmailOAuthServiceError: LocalizedError {
+    case missingClientID
     case invalidAuthorizationURL
     case callbackMissingCode
     case callbackStateMismatch
     case callbackFailed
+    case invalidTokenResponse
     case missingRefreshToken
 
     var errorDescription: String? {
         switch self {
+        case .missingClientID:
+            return "Gmail OAuth client id saknas i appkonfigurationen."
         case .invalidAuthorizationURL:
-            return "Ogiltig authorization URL från backend."
+            return "Ogiltig authorization URL."
         case .callbackMissingCode:
             return "OAuth callback saknar authorization code."
         case .callbackStateMismatch:
             return "OAuth state matchade inte."
         case .callbackFailed:
             return "OAuth callback misslyckades."
+        case .invalidTokenResponse:
+            return "Ogiltigt token-svar från Google."
         case .missingRefreshToken:
             return "Saknar refresh token för att kunna uppdatera access token."
         }
@@ -80,33 +52,35 @@ enum GmailOAuthServiceError: LocalizedError {
 
 @MainActor
 final class GmailOAuthService {
-    private let helperAPIClient: HelperAPIClient
+    private static let authURL = URL(string: "https://accounts.google.com/o/oauth2/v2/auth")!
+    private static let tokenURL = URL(string: "https://oauth2.googleapis.com/token")!
+
     private let tokenManager: OAuthTokenManager
 
-    init(
-        helperAPIClient: HelperAPIClient? = nil,
-        tokenManager: OAuthTokenManager? = nil
-    ) {
-        self.helperAPIClient = helperAPIClient ?? .shared
+    init(tokenManager: OAuthTokenManager? = nil) {
         self.tokenManager = tokenManager ?? .shared
     }
 
     func startAuthorization() async throws -> OAuthAuthorizationResult {
+        let clientID = try resolveClientID()
         let codeVerifier = Self.makeCodeVerifier()
         let codeChallenge = Self.makeCodeChallenge(codeVerifier: codeVerifier)
+        let state = Self.makeOAuthState()
 
-        let startData = try await helperAPIClient.get(
-            path: "/oauth/gmail/start",
-            queryItems: [
-                URLQueryItem(name: "code_challenge", value: codeChallenge),
-                URLQueryItem(name: "redirect_uri", value: AppIntegrationConfig.gmailRedirectURI)
-            ]
-        )
+        var components = URLComponents(url: Self.authURL, resolvingAgainstBaseURL: false)
+        components?.queryItems = [
+            URLQueryItem(name: "response_type", value: "code"),
+            URLQueryItem(name: "client_id", value: clientID),
+            URLQueryItem(name: "redirect_uri", value: AppIntegrationConfig.gmailRedirectURI),
+            URLQueryItem(name: "scope", value: "https://www.googleapis.com/auth/gmail.readonly"),
+            URLQueryItem(name: "access_type", value: "offline"),
+            URLQueryItem(name: "prompt", value: "consent"),
+            URLQueryItem(name: "state", value: state),
+            URLQueryItem(name: "code_challenge", value: codeChallenge),
+            URLQueryItem(name: "code_challenge_method", value: "S256")
+        ]
 
-        let decoder = JSONDecoder()
-        let start = try decoder.decode(GmailOAuthStartResponse.self, from: startData)
-
-        guard let authorizationURL = URL(string: start.authorizationURL) else {
+        guard let authorizationURL = components?.url else {
             throw GmailOAuthServiceError.invalidAuthorizationURL
         }
 
@@ -116,7 +90,7 @@ final class GmailOAuthService {
         )
 
         let callback = Self.parseCallbackURL(callbackURL)
-        guard callback.state == start.state else {
+        guard callback.state == state else {
             throw GmailOAuthServiceError.callbackStateMismatch
         }
 
@@ -124,17 +98,15 @@ final class GmailOAuthService {
             throw GmailOAuthServiceError.callbackMissingCode
         }
 
-        let exchangeBody = try JSONEncoder().encode(
-            GmailOAuthExchangeRequest(
-                code: code,
-                codeVerifier: codeVerifier,
-                state: start.state,
-                redirectURI: AppIntegrationConfig.gmailRedirectURI
-            )
+        let token = try await exchangeToken(
+            payload: [
+                "grant_type": "authorization_code",
+                "client_id": clientID,
+                "code": code,
+                "code_verifier": codeVerifier,
+                "redirect_uri": AppIntegrationConfig.gmailRedirectURI
+            ]
         )
-
-        let tokenData = try await helperAPIClient.post(path: "/oauth/gmail/exchange", body: exchangeBody)
-        let token = try decoder.decode(GmailOAuthTokenResponse.self, from: tokenData)
 
         let resolved = OAuthToken(
             accessToken: token.accessToken,
@@ -151,9 +123,14 @@ final class GmailOAuthService {
     }
 
     func refreshAuthorization(refreshToken: String) async throws -> OAuthAuthorizationResult {
-        let body = try JSONEncoder().encode(GmailOAuthRefreshRequest(refreshToken: refreshToken))
-        let data = try await helperAPIClient.post(path: "/oauth/gmail/refresh", body: body)
-        let token = try JSONDecoder().decode(GmailOAuthTokenResponse.self, from: data)
+        let clientID = try resolveClientID()
+        let token = try await exchangeToken(
+            payload: [
+                "grant_type": "refresh_token",
+                "client_id": clientID,
+                "refresh_token": refreshToken
+            ]
+        )
 
         let resolved = OAuthToken(
             accessToken: token.accessToken,
@@ -174,6 +151,47 @@ final class GmailOAuthService {
         let code = components?.queryItems?.first(where: { $0.name == "code" })?.value
         let state = components?.queryItems?.first(where: { $0.name == "state" })?.value
         return (code, state)
+    }
+
+    private func exchangeToken(payload: [String: String]) async throws -> GmailOAuthTokenResponse {
+        var request = URLRequest(url: Self.tokenURL)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+
+        var components = URLComponents()
+        components.queryItems = payload.map { URLQueryItem(name: $0.key, value: $0.value) }
+        request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+
+        let token = try JSONDecoder().decode(GmailOAuthTokenResponse.self, from: data)
+        guard !token.accessToken.isEmpty else {
+            throw GmailOAuthServiceError.invalidTokenResponse
+        }
+        return token
+    }
+
+    private func resolveClientID() throws -> String {
+        if let value = Bundle.main.object(forInfoDictionaryKey: "GMAIL_IOS_CLIENT_ID") as? String,
+           !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return value
+        }
+        if let value = ProcessInfo.processInfo.environment["HELPER_GMAIL_IOS_CLIENT_ID"],
+           !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return value
+        }
+        if let value = UserDefaults.standard.string(forKey: "helper.gmail.ios_client_id"),
+           !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return value
+        }
+        throw GmailOAuthServiceError.missingClientID
     }
 
     private static func performAuthorizationSession(
@@ -213,6 +231,11 @@ final class GmailOAuthService {
         let data = Data(codeVerifier.utf8)
         let digest = CryptoKit.SHA256.hash(data: data)
         return Data(digest).base64URLEncodedString()
+    }
+
+    private static func makeOAuthState() -> String {
+        let bytes = (0..<24).map { _ in UInt8.random(in: 0...255) }
+        return Data(bytes).base64URLEncodedString()
     }
 }
 

@@ -469,6 +469,8 @@ public struct ChatView: View {
             return "Filer"
         case .location:
             return "Plats"
+        case .mail:
+            return "Mejl"
         case .memory:
             return "Minne"
         case .rawEvents:
@@ -477,10 +479,7 @@ public struct ChatView: View {
     }
 
     private func handleGmailSync() async {
-        do {
-            _ = try await OAuthTokenManager.shared.loadToken()
-            gmailConnected = true
-        } catch {
+        if !OAuthTokenManager.shared.hasStoredToken() {
             do {
                 _ = try await gmailOAuthService.startAuthorization()
                 gmailConnected = true
@@ -501,13 +500,10 @@ public struct ChatView: View {
     }
 
     private func handleGmailLogin() async {
-        do {
-            _ = try await OAuthTokenManager.shared.loadToken()
+        if OAuthTokenManager.shared.hasStoredToken() {
             gmailConnected = true
             syncStatusMessage = "Gmail är redan ansluten."
             return
-        } catch {
-            // Ingen giltig token finns - fortsätt med OAuth-flödet.
         }
 
         do {
@@ -521,12 +517,7 @@ public struct ChatView: View {
     }
 
     private func refreshGmailConnectionState() async {
-        do {
-            _ = try await OAuthTokenManager.shared.loadToken()
-            gmailConnected = true
-        } catch {
-            gmailConnected = false
-        }
+        gmailConnected = OAuthTokenManager.shared.hasStoredToken()
     }
 
     private func createNote() {

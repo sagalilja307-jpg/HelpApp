@@ -288,6 +288,7 @@ private struct EmptyCollector: LocalQueryCollecting {
     func collect(
         source: QuerySource,
         timeRange: DateInterval?,
+        intentPlan: BackendIntentPlanDTO,
         userQuery: UserQuery
     ) async throws -> LocalCollectedResult {
         LocalCollectedResult(entries: [])
@@ -300,6 +301,7 @@ private struct FixedCollector: LocalQueryCollecting {
     func collect(
         source: QuerySource,
         timeRange: DateInterval?,
+        intentPlan: BackendIntentPlanDTO,
         userQuery: UserQuery
     ) async throws -> LocalCollectedResult {
         LocalCollectedResult(entries: entries)

@@ -15,7 +15,7 @@ final class GmailOAuthServiceTests: XCTestCase {
 
     @MainActor
     func testParseCallbackURLExtractsCodeAndState() throws {
-        let url = try XCTUnwrap(URL(string: "helper-oauth://oauth/gmail/callback?code=abc123&state=xyz987"))
+        let url = try XCTUnwrap(URL(string: "com.googleusercontent.apps.30704240302-fjskhosjebrbm3ssn6ap0qvo2mqo7hk3:/oauth2redirect?code=abc123&state=xyz987"))
         let parsed = GmailOAuthService.parseCallbackURL(url)
 
         XCTAssertEqual(parsed.code, "abc123")

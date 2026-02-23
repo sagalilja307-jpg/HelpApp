@@ -45,15 +45,6 @@ struct QueryPipeline {
         }
         let plan = response.intentPlan
 
-        if plan.domain == .mail && response.hasDataIntent {
-            return QueryResult(
-                timeRange: Self.timeRange(from: plan.timeScope),
-                entries: Self.mapBackendEntries(response.entries),
-                answer: response.answer ?? "Jag hittar ingen mejldata att visa just nu.",
-                intentPlan: plan
-            )
-        }
-
         if plan.domain == .mail && !response.hasDataIntent {
             return QueryResult(
                 timeRange: nil,
@@ -114,6 +105,7 @@ struct QueryPipeline {
             collected = try await localCollector.collect(
                 source: source,
                 timeRange: timeRange,
+                intentPlan: plan,
                 userQuery: query
             )
         } catch {
@@ -146,6 +138,7 @@ protocol LocalQueryCollecting {
     func collect(
         source: QuerySource,
         timeRange: DateInterval?,
+        intentPlan: BackendIntentPlanDTO,
         userQuery: UserQuery
     ) async throws -> LocalCollectedResult
 }
@@ -171,23 +164,6 @@ protocol QuerySourceAccessChecking {
 
 private extension QueryPipeline {
 
-    nonisolated static func mapBackendEntries(_ entries: [BackendQueryEntryDTO]?) -> [QueryResult.Entry] {
-        (entries ?? []).map { entry in
-            QueryResult.Entry(
-                id: UUID(uuidString: entry.id) ?? UUID(),
-                source: .memory,
-                title: entry.title,
-                body: entry.body,
-                date: entry.date
-            )
-        }
-    }
-
-    nonisolated static func timeRange(from scope: BackendTimeScopeDTO) -> DateInterval? {
-        guard let start = scope.start, let end = scope.end else { return nil }
-        return DateInterval(start: start, end: end)
-    }
-
     nonisolated static func mapDomainToSource(_ domain: BackendIntentDomain?) -> QuerySource? {
         switch domain {
         case .calendar: return .calendar
@@ -196,9 +172,10 @@ private extension QueryPipeline {
         case .photos: return .photos
         case .files: return .files
         case .location: return .location
+        case .mail: return .mail
         case .notes, .memory:
             return .memory
-        case .mail, .none:
+        case .none:
             return nil
         }
     }
@@ -250,6 +227,7 @@ private extension QueryPipeline {
         case .photos: return "bilder"
         case .files: return "filer"
         case .location: return "plats"
+        case .mail: return "mejl"
         default: return "data"
         }
     }

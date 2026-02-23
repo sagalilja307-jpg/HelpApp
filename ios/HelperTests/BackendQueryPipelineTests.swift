@@ -121,22 +121,11 @@ final class BackendQueryPipelineTests: XCTestCase {
         XCTAssertEqual(collector.lastSource, .memory)
     }
 
-    func testMailWithDataIntentUsesBackendQueryResponseAndSkipsCollector() async throws {
+    func testMailWithDataIntentCollectsViaMailSource() async throws {
         let collector = RecordingCollector()
         let plan = makePlan(domain: .mail, operation: .count, type: .all, value: nil)
         let response = BackendQueryResponseDTO(
             intentPlan: plan,
-            answer: "3 olästa mejl.",
-            entries: [
-                BackendQueryEntryDTO(
-                    id: UUID().uuidString,
-                    source: "mail",
-                    type: .email,
-                    title: "Välkommen",
-                    body: "Hej",
-                    date: Date(timeIntervalSince1970: 1_700_000_000)
-                )
-            ],
             hasDataIntent: true
         )
         let pipeline = QueryPipeline(
@@ -147,11 +136,8 @@ final class BackendQueryPipelineTests: XCTestCase {
 
         let result = try await pipeline.run(UserQuery(text: "hur många olästa mejl har jag?"))
 
-        XCTAssertEqual(result.answer, "3 olästa mejl.")
         XCTAssertEqual(result.intentPlan, plan)
-        XCTAssertEqual(result.entries.count, 1)
-        XCTAssertEqual(result.entries.first?.source, .memory)
-        XCTAssertNil(collector.lastSource)
+        XCTAssertEqual(collector.lastSource, .mail)
     }
 
     func testMailWithoutDataIntentReturnsTextOnlyAndSkipsCollector() async throws {
@@ -232,6 +218,7 @@ private final class RecordingCollector: LocalQueryCollecting {
     func collect(
         source: QuerySource,
         timeRange: DateInterval?,
+        intentPlan: BackendIntentPlanDTO,
         userQuery: UserQuery
     ) async throws -> LocalCollectedResult {
         lastSource = source

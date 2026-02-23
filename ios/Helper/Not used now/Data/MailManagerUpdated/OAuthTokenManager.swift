@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 struct OAuthToken: Codable {
     let accessToken: String
@@ -13,37 +14,96 @@ struct OAuthToken: Codable {
 final class OAuthTokenManager {
     static let shared = OAuthTokenManager()
 
-    private let storageKey = "oauth_token"
-    private let userDefaults = UserDefaults.standard
+    private let service = "saga.com.Helper.gmail.oauth"
+    private let account = "default"
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
 
     private init() {}
 
     func saveToken(_ token: OAuthToken) async {
         do {
-            let data = try JSONEncoder().encode(token)
-            userDefaults.set(data, forKey: storageKey)
-            HelperAPIClient.shared.setAccessToken(token.accessToken)
+            let data = try encoder.encode(token)
+            try saveToKeychain(data)
         } catch {
             print("Kunde inte spara token: \(error)")
         }
     }
 
     func loadToken() async throws -> OAuthToken {
-        guard let data = userDefaults.data(forKey: storageKey) else {
-            throw URLError(.userAuthenticationRequired)
-        }
-
-        let token = try JSONDecoder().decode(OAuthToken.self, from: data)
+        let token = try loadStoredToken()
 
         if token.isExpired {
             throw URLError(.userAuthenticationRequired)
         }
 
-        HelperAPIClient.shared.setAccessToken(token.accessToken)
         return token
     }
 
+    func loadStoredToken() throws -> OAuthToken {
+        guard let data = try readFromKeychain() else {
+            throw URLError(.userAuthenticationRequired)
+        }
+        return try decoder.decode(OAuthToken.self, from: data)
+    }
+
+    func hasStoredToken() -> Bool {
+        do {
+            return try readFromKeychain() != nil
+        } catch {
+            return false
+        }
+    }
+
+    func hasValidToken() -> Bool {
+        guard let token = try? loadStoredToken() else { return false }
+        return !token.isExpired
+    }
+
     func clearToken() {
-        userDefaults.removeObject(forKey: storageKey)
+        _ = try? deleteFromKeychain()
+    }
+}
+
+private extension OAuthTokenManager {
+    var baseQuery: [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+    }
+
+    func saveToKeychain(_ data: Data) throws {
+        try deleteFromKeychain()
+        var query = baseQuery
+        query[kSecValueData as String] = data
+        let status = SecItemAdd(query as CFDictionary, nil)
+        guard status == errSecSuccess else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(status))
+        }
+    }
+
+    func readFromKeychain() throws -> Data? {
+        var query = baseQuery
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+
+        if status == errSecItemNotFound {
+            return nil
+        }
+        guard status == errSecSuccess else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(status))
+        }
+        return item as? Data
+    }
+
+    func deleteFromKeychain() throws {
+        let status = SecItemDelete(baseQuery as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(status))
+        }
     }
 }
