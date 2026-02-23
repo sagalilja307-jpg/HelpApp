@@ -18,7 +18,6 @@ public struct ChatView: View {
     @State private var showCreateNote = false
     @State private var showDataSources = false
     @State private var supportSettingsViewModel = SupportSettingsViewModel()
-    @State private var gmailSyncCoordinator = GmailSyncCoordinator()
     @State private var gmailOAuthService = GmailOAuthService()
     @State private var gmailConnected = false
     @State private var syncStatusMessage: String?
@@ -141,14 +140,6 @@ public struct ChatView: View {
                     Image(systemName: "externaldrive.connected.to.line.below")
                 }
                 .accessibilityLabel("Datakallor")
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    Task { await handleGmailSync() }
-                } label: {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                }
-                .accessibilityLabel("Synka Gmail")
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -475,27 +466,6 @@ public struct ChatView: View {
             return "Minne"
         case .rawEvents:
             return "Råhändelser"
-        }
-    }
-
-    private func handleGmailSync() async {
-        if !OAuthTokenManager.shared.hasStoredToken() {
-            do {
-                _ = try await gmailOAuthService.startAuthorization()
-                gmailConnected = true
-            } catch {
-                gmailConnected = false
-                syncStatusMessage = "Kunde inte ansluta Gmail: \(error.localizedDescription)"
-                return
-            }
-        }
-
-        do {
-            try await gmailSyncCoordinator.syncInbox()
-            gmailConnected = true
-            syncStatusMessage = "Gmail synkades."
-        } catch {
-            syncStatusMessage = "Gmail-synk misslyckades: \(error.localizedDescription)"
         }
     }
 

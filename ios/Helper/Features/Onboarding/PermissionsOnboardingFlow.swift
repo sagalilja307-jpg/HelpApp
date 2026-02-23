@@ -15,11 +15,12 @@ struct PermissionsOnboardingFlow: View {
     private let steps: [AppPermissionType]
 
     @State private var index: Int = 0
+    @State private var isAdvancing = false
 
     init(onboardingComplete: Binding<Bool>,
          steps: [AppPermissionType] = [
-            .notification,
             .photos,
+            .notification,
             .camera,
             .contacts,
             .location,
@@ -36,17 +37,20 @@ struct PermissionsOnboardingFlow: View {
             header
 
             ZStack {
-                PermissionOnboardingView(type: currentType)
+                PermissionOnboardingView(
+                    type: currentType,
+                    isLastStep: isLastStep,
+                    onContinue: { goNext() }
+                )
                     .id(currentType)
                     .transition(.opacity)
             }
             .animation(.easeInOut(duration: 0.25), value: index)
-
-
-            // “Alltid möjlig att gå vidare”
-            footer
         }
         .padding(.top, 8)
+        .task {
+            await moveToNextPendingPermission(from: 0)
+        }
     }
 
     // MARK: - UI
@@ -67,42 +71,38 @@ struct PermissionsOnboardingFlow: View {
         .padding(.bottom, 8)
     }
 
-    private var footer: some View {
-        VStack(spacing: 10) {
-            Text("Steg \(index + 1) av \(steps.count)")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 12) {
-                Button("Inte nu") {
-                    goNext()
-                }
-                .buttonStyle(.bordered)
-                .frame(maxWidth: .infinity)
-
-                Button(index == steps.count - 1 ? "Börja" : "Fortsätt") {
-                    goNext()
-                }
-                .buttonStyle(.borderedProminent)
-                .frame(maxWidth: .infinity)
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 12)
-        }
-    }
-
-    // MARK: - Logic
-
     private var currentType: AppPermissionType {
         steps[min(max(index, 0), steps.count - 1)]
     }
 
+    private var isLastStep: Bool {
+        index >= steps.count - 1
+    }
+
     private func goNext() {
-        if index < steps.count - 1 {
-            index += 1
-        } else {
-            finish()
+        Task {
+            await moveToNextPendingPermission(from: index + 1)
         }
+    }
+
+    @MainActor
+    private func moveToNextPendingPermission(from startIndex: Int) async {
+        guard !isAdvancing else { return }
+        isAdvancing = true
+        defer { isAdvancing = false }
+
+        var nextIndex = max(startIndex, 0)
+        while nextIndex < steps.count {
+            let status = await PermissionManager.shared.status(for: steps[nextIndex])
+            if status == .granted {
+                nextIndex += 1
+                continue
+            }
+            index = nextIndex
+            return
+        }
+
+        finish()
     }
 
     private func finish() {
