@@ -220,7 +220,7 @@ struct PermissionOnboardingView: View {
 
     private var needsPostRequestPolling: Bool {
         switch type {
-        case .calendar, .reminder, .notification:
+        case .calendar, .reminder, .notification, .photos:
             return true
         default:
             return false
