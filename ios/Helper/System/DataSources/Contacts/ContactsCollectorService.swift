@@ -1,6 +1,5 @@
 import Foundation
 import SwiftData
-import CryptoKit
 #if canImport(Contacts)
 @preconcurrency import Contacts
 #endif
@@ -29,7 +28,7 @@ struct ContactsCollectorService: ContactsCollecting {
     }
 
     #if canImport(Contacts)
-    private let contactStore: CNContactStore
+    let contactStore: CNContactStore
     
     init(contactStore: CNContactStore = CNContactStore()) {
         self.contactStore = contactStore
@@ -149,142 +148,5 @@ struct ContactsCollectorService: ContactsCollecting {
             DataSourceDebug.failure(op, error)
             throw error
         }
-    }
-
-    // MARK: - Collect
-
-    func collectDelta(
-        since: Date?,
-        in context: ModelContext
-    ) throws -> (items: [UnifiedItemDTO], entries: [QueryResult.Entry]) {
-        let op = "ContactsCollect"
-        DataSourceDebug.start(op)
-        do {
-            let descriptor = FetchDescriptor<IndexedContact>(
-                sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-            )
-
-            let rows = try context.fetch(descriptor)
-
-            let filtered = rows.filter { row in
-                guard let since else { return true }
-                return row.updatedAt > since
-            }
-
-            let items = filtered.map(Self.mapIndexedContact)
-            let entries = filtered.map(Self.makeEntry)
-
-            DataSourceDebug.success(op, count: filtered.count)
-            return (items, entries)
-        } catch {
-            DataSourceDebug.failure(op, error)
-            throw error
-        }
-    }
-    
-    // MARK: - Private Helpers
-    
-    #if canImport(Contacts)
-    private func fetchSnapshots() throws -> [ContactSnapshot] {
-        let keys: [CNKeyDescriptor] = [
-            CNContactIdentifierKey as CNKeyDescriptor,
-            CNContactFormatter.descriptorForRequiredKeys(for: .fullName),
-            CNContactOrganizationNameKey as CNKeyDescriptor,
-            CNContactEmailAddressesKey as CNKeyDescriptor,
-            CNContactPhoneNumbersKey as CNKeyDescriptor
-        ]
-        
-        let request = CNContactFetchRequest(keysToFetch: keys)
-        var snapshots: [ContactSnapshot] = []
-        
-        try contactStore.enumerateContacts(with: request) { contact, _ in
-            let fullName = CNContactFormatter.string(from: contact, style: .fullName) ?? ""
-            guard !fullName.isEmpty else { return }
-            
-            let organization = contact.organizationName
-            let emails = contact.emailAddresses.map { $0.value as String }
-            let phones = contact.phoneNumbers.map { $0.value.stringValue }
-            
-            let hash = Self.computeHash(
-                name: fullName,
-                org: organization,
-                emails: emails,
-                phones: phones
-            )
-            
-            snapshots.append(ContactSnapshot(
-                identifier: contact.identifier,
-                fullName: fullName,
-                organization: organization,
-                emails: emails,
-                phones: phones,
-                hash: hash
-            ))
-        }
-        
-        return snapshots
-    }
-    
-    private static func computeHash(
-        name: String,
-        org: String,
-        emails: [String],
-        phones: [String]
-    ) -> String {
-        let combined = "\(name)|\(org)|\(emails.joined(separator: ","))|\(phones.joined(separator: ","))"
-        return String(combined.hashValue)
-    }
-    #endif
-    
-    private static func contactBody(
-        organization: String,
-        emails: [String],
-        phones: [String]
-    ) -> String {
-        var parts: [String] = []
-        
-        if !organization.isEmpty {
-            parts.append("Org: \(organization)")
-        }
-        
-        if !emails.isEmpty {
-            parts.append("E-post: \(emails.joined(separator: ", "))")
-        }
-        
-        if !phones.isEmpty {
-            parts.append("Tel: \(phones.joined(separator: ", "))")
-        }
-        
-        return parts.isEmpty ? "Kontakt" : parts.joined(separator: " | ")
-    }
-    
-    nonisolated private static func mapIndexedContact(_ contact: IndexedContact) -> UnifiedItemDTO {
-        UnifiedItemDTO(
-            id: contact.id,
-            source: "contacts",
-            type: .contact,
-            title: contact.fullName,
-            body: contact.bodySnippet,
-            createdAt: contact.createdAt,
-            updatedAt: contact.updatedAt,
-            startAt: nil,
-            endAt: nil,
-            dueAt: nil,
-            status: [
-                "organization": AnyCodable(contact.organization),
-                "has_email": AnyCodable(contact.hasEmail),
-                "has_phone": AnyCodable(contact.hasPhone)
-            ]
-        )
-    }
-    
-    nonisolated private static func makeEntry(_ contact: IndexedContact) -> QueryResult.Entry {
-        QueryResult.Entry(
-            id: UUID(),
-            source: .contacts,
-            title: contact.fullName,
-            body: contact.bodySnippet,
-            date: contact.updatedAt
-        )
     }
 }
