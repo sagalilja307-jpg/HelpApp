@@ -29,7 +29,7 @@ public final class CalendarSyncManager: ObservableObject {
     // MARK: - Private
 
     private let store: EKEventStore
-    private var cancellables = Set<AnyCancellable>()
+    var cancellables = Set<AnyCancellable>()
 
     // MARK: - Init
 
@@ -97,16 +97,5 @@ public final class CalendarSyncManager: ObservableObject {
             DataSourceDebug.failure(op, error)
             return false
         }
-    }
-
-    // MARK: - Event Observation
-
-    private func observeEventStoreChanges() {
-        NotificationCenter.default.publisher(for: .EKEventStoreChanged)
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.refreshAuthorizationStatus()
-            }
-            .store(in: &cancellables)
     }
 }

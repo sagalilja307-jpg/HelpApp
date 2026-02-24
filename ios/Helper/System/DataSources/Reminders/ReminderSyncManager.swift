@@ -2,7 +2,6 @@ import EventKit
 import Foundation
 import SwiftData
 
-
 final class ReminderSyncManager {
 
     static let shared = ReminderSyncManager()
@@ -88,61 +87,5 @@ final class ReminderSyncManager {
     func reminderExists(with title: String) async throws -> Bool {
         let reminders = try await fetchActiveReminders()
         return reminders.contains { $0.title == title }
-    }
-}
-
-
-// Lägg dessa under klassen (eller längst ner i filen)
-private struct ReminderRawPayload: Codable {
-    let kind: String            // "reminder"
-    let reminderId: String      // EK identifier
-    let title: String
-    let dueDate: Date?
-    let isCompleted: Bool
-}
-
-extension ReminderSyncManager {
-
-    /// Hämtar aktiva påminnelser och speglar dem till RawEvent i MemoryService.
-    /// Returnerar antal items som skrevs/uppdaterades.
-    func syncActiveRemindersToMemory(
-        memory: MemoryService,
-        in context: ModelContext
-    ) async throws -> Int {
-
-        let reminders = try await fetchActiveReminders()
-
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-
-        for item in reminders {
-            let payload = ReminderRawPayload(
-                kind: "reminder",
-                reminderId: item.id,
-                title: item.title,
-                dueDate: item.dueDate,
-                isCompleted: item.isCompleted
-            )
-
-            let data = try encoder.encode(payload)
-            let payloadJSON = String(data: data, encoding: .utf8) ?? "{}"
-
-            // Stabilt id i ditt minne (samma reminder -> samma raw_event id)
-            let rawId = "reminder:\(item.id)"
-
-            // timestamp: använd dueDate om den finns, annars "nu"
-            let ts = item.dueDate ?? DateService.shared.now()
-
-            try memory.putRawEvent(
-                actor: .system,
-                id: rawId,
-                source: "reminders",
-                timestamp: ts,
-                payloadJSON: payloadJSON,
-                in: context
-            )
-        }
-
-        return reminders.count
     }
 }
