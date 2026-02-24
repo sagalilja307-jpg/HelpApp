@@ -2,7 +2,6 @@ import Foundation
 import EventKit
 import AVFoundation
 import UserNotifications
-import Combine
 
 #if canImport(Contacts)
 import Contacts
@@ -47,8 +46,7 @@ final class PermissionManager: NSObject {
 
     private let eventStore = EKEventStore()
     private let locationManager = CLLocationManager()
-
-    private var locationContinuation: CheckedContinuation<Void, Error>?
+    private var locationContinuation: CheckedContinuation<AppPermissionStatus, Never>?
 
     // MARK: - STATUS
 
@@ -82,76 +80,79 @@ final class PermissionManager: NSObject {
             return photosPermissionStatus()
 
         case .location:
-            return locationPermissionStatus()
+            return mapLocationStatus(locationManager.authorizationStatus)
         }
     }
 
-    // MARK: - REQUESTS
+    // MARK: - REQUEST ENTRY POINT
 
-    func requestAccess(for type: AppPermissionType) async throws {
+    func requestAccess(for type: AppPermissionType) async throws -> AppPermissionStatus {
         switch type {
 
         case .calendar:
-            try await requestCalendarAccess()
+            return try await requestCalendarAccess()
 
         case .reminder:
-            try await requestReminderAccess()
+            return try await requestReminderAccess()
 
         case .notification:
             try await requestNotificationAccess()
+            return await status(for: .notification)
 
         case .camera:
             try await requestCameraAccess()
+            return await status(for: .camera)
 
         case .contacts:
             try await requestContactsAccess()
+            return await status(for: .contacts)
 
         case .photos:
-            _ = try await requestPhotosAccess()
+            return try await requestPhotosAccess()
 
         case .location:
-            try await requestLocationAccess()
+            return await requestLocationAccess()
         }
     }
 
-    // MARK: Calendar
+    // MARK: - Calendar
 
-    private func requestCalendarAccess() async throws {
-        let currentStatus = EKEventStore.authorizationStatus(for: .event)
-        guard currentStatus == .notDetermined else { return }
-
+    private func requestCalendarAccess() async throws -> AppPermissionStatus {
         if #available(iOS 17.0, *) {
-            _ = try await eventStore.requestFullAccessToEvents()
+            let granted = try await eventStore.requestFullAccessToEvents()
+            return granted ? .granted : .denied
         } else {
-            try await eventStore.requestAccess(to: .event)
+            let granted = try await eventStore.requestAccess(to: .event)
+            return granted ? .granted : .denied
         }
     }
 
-    private func requestReminderAccess() async throws {
-        let currentStatus = EKEventStore.authorizationStatus(for: .reminder)
-        guard currentStatus == .notDetermined else { return }
+    // MARK: - Reminder
 
+    private func requestReminderAccess() async throws -> AppPermissionStatus {
         if #available(iOS 17.0, *) {
-            _ = try await eventStore.requestFullAccessToReminders()
+            let granted = try await eventStore.requestFullAccessToReminders()
+            return granted ? .granted : .denied
         } else {
-            try await eventStore.requestAccess(to: .reminder)
+            let granted = try await eventStore.requestAccess(to: .reminder)
+            return granted ? .granted : .denied
         }
     }
 
-    // MARK: Notifications
+    // MARK: - Notifications
 
     private func requestNotificationAccess() async throws {
         _ = try await UNUserNotificationCenter.current()
             .requestAuthorization(options: [.alert, .sound, .badge])
     }
 
-    // MARK: Camera
+    // MARK: - Camera
 
     private func requestCameraAccess() async throws {
         _ = await AVCaptureDevice.requestAccess(for: .video)
     }
 
-    // MARK: Contacts
+    // MARK: - Contacts
 
     private func requestContactsAccess() async throws {
         #if canImport(Contacts)
@@ -159,34 +160,27 @@ final class PermissionManager: NSObject {
         #endif
     }
 
-    // MARK: Photos
+    // MARK: - Photos (MAX ACCESS ONLY)
 
     private func requestPhotosAccess() async throws -> AppPermissionStatus {
         #if canImport(PhotoKit)
-        let current = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-        switch current {
-        case .authorized, .limited:
-            return mapPhotosStatus(current)
-        case .notDetermined:
-            let newStatus = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
-            return mapPhotosStatus(newStatus)
-        case .denied, .restricted:
-            return mapPhotosStatus(current)
-        @unknown default:
-            return mapPhotosStatus(current)
-        }
+        let newStatus = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+        return mapPhotosStatus(newStatus)
         #else
         return .denied
         #endif
     }
 
-    // MARK: Location (Correct Async Implementation)
+    // MARK: - Location (Deterministic)
 
-    private func requestLocationAccess() async throws {
+    private func requestLocationAccess() async -> AppPermissionStatus {
         let current = locationManager.authorizationStatus
-        guard current == .notDetermined else { return }
 
-        try await withCheckedThrowingContinuation { continuation in
+        if current != .notDetermined {
+            return mapLocationStatus(current)
+        }
+
+        return await withCheckedContinuation { continuation in
             locationContinuation = continuation
             locationManager.requestWhenInUseAuthorization()
         }
@@ -233,16 +227,6 @@ final class PermissionManager: NSObject {
         }
     }
 
-    private func contactsPermissionStatus() -> AppPermissionStatus {
-        #if canImport(Contacts)
-        return mapContactsStatus(
-            CNContactStore.authorizationStatus(for: .contacts)
-        )
-        #else
-        return .denied
-        #endif
-    }
-
     private func photosPermissionStatus() -> AppPermissionStatus {
         #if canImport(PhotoKit)
         return mapPhotosStatus(
@@ -253,8 +237,19 @@ final class PermissionManager: NSObject {
         #endif
     }
 
-    private func locationPermissionStatus() -> AppPermissionStatus {
-        mapLocationStatus(locationManager.authorizationStatus)
+    private func mapPhotosStatus(_ status: PHAuthorizationStatus) -> AppPermissionStatus {
+        switch status {
+        case .notDetermined:
+            return .notDetermined
+        case .authorized:
+            return .granted
+        case .limited:
+            return .denied   // MAX ACCESS ONLY
+        case .denied, .restricted:
+            return .denied
+        @unknown default:
+            return .denied
+        }
     }
 
     #if canImport(CoreLocation)
@@ -273,29 +268,16 @@ final class PermissionManager: NSObject {
     #endif
 
     #if canImport(Contacts)
-    private func mapContactsStatus(_ status: CNAuthorizationStatus) -> AppPermissionStatus {
-        switch status {
+    private func contactsPermissionStatus() -> AppPermissionStatus {
+        switch CNContactStore.authorizationStatus(for: .contacts) {
         case .notDetermined:
             return .notDetermined
-        case .authorized, .limited:
+        case .authorized:
             return .granted
         case .denied, .restricted:
             return .denied
-        @unknown default:
-            return .denied
-        }
-    }
-    #endif
-
-    #if canImport(PhotoKit)
-    private func mapPhotosStatus(_ status: PHAuthorizationStatus) -> AppPermissionStatus {
-        switch status {
-        case .notDetermined:
-            return .notDetermined
-        case .authorized, .limited:
+        case .limited:
             return .granted
-        case .denied, .restricted:
-            return .denied
         @unknown default:
             return .denied
         }
@@ -313,11 +295,9 @@ extension PermissionManager: CLLocationManagerDelegate {
         Task { @MainActor in
             guard let continuation = locationContinuation else { return }
 
-            let status = manager.authorizationStatus
-            if status != .notDetermined {
-                continuation.resume()
-                locationContinuation = nil
-            }
+            let status = mapLocationStatus(manager.authorizationStatus)
+            continuation.resume(returning: status)
+            locationContinuation = nil
         }
     }
 }

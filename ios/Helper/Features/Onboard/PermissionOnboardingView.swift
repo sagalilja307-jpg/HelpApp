@@ -1,12 +1,19 @@
 //
 //  PermissionOnboardingView.swift
 //  Helper
+/ /
+//  Created by Saga Lilja on 2026-01-30.
+//
+
+//
+//  PermissionOnboardingView.swift
+//  Helper
 //
 //  Created by Saga Lilja on 2026-01-30.
 //
 
-
 import SwiftUI
+import UIKit
 
 struct PermissionOnboardingView: View {
 
@@ -93,9 +100,12 @@ struct PermissionOnboardingView: View {
         .animation(.easeInOut(duration: 0.2), value: status)
     }
 
+    // MARK: - Action Area
+
     @ViewBuilder
     private var actionArea: some View {
         switch status {
+
         case .granted:
             Button {
                 onContinue()
@@ -131,7 +141,8 @@ struct PermissionOnboardingView: View {
                 } label: {
                     HStack(spacing: 10) {
                         if isLoading {
-                            ProgressView().controlSize(.small)
+                            ProgressView()
+                                .controlSize(.small)
                         }
                         Text(isLoading ? "Begär åtkomst…" : "Tillåt åtkomst")
                     }
@@ -148,23 +159,35 @@ struct PermissionOnboardingView: View {
         }
     }
 
+    // MARK: - Permission Request (Deterministic)
+
     private func request() {
         isLoading = true
+
         Task {
             defer { isLoading = false }
-            try? await PermissionManager.shared.requestAccess(for: type)
-            let latestStatus = await settleStatusAfterRequest()
-            status = latestStatus
-            if latestStatus != .notDetermined {
-                onContinue()
+
+            do {
+                let newStatus = try await PermissionManager.shared.requestAccess(for: type)
+                status = newStatus
+
+                if newStatus == .granted {
+                    onContinue()
+                }
+            } catch {
+                status = .denied
             }
         }
     }
+
+    // MARK: - Settings
 
     private func openSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
     }
+
+    // MARK: - Content
 
     private var title: String {
         switch type {
@@ -199,31 +222,6 @@ struct PermissionOnboardingView: View {
         case .contacts: return "person.crop.circle"
         case .photos: return "photo.on.rectangle"
         case .location: return "location"
-        }
-    }
-
-    private func settleStatusAfterRequest() async -> AppPermissionStatus {
-        var latestStatus = await PermissionManager.shared.status(for: type)
-        guard latestStatus == .notDetermined else { return latestStatus }
-
-        let maxPollCount = needsPostRequestPolling ? 10 : 3
-        for _ in 0..<maxPollCount {
-            try? await Task.sleep(nanoseconds: 200_000_000)
-            latestStatus = await PermissionManager.shared.status(for: type)
-            if latestStatus != .notDetermined {
-                return latestStatus
-            }
-        }
-
-        return latestStatus
-    }
-
-    private var needsPostRequestPolling: Bool {
-        switch type {
-        case .calendar, .reminder, .notification, .photos:
-            return true
-        default:
-            return false
         }
     }
 }
