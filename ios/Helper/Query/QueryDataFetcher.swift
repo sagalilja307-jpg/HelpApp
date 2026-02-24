@@ -306,7 +306,7 @@ final class QueryDataFetcher: QueryDataFetching {
         #if canImport(EventKit)
         let status = EKEventStore.authorizationStatus(for: .reminder)
         if #available(iOS 17.0, *) {
-            guard status == .fullAccess || status == .authorized else { return ([], []) }
+            guard status == .fullAccess || status == .writeOnly else { return ([], []) }
         } else {
             guard status == .authorized else { return ([], []) }
         }

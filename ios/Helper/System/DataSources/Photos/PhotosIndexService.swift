@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
-#if canImport(PhotoKit)
-@preconcurrency import PhotoKit
+#if canImport(Photos)
+@preconcurrency import Photos
 #endif
 #if canImport(UIKit)
 @preconcurrency import UIKit
@@ -165,7 +165,7 @@ private extension PhotosIndexService {
         in context: ModelContext
     ) async throws -> Int {
 
-        #if canImport(PhotoKit)
+        #if canImport(Photos)
 
         let snapshots = try await fetchSnapshots(
             modifiedAfter: since,
@@ -181,6 +181,154 @@ private extension PhotosIndexService {
         return 0
         #endif
     }
+
+    #if canImport(Photos)
+    func fetchSnapshots(
+        modifiedAfter since: Date?,
+        fetchLimit: Int?
+    ) async throws -> [AssetSnapshot] {
+        let options = PHFetchOptions()
+        options.sortDescriptors = [
+            NSSortDescriptor(key: "modificationDate", ascending: false)
+        ]
+        if let since {
+            options.predicate = NSPredicate(
+                format: "modificationDate > %@",
+                since as NSDate
+            )
+        }
+        if let fetchLimit {
+            options.fetchLimit = fetchLimit
+        }
+
+        let assetsResult = PHAsset.fetchAssets(with: .image, options: options)
+        guard assetsResult.count > 0 else { return [] }
+
+        var assets: [PHAsset] = []
+        assets.reserveCapacity(assetsResult.count)
+        assetsResult.enumerateObjects { asset, _, _ in
+            assets.append(asset)
+        }
+
+        let ocrEnabled = sourceConnectionStore.isOCREnabled(for: .photos)
+        var snapshots: [AssetSnapshot] = []
+        snapshots.reserveCapacity(assets.count)
+
+        for asset in assets {
+            snapshots.append(await makeSnapshot(for: asset, ocrEnabled: ocrEnabled))
+        }
+
+        return snapshots
+    }
+
+    func makeSnapshot(
+        for asset: PHAsset,
+        ocrEnabled: Bool
+    ) async -> AssetSnapshot {
+        let ocrText: String?
+        let ocrState: String
+
+        if ocrEnabled {
+            #if canImport(UIKit)
+            if let image = await requestUIImage(for: asset) {
+                let recognized = await PhotoOCR.recognize(from: image)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if recognized.isEmpty {
+                    ocrText = nil
+                    ocrState = "empty"
+                } else {
+                    ocrText = String(recognized.prefix(2_000))
+                    ocrState = "done"
+                }
+            } else {
+                ocrText = nil
+                ocrState = "image_unavailable"
+            }
+            #else
+            ocrText = nil
+            ocrState = "unavailable"
+            #endif
+        } else {
+            ocrText = nil
+            ocrState = "disabled"
+        }
+
+        return AssetSnapshot(
+            localIdentifier: asset.localIdentifier,
+            title: Self.makeTitle(for: asset),
+            bodySnippet: Self.makeBodySnippet(for: asset, ocrText: ocrText),
+            assetCreatedAt: asset.creationDate,
+            assetUpdatedAt: asset.modificationDate ?? asset.creationDate,
+            isFavorite: asset.isFavorite,
+            ocrText: ocrText,
+            ocrEnabled: ocrEnabled,
+            ocrState: ocrState
+        )
+    }
+
+    #if canImport(UIKit)
+    func requestUIImage(for asset: PHAsset) async -> UIImage? {
+        let options = PHImageRequestOptions()
+        options.isNetworkAccessAllowed = true
+        options.deliveryMode = .highQualityFormat
+        options.resizeMode = .fast
+
+        return await withCheckedContinuation { continuation in
+            PHImageManager.default().requestImageDataAndOrientation(
+                for: asset,
+                options: options
+            ) { data, _, _, _ in
+                guard let data else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                continuation.resume(returning: UIImage(data: data))
+            }
+        }
+    }
+    #endif
+
+    static func makeTitle(for asset: PHAsset) -> String {
+        guard let date = asset.creationDate else { return "Bild" }
+        return "Bild \(photoTitleFormatter.string(from: date))"
+    }
+
+    static func makeBodySnippet(for asset: PHAsset, ocrText: String?) -> String {
+        var parts: [String] = []
+
+        if let date = asset.creationDate {
+            parts.append(photoBodyFormatter.string(from: date))
+        }
+
+        parts.append("\(asset.pixelWidth)x\(asset.pixelHeight)")
+
+        if asset.isFavorite {
+            parts.append("favorit")
+        }
+
+        if let ocrText, !ocrText.isEmpty {
+            parts.append(String(ocrText.prefix(240)))
+        }
+
+        return parts.isEmpty ? "Bild i biblioteket" : parts.joined(separator: " • ")
+    }
+
+    static let photoTitleFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "sv_SE")
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
+
+    static let photoBodyFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "sv_SE")
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter
+    }()
+    #endif
 
     func upsertSnapshots(
         _ snapshots: [AssetSnapshot],

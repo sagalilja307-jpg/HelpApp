@@ -5,8 +5,8 @@ import EventKit
 #if canImport(Contacts)
 import Contacts
 #endif
-#if canImport(PhotoKit)
-import PhotoKit
+#if canImport(Photos)
+import Photos
 #endif
 #if canImport(CoreLocation)
 import CoreLocation
@@ -198,7 +198,7 @@ private extension QuerySourceAccess {
     }
 
     func photosAuthorized() -> Bool {
-#if canImport(PhotoKit)
+#if canImport(Photos)
         let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         return status == .authorized || status == .limited
 #else

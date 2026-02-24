@@ -7,8 +7,8 @@ import UserNotifications
 import Contacts
 #endif
 
-#if canImport(PhotoKit)
-@preconcurrency import PhotoKit
+#if canImport(Photos)
+@preconcurrency import Photos
 #endif
 
 #if canImport(CoreLocation)
@@ -163,7 +163,7 @@ final class PermissionManager: NSObject {
     // MARK: - Photos
 
     private func requestPhotosAccess() async throws -> AppPermissionStatus {
-        #if canImport(PhotoKit)
+        #if canImport(Photos)
         let newStatus = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
         return mapPhotosStatus(newStatus)
         #else
@@ -228,7 +228,7 @@ final class PermissionManager: NSObject {
     }
 
     private func photosPermissionStatus() -> AppPermissionStatus {
-        #if canImport(PhotoKit)
+        #if canImport(Photos)
         return mapPhotosStatus(
             PHPhotoLibrary.authorizationStatus(for: .readWrite)
         )
@@ -237,7 +237,7 @@ final class PermissionManager: NSObject {
         #endif
     }
 
-    #if canImport(PhotoKit)
+    #if canImport(Photos)
     private func mapPhotosStatus(_ status: PHAuthorizationStatus) -> AppPermissionStatus {
         switch status {
         case .notDetermined:

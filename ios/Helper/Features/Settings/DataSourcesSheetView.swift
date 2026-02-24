@@ -325,7 +325,7 @@ private extension DataSourcesSheetView {
         }
 
         do {
-            try await PermissionManager.shared.requestAccess(for: .contacts)
+            _ = try await PermissionManager.shared.requestAccess(for: .contacts)
             let status = await PermissionManager.shared.status(for: .contacts)
 
             guard status == .granted else {
@@ -356,7 +356,7 @@ private extension DataSourcesSheetView {
         }
 
         do {
-            try await PermissionManager.shared.requestAccess(for: .photos)
+            _ = try await PermissionManager.shared.requestAccess(for: .photos)
             let status = await PermissionManager.shared.status(for: .photos)
 
             guard status == .granted else {
@@ -459,7 +459,7 @@ private extension DataSourcesSheetView {
         }
 
         do {
-            try await PermissionManager.shared.requestAccess(for: .location)
+            _ = try await PermissionManager.shared.requestAccess(for: .location)
             let status = await PermissionManager.shared.status(for: .location)
 
             guard status == .granted else {
@@ -567,7 +567,7 @@ private extension DataSourcesSheetView {
 
     func requestCalendarAccessFromSheet() async {
         do {
-            try await PermissionManager.shared.requestAccess(for: .calendar)
+            _ = try await PermissionManager.shared.requestAccess(for: .calendar)
             calendarStatus = await PermissionManager.shared.status(for: .calendar)
             calendarEnabled = calendarStatus == .granted
             if !calendarEnabled {
@@ -582,7 +582,7 @@ private extension DataSourcesSheetView {
 
     func requestReminderAccessFromSheet() async {
         do {
-            try await PermissionManager.shared.requestAccess(for: .reminder)
+            _ = try await PermissionManager.shared.requestAccess(for: .reminder)
             remindersStatus = await PermissionManager.shared.status(for: .reminder)
             remindersEnabled = remindersStatus == .granted
             if !remindersEnabled {
@@ -597,7 +597,7 @@ private extension DataSourcesSheetView {
 
     func requestNotificationAccessFromSheet() async {
         do {
-            try await PermissionManager.shared.requestAccess(for: .notification)
+            _ = try await PermissionManager.shared.requestAccess(for: .notification)
             notificationStatus = await PermissionManager.shared.status(for: .notification)
             notificationsEnabled = notificationStatus == .granted
             if !notificationsEnabled {
