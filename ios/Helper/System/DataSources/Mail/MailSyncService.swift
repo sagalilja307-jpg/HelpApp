@@ -73,26 +73,35 @@ final class MailSyncService {
         gmailQuery: String?,
         maxResults: Int = 50
     ) async throws -> [GmailMessageSummary] {
-        let refs = try await listMessageRefs(
-            accessToken: accessToken,
-            gmailQuery: gmailQuery,
-            maxResults: maxResults
-        )
-
-        var result: [GmailMessageSummary] = []
-        result.reserveCapacity(refs.count)
-
-        for ref in refs {
-            if let message = try await fetchMessage(
+        let op = "MailFetchMessages"
+        DataSourceDebug.start(op)
+        do {
+            let refs = try await listMessageRefs(
                 accessToken: accessToken,
-                messageId: ref.id,
-                fallbackThreadId: ref.threadId
-            ) {
-                result.append(message)
-            }
-        }
+                gmailQuery: gmailQuery,
+                maxResults: maxResults
+            )
 
-        return result.sorted { $0.internalDate > $1.internalDate }
+            var result: [GmailMessageSummary] = []
+            result.reserveCapacity(refs.count)
+
+            for ref in refs {
+                if let message = try await fetchMessage(
+                    accessToken: accessToken,
+                    messageId: ref.id,
+                    fallbackThreadId: ref.threadId
+                ) {
+                    result.append(message)
+                }
+            }
+
+            let sorted = result.sorted { $0.internalDate > $1.internalDate }
+            DataSourceDebug.success(op, count: sorted.count)
+            return sorted
+        } catch {
+            DataSourceDebug.failure(op, error)
+            throw error
+        }
     }
 
     @MainActor
@@ -103,58 +112,67 @@ final class MailSyncService {
         memory: MemoryService,
         in context: ModelContext
     ) async throws -> [QueryResult.Entry] {
-        let messages = try await fetchMessages(
-            accessToken: accessToken,
-            gmailQuery: gmailQuery,
-            maxResults: maxResults
-        )
-        let contentObjects = makeContentObjects(from: messages)
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-
-        for (message, content) in zip(messages, contentObjects) {
-            let rawPayload = MailRawPayload(
-                kind: "mail",
-                messageId: message.id,
-                threadId: message.threadId,
-                from: message.from,
-                subject: message.subject,
-                snippet: message.snippet,
-                internalDate: message.internalDate,
-                isUnread: message.isUnread
+        let op = "MailSyncInbox"
+        DataSourceDebug.start(op)
+        do {
+            let messages = try await fetchMessages(
+                accessToken: accessToken,
+                gmailQuery: gmailQuery,
+                maxResults: maxResults
             )
-            let payloadData = try encoder.encode(rawPayload)
-            let payloadJSON = String(data: payloadData, encoding: .utf8) ?? "{}"
-            let rawEventID = "mail:\(message.id)"
+            let contentObjects = makeContentObjects(from: messages)
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
 
-            try memory.putRawEvent(
-                actor: .system,
-                id: rawEventID,
-                source: "mail",
-                timestamp: message.internalDate,
-                payloadJSON: payloadJSON,
-                text: content.rawText,
-                in: context
-            )
+            for (message, content) in zip(messages, contentObjects) {
+                let rawPayload = MailRawPayload(
+                    kind: "mail",
+                    messageId: message.id,
+                    threadId: message.threadId,
+                    from: message.from,
+                    subject: message.subject,
+                    snippet: message.snippet,
+                    internalDate: message.internalDate,
+                    isUnread: message.isUnread
+                )
+                let payloadData = try encoder.encode(rawPayload)
+                let payloadJSON = String(data: payloadData, encoding: .utf8) ?? "{}"
+                let rawEventID = "mail:\(message.id)"
 
-            try memory.putEmbedding(
-                actor: .system,
-                embeddingId: rawEventID,
-                sourceType: "mail",
-                sourceId: message.id,
-                vector: vectorize(content.rawText),
-                in: context
-            )
-        }
+                try memory.putRawEvent(
+                    actor: .system,
+                    id: rawEventID,
+                    source: "mail",
+                    timestamp: message.internalDate,
+                    payloadJSON: payloadJSON,
+                    text: content.rawText,
+                    in: context
+                )
 
-        return messages.map { message in
-            QueryResult.Entry(
-                id: UUID(),
-                source: .mail,
-                title: message.subject.isEmpty ? "(Utan ämne)" : message.subject,
-                body: message.snippet.isEmpty ? nil : message.snippet,
-                date: message.internalDate
-            )
+                try memory.putEmbedding(
+                    actor: .system,
+                    embeddingId: rawEventID,
+                    sourceType: "mail",
+                    sourceId: message.id,
+                    vector: vectorize(content.rawText),
+                    in: context
+                )
+            }
+
+            let entries = messages.map { message in
+                QueryResult.Entry(
+                    id: UUID(),
+                    source: .mail,
+                    title: message.subject.isEmpty ? "(Utan ämne)" : message.subject,
+                    body: message.snippet.isEmpty ? nil : message.snippet,
+                    date: message.internalDate
+                )
+            }
+            DataSourceDebug.success(op, count: entries.count)
+            return entries
+        } catch {
+            DataSourceDebug.failure(op, error)
+            throw error
         }
     }
 
@@ -163,15 +181,23 @@ final class MailSyncService {
         days: Int = 90,
         maxResults: Int = 50
     ) async throws {
-        let memory = try MemoryService()
-        let context = memory.context()
-        _ = try await syncInbox(
-            accessToken: accessToken,
-            gmailQuery: "newer_than:\(max(1, days))d",
-            maxResults: maxResults,
-            memory: memory,
-            in: context
-        )
+        let op = "MailSyncGmail"
+        DataSourceDebug.start(op)
+        do {
+            let memory = try MemoryService()
+            let context = memory.context()
+            let entries = try await syncInbox(
+                accessToken: accessToken,
+                gmailQuery: "newer_than:\(max(1, days))d",
+                maxResults: maxResults,
+                memory: memory,
+                in: context
+            )
+            DataSourceDebug.success(op, count: entries.count)
+        } catch {
+            DataSourceDebug.failure(op, error)
+            throw error
+        }
     }
 
     func makeContentObjects(from messages: [GmailMessageSummary]) -> [ContentObject] {

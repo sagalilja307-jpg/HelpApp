@@ -71,76 +71,84 @@ struct ContactsCollectorService: ContactsCollecting {
     func refreshIndex(
         in context: ModelContext
     ) throws -> Int {
+        let op = "ContactsRefreshIndex"
+        DataSourceDebug.start(op)
+        do {
+            #if canImport(Contacts)
 
-        #if canImport(Contacts)
+            let snapshots = try fetchSnapshots()
 
-        let snapshots = try fetchSnapshots()
+            let existing = try context.fetch(FetchDescriptor<IndexedContact>())
+            var existingByIdentifier =
+                Dictionary(uniqueKeysWithValues: existing.map { ($0.contactIdentifier, $0) })
 
-        let existing = try context.fetch(FetchDescriptor<IndexedContact>())
-        var existingByIdentifier =
-            Dictionary(uniqueKeysWithValues: existing.map { ($0.contactIdentifier, $0) })
+            var changedCount = 0
+            let now = DateService.shared.now()
 
-        var changedCount = 0
-        let now = DateService.shared.now()
+            for snapshot in snapshots {
 
-        for snapshot in snapshots {
+                if let row = existingByIdentifier[snapshot.identifier] {
 
-            if let row = existingByIdentifier[snapshot.identifier] {
+                    if row.contactHash == snapshot.hash {
+                        continue
+                    }
 
-                if row.contactHash == snapshot.hash {
-                    continue
+                    row.fullName = snapshot.fullName
+                    row.organization = snapshot.organization
+                    row.bodySnippet = Self.contactBody(
+                        organization: snapshot.organization,
+                        emails: snapshot.emails,
+                        phones: snapshot.phones
+                    )
+                    row.hasEmail = !snapshot.emails.isEmpty
+                    row.hasPhone = !snapshot.phones.isEmpty
+                    row.contactHash = snapshot.hash
+                    row.updatedAt = now
+
+                    changedCount += 1
+
+                } else {
+
+                    let body = Self.contactBody(
+                        organization: snapshot.organization,
+                        emails: snapshot.emails,
+                        phones: snapshot.phones
+                    )
+
+                    let row = IndexedContact(
+                        id: "contact:\(snapshot.identifier)",
+                        contactIdentifier: snapshot.identifier,
+                        fullName: snapshot.fullName,
+                        organization: snapshot.organization,
+                        bodySnippet: body,
+                        hasEmail: !snapshot.emails.isEmpty,
+                        hasPhone: !snapshot.phones.isEmpty,
+                        contactHash: snapshot.hash,
+                        createdAt: now,
+                        updatedAt: now
+                    )
+
+                    context.insert(row)
+                    existingByIdentifier[snapshot.identifier] = row
+                    changedCount += 1
                 }
-
-                row.fullName = snapshot.fullName
-                row.organization = snapshot.organization
-                row.bodySnippet = Self.contactBody(
-                    organization: snapshot.organization,
-                    emails: snapshot.emails,
-                    phones: snapshot.phones
-                )
-                row.hasEmail = !snapshot.emails.isEmpty
-                row.hasPhone = !snapshot.phones.isEmpty
-                row.contactHash = snapshot.hash
-                row.updatedAt = now
-
-                changedCount += 1
-
-            } else {
-
-                let body = Self.contactBody(
-                    organization: snapshot.organization,
-                    emails: snapshot.emails,
-                    phones: snapshot.phones
-                )
-
-                let row = IndexedContact(
-                    id: "contact:\(snapshot.identifier)",
-                    contactIdentifier: snapshot.identifier,
-                    fullName: snapshot.fullName,
-                    organization: snapshot.organization,
-                    bodySnippet: body,
-                    hasEmail: !snapshot.emails.isEmpty,
-                    hasPhone: !snapshot.phones.isEmpty,
-                    contactHash: snapshot.hash,
-                    createdAt: now,
-                    updatedAt: now
-                )
-
-                context.insert(row)
-                existingByIdentifier[snapshot.identifier] = row
-                changedCount += 1
             }
+
+            if changedCount > 0 {
+                try context.save()
+            }
+
+            DataSourceDebug.success(op, count: changedCount)
+            return changedCount
+
+            #else
+            DataSourceDebug.success(op, count: 0)
+            return 0
+            #endif
+        } catch {
+            DataSourceDebug.failure(op, error)
+            throw error
         }
-
-        if changedCount > 0 {
-            try context.save()
-        }
-
-        return changedCount
-
-        #else
-        return 0
-        #endif
     }
 
     // MARK: - Collect
@@ -149,22 +157,29 @@ struct ContactsCollectorService: ContactsCollecting {
         since: Date?,
         in context: ModelContext
     ) throws -> (items: [UnifiedItemDTO], entries: [QueryResult.Entry]) {
+        let op = "ContactsCollect"
+        DataSourceDebug.start(op)
+        do {
+            let descriptor = FetchDescriptor<IndexedContact>(
+                sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+            )
 
-        let descriptor = FetchDescriptor<IndexedContact>(
-            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-        )
+            let rows = try context.fetch(descriptor)
 
-        let rows = try context.fetch(descriptor)
+            let filtered = rows.filter { row in
+                guard let since else { return true }
+                return row.updatedAt > since
+            }
 
-        let filtered = rows.filter { row in
-            guard let since else { return true }
-            return row.updatedAt > since
+            let items = filtered.map(Self.mapIndexedContact)
+            let entries = filtered.map(Self.makeEntry)
+
+            DataSourceDebug.success(op, count: filtered.count)
+            return (items, entries)
+        } catch {
+            DataSourceDebug.failure(op, error)
+            throw error
         }
-
-        let items = filtered.map(Self.mapIndexedContact)
-        let entries = filtered.map(Self.makeEntry)
-
-        return (items, entries)
     }
     
     // MARK: - Private Helpers

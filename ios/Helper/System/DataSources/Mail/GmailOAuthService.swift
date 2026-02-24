@@ -62,88 +62,104 @@ final class GmailOAuthService {
     }
 
     func startAuthorization() async throws -> OAuthAuthorizationResult {
-        let clientID = try resolveClientID()
-        let codeVerifier = Self.makeCodeVerifier()
-        let codeChallenge = Self.makeCodeChallenge(codeVerifier: codeVerifier)
-        let state = Self.makeOAuthState()
+        let op = "MailStartAuthorization"
+        DataSourceDebug.start(op)
+        do {
+            let clientID = try resolveClientID()
+            let codeVerifier = Self.makeCodeVerifier()
+            let codeChallenge = Self.makeCodeChallenge(codeVerifier: codeVerifier)
+            let state = Self.makeOAuthState()
 
-        var components = URLComponents(url: Self.authURL, resolvingAgainstBaseURL: false)
-        components?.queryItems = [
-            URLQueryItem(name: "response_type", value: "code"),
-            URLQueryItem(name: "client_id", value: clientID),
-            URLQueryItem(name: "redirect_uri", value: AppIntegrationConfig.gmailRedirectURI),
-            URLQueryItem(name: "scope", value: "https://www.googleapis.com/auth/gmail.readonly"),
-            URLQueryItem(name: "access_type", value: "offline"),
-            URLQueryItem(name: "prompt", value: "consent"),
-            URLQueryItem(name: "state", value: state),
-            URLQueryItem(name: "code_challenge", value: codeChallenge),
-            URLQueryItem(name: "code_challenge_method", value: "S256")
-        ]
-
-        guard let authorizationURL = components?.url else {
-            throw GmailOAuthServiceError.invalidAuthorizationURL
-        }
-
-        let callbackURL = try await Self.performAuthorizationSession(
-            authorizationURL: authorizationURL,
-            callbackScheme: AppIntegrationConfig.oauthCallbackScheme
-        )
-
-        let callback = Self.parseCallbackURL(callbackURL)
-        guard callback.state == state else {
-            throw GmailOAuthServiceError.callbackStateMismatch
-        }
-
-        guard let code = callback.code, !code.isEmpty else {
-            throw GmailOAuthServiceError.callbackMissingCode
-        }
-
-        let token = try await exchangeToken(
-            payload: [
-                "grant_type": "authorization_code",
-                "client_id": clientID,
-                "code": code,
-                "code_verifier": codeVerifier,
-                "redirect_uri": AppIntegrationConfig.gmailRedirectURI
+            var components = URLComponents(url: Self.authURL, resolvingAgainstBaseURL: false)
+            components?.queryItems = [
+                URLQueryItem(name: "response_type", value: "code"),
+                URLQueryItem(name: "client_id", value: clientID),
+                URLQueryItem(name: "redirect_uri", value: AppIntegrationConfig.gmailRedirectURI),
+                URLQueryItem(name: "scope", value: "https://www.googleapis.com/auth/gmail.readonly"),
+                URLQueryItem(name: "access_type", value: "offline"),
+                URLQueryItem(name: "prompt", value: "consent"),
+                URLQueryItem(name: "state", value: state),
+                URLQueryItem(name: "code_challenge", value: codeChallenge),
+                URLQueryItem(name: "code_challenge_method", value: "S256")
             ]
-        )
 
-        let resolved = OAuthToken(
-            accessToken: token.accessToken,
-            refreshToken: token.refreshToken,
-            expiresAt: DateService.shared.now().addingTimeInterval(TimeInterval(token.expiresIn))
-        )
-        await tokenManager.saveToken(resolved)
+            guard let authorizationURL = components?.url else {
+                throw GmailOAuthServiceError.invalidAuthorizationURL
+            }
 
-        return OAuthAuthorizationResult(
-            accessToken: token.accessToken,
-            refreshToken: token.refreshToken,
-            expiresAt: resolved.expiresAt
-        )
+            let callbackURL = try await Self.performAuthorizationSession(
+                authorizationURL: authorizationURL,
+                callbackScheme: AppIntegrationConfig.oauthCallbackScheme
+            )
+
+            let callback = Self.parseCallbackURL(callbackURL)
+            guard callback.state == state else {
+                throw GmailOAuthServiceError.callbackStateMismatch
+            }
+
+            guard let code = callback.code, !code.isEmpty else {
+                throw GmailOAuthServiceError.callbackMissingCode
+            }
+
+            let token = try await exchangeToken(
+                payload: [
+                    "grant_type": "authorization_code",
+                    "client_id": clientID,
+                    "code": code,
+                    "code_verifier": codeVerifier,
+                    "redirect_uri": AppIntegrationConfig.gmailRedirectURI
+                ]
+            )
+
+            let resolved = OAuthToken(
+                accessToken: token.accessToken,
+                refreshToken: token.refreshToken,
+                expiresAt: DateService.shared.now().addingTimeInterval(TimeInterval(token.expiresIn))
+            )
+            await tokenManager.saveToken(resolved)
+
+            DataSourceDebug.success(op)
+            return OAuthAuthorizationResult(
+                accessToken: token.accessToken,
+                refreshToken: token.refreshToken,
+                expiresAt: resolved.expiresAt
+            )
+        } catch {
+            DataSourceDebug.failure(op, error)
+            throw error
+        }
     }
 
     func refreshAuthorization(refreshToken: String) async throws -> OAuthAuthorizationResult {
-        let clientID = try resolveClientID()
-        let token = try await exchangeToken(
-            payload: [
-                "grant_type": "refresh_token",
-                "client_id": clientID,
-                "refresh_token": refreshToken
-            ]
-        )
+        let op = "MailRefreshAuthorization"
+        DataSourceDebug.start(op)
+        do {
+            let clientID = try resolveClientID()
+            let token = try await exchangeToken(
+                payload: [
+                    "grant_type": "refresh_token",
+                    "client_id": clientID,
+                    "refresh_token": refreshToken
+                ]
+            )
 
-        let resolved = OAuthToken(
-            accessToken: token.accessToken,
-            refreshToken: token.refreshToken ?? refreshToken,
-            expiresAt: DateService.shared.now().addingTimeInterval(TimeInterval(token.expiresIn))
-        )
+            let resolved = OAuthToken(
+                accessToken: token.accessToken,
+                refreshToken: token.refreshToken ?? refreshToken,
+                expiresAt: DateService.shared.now().addingTimeInterval(TimeInterval(token.expiresIn))
+            )
 
-        await tokenManager.saveToken(resolved)
-        return OAuthAuthorizationResult(
-            accessToken: resolved.accessToken,
-            refreshToken: resolved.refreshToken,
-            expiresAt: resolved.expiresAt
-        )
+            await tokenManager.saveToken(resolved)
+            DataSourceDebug.success(op)
+            return OAuthAuthorizationResult(
+                accessToken: resolved.accessToken,
+                refreshToken: resolved.refreshToken,
+                expiresAt: resolved.expiresAt
+            )
+        } catch {
+            DataSourceDebug.failure(op, error)
+            throw error
+        }
     }
 
     static func parseCallbackURL(_ url: URL) -> (code: String?, state: String?) {

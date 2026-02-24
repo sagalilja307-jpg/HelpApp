@@ -59,42 +59,56 @@ struct PhotosIndexService: PhotosIndexing {
     func indexIncremental(
         in context: ModelContext
     ) async throws -> Int {
+        let op = "PhotosIndexIncremental"
+        DataSourceDebug.start(op)
+        do {
+            let since = defaults.object(
+                forKey: Self.incrementalCursorKey
+            ) as? Date
 
-        let since = defaults.object(
-            forKey: Self.incrementalCursorKey
-        ) as? Date
+            let count = try await indexAssets(
+                modifiedAfter: since,
+                fetchLimit: 500,
+                in: context
+            )
 
-        let count = try await indexAssets(
-            modifiedAfter: since,
-            fetchLimit: 500,
-            in: context
-        )
+            defaults.set(
+                nowProvider(),
+                forKey: Self.incrementalCursorKey
+            )
 
-        defaults.set(
-            nowProvider(),
-            forKey: Self.incrementalCursorKey
-        )
-
-        return count
+            DataSourceDebug.success(op, count: count)
+            return count
+        } catch {
+            DataSourceDebug.failure(op, error)
+            throw error
+        }
     }
 
     @MainActor
     func fullScan(
         in context: ModelContext
     ) async throws -> Int {
+        let op = "PhotosFullScan"
+        DataSourceDebug.start(op)
+        do {
+            let count = try await indexAssets(
+                modifiedAfter: nil,
+                fetchLimit: nil,
+                in: context
+            )
 
-        let count = try await indexAssets(
-            modifiedAfter: nil,
-            fetchLimit: nil,
-            in: context
-        )
+            defaults.set(
+                nowProvider(),
+                forKey: Self.incrementalCursorKey
+            )
 
-        defaults.set(
-            nowProvider(),
-            forKey: Self.incrementalCursorKey
-        )
-
-        return count
+            DataSourceDebug.success(op, count: count)
+            return count
+        } catch {
+            DataSourceDebug.failure(op, error)
+            throw error
+        }
     }
     
     // MARK: - Convenience Methods
@@ -136,22 +150,29 @@ struct PhotosIndexService: PhotosIndexing {
         since: Date?,
         in context: ModelContext
     ) throws -> (items: [UnifiedItemDTO], entries: [QueryResult.Entry]) {
+        let op = "PhotosCollect"
+        DataSourceDebug.start(op)
+        do {
+            let descriptor = FetchDescriptor<IndexedPhotoAsset>(
+                sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+            )
 
-        let descriptor = FetchDescriptor<IndexedPhotoAsset>(
-            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-        )
+            let rows = try context.fetch(descriptor)
 
-        let rows = try context.fetch(descriptor)
+            let filtered = rows.filter { row in
+                guard let since else { return true }
+                return row.updatedAt > since
+            }
 
-        let filtered = rows.filter { row in
-            guard let since else { return true }
-            return row.updatedAt > since
+            DataSourceDebug.success(op, count: filtered.count)
+            return (
+                filtered.map(Self.mapIndexedAsset),
+                filtered.map(Self.makeEntry)
+            )
+        } catch {
+            DataSourceDebug.failure(op, error)
+            throw error
         }
-
-        return (
-            filtered.map(Self.mapIndexedAsset),
-            filtered.map(Self.makeEntry)
-        )
     }
 }
 private extension PhotosIndexService {

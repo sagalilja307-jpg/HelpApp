@@ -87,31 +87,41 @@ final class PermissionManager: NSObject {
     // MARK: - REQUEST ENTRY POINT
 
     func requestAccess(for type: AppPermissionType) async throws -> AppPermissionStatus {
-        switch type {
+        let op = "PermissionsRequestAccess"
+        DataSourceDebug.start(op)
+        do {
+            let status: AppPermissionStatus
+            switch type {
 
-        case .calendar:
-            return try await requestCalendarAccess()
+            case .calendar:
+                status = try await requestCalendarAccess()
 
-        case .reminder:
-            return try await requestReminderAccess()
+            case .reminder:
+                status = try await requestReminderAccess()
 
-        case .notification:
-            try await requestNotificationAccess()
-            return await status(for: .notification)
+            case .notification:
+                try await requestNotificationAccess()
+                status = await self.status(for: .notification)
 
-        case .camera:
-            try await requestCameraAccess()
-            return await status(for: .camera)
+            case .camera:
+                try await requestCameraAccess()
+                status = await self.status(for: .camera)
 
-        case .contacts:
-            try await requestContactsAccess()
-            return await status(for: .contacts)
+            case .contacts:
+                try await requestContactsAccess()
+                status = await self.status(for: .contacts)
 
-        case .photos:
-            return try await requestPhotosAccess()
+            case .photos:
+                status = try await requestPhotosAccess()
 
-        case .location:
-            return await requestLocationAccess()
+            case .location:
+                status = await requestLocationAccess()
+            }
+            DataSourceDebug.success(op)
+            return status
+        } catch {
+            DataSourceDebug.failure(op, error)
+            throw error
         }
     }
 

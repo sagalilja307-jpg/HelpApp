@@ -74,33 +74,36 @@ final class LocationSnapshotService: NSObject, LocationSnapshoting {
     func captureSnapshot(
         in context: ModelContext
     ) async throws -> LocationSnapshotResult {
+        let op = "LocationCaptureSnapshot"
+        DataSourceDebug.start(op)
 
         #if canImport(CoreLocation)
+        do {
+            let status = locationManager.authorizationStatus
 
-        let status = locationManager.authorizationStatus
+            guard status == .authorizedWhenInUse ||
+                  status == .authorizedAlways else {
 
-        guard status == .authorizedWhenInUse ||
-              status == .authorizedAlways else {
+                if let fallback = try lastSnapshot(
+                    maxAge: Self.fallbackMaxAge,
+                    in: context
+                ) {
+                    DataSourceDebug.success(op, count: 1)
+                    return LocationSnapshotResult(
+                        snapshot: fallback,
+                        fallbackUsed: true
+                    )
+                }
 
-            if let fallback = try lastSnapshot(
-                maxAge: Self.fallbackMaxAge,
-                in: context
-            ) {
-                return LocationSnapshotResult(
-                    snapshot: fallback,
-                    fallbackUsed: true
-                )
+                throw LocationError.notAuthorized
             }
 
-            throw LocationError.notAuthorized
-        }
-
-        do {
             let location = try await requestLocation()
             let snapshot = try await createSnapshot(
                 from: location,
                 in: context
             )
+            DataSourceDebug.success(op, count: 1)
             return LocationSnapshotResult(
                 snapshot: snapshot,
                 fallbackUsed: false
@@ -111,16 +114,19 @@ final class LocationSnapshotService: NSObject, LocationSnapshoting {
                 maxAge: Self.fallbackMaxAge,
                 in: context
             ) {
+                DataSourceDebug.success(op, count: 1)
                 return LocationSnapshotResult(
                     snapshot: fallback,
                     fallbackUsed: true
                 )
             }
 
+            DataSourceDebug.failure(op, error)
             throw error
         }
 
         #else
+        DataSourceDebug.failure(op, LocationError.locationUnavailable)
         throw LocationError.locationUnavailable
         #endif
     }

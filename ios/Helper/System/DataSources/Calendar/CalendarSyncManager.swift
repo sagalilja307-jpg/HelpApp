@@ -52,6 +52,8 @@ public final class CalendarSyncManager: ObservableObject {
     }
 
     public func refreshAuthorizationStatus() {
+        let op = "CalendarRefreshAuthorizationStatus"
+        DataSourceDebug.start(op)
         let status = EKEventStore.authorizationStatus(for: .event)
 
         switch status {
@@ -70,11 +72,14 @@ public final class CalendarSyncManager: ObservableObject {
         @unknown default:
             permission = .unknown
         }
+        DataSourceDebug.success(op)
     }
 
     /// Begär FULL ACCESS (läs + skriv) till kalendern.
     /// Returnerar true endast om vi faktiskt har full access efteråt.
     public func requestAccess() async -> Bool {
+        let op = "CalendarRequestAccess"
+        DataSourceDebug.start(op)
         do {
             if #available(iOS 17.0, *) {
                 _ = try await store.requestFullAccessToEvents()
@@ -83,10 +88,13 @@ public final class CalendarSyncManager: ObservableObject {
             }
 
             refreshAuthorizationStatus()
-            return permission == .fullAccess
+            let granted = permission == .fullAccess
+            DataSourceDebug.success(op, count: granted ? 1 : 0)
+            return granted
 
         } catch {
             refreshAuthorizationStatus()
+            DataSourceDebug.failure(op, error)
             return false
         }
     }
@@ -102,4 +110,3 @@ public final class CalendarSyncManager: ObservableObject {
             .store(in: &cancellables)
     }
 }
-

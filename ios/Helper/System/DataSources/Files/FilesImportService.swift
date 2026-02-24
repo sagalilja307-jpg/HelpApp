@@ -98,192 +98,116 @@ struct FilesImportService: FilesImporting {
         urls: [URL],
         in context: ModelContext
     ) async throws -> Int {
+        let op = "FilesImportDocuments"
+        DataSourceDebug.start(op)
 
         guard !urls.isEmpty else { return 0 }
 
-        let existing = try context.fetch(FetchDescriptor<IndexedFileDocument>())
-        var existingByHash: [String: IndexedFileDocument] =
-            Dictionary(uniqueKeysWithValues: existing.map { ($0.stableHash, $0) })
+        do {
+            let existing = try context.fetch(FetchDescriptor<IndexedFileDocument>())
+            var existingByHash: [String: IndexedFileDocument] =
+                Dictionary(uniqueKeysWithValues: existing.map { ($0.stableHash, $0) })
 
-        var changed = 0
-        let now = nowProvider()
+            var changed = 0
+            let now = nowProvider()
 
-        for url in urls {
+            for url in urls {
 
-            let didAccess = url.startAccessingSecurityScopedResource()
-            defer {
-                if didAccess { url.stopAccessingSecurityScopedResource() }
-            }
+                let didAccess = url.startAccessingSecurityScopedResource()
+                defer {
+                    if didAccess { url.stopAccessingSecurityScopedResource() }
+                }
 
-            let values = try url.resourceValues(forKeys: [
-                .nameKey,
-                .contentTypeKey,
-                .fileSizeKey,
-                .contentModificationDateKey
-            ])
+                let values = try url.resourceValues(forKeys: [
+                    .nameKey,
+                    .contentTypeKey,
+                    .fileSizeKey,
+                    .contentModificationDateKey
+                ])
 
-            let fileName = values.name ?? url.lastPathComponent
-            let uti = values.contentType?.identifier ?? "public.data"
-            let size = max(0, values.fileSize ?? 0)
-            let modifiedAt = values.contentModificationDate ?? now
+                let fileName = values.name ?? url.lastPathComponent
+                let uti = values.contentType?.identifier ?? "public.data"
+                let size = max(0, values.fileSize ?? 0)
+                let modifiedAt = values.contentModificationDate ?? now
 
-            let stableHash = Self.stableHash(
-                url: url,
-                fileName: fileName,
-                size: size,
-                modifiedAt: modifiedAt
-            )
-
-            let rowId = "file:\(stableHash)"
-
-            let extracted = await extractBody(
-                from: url,
-                uti: uti,
-                fileName: fileName,
-                sizeBytes: size
-            )
-
-            let bookmark = try? url.bookmarkData(
-                options: [.minimalBookmark],
-                includingResourceValuesForKeys: nil,
-                relativeTo: nil
-            )
-
-            if let row = existingByHash[stableHash] {
-
-                let hasChanged =
-                    row.fileName != fileName ||
-                    row.bodySnippet != extracted ||
-                    row.uti != uti ||
-                    row.sizeBytes != size ||
-                    row.bookmarkData != bookmark
-
-                if !hasChanged { continue }
-
-                row.id = rowId
-                row.fileName = fileName
-                row.bodySnippet = extracted
-                row.uti = uti
-                row.sizeBytes = size
-                row.bookmarkData = bookmark
-                row.source = "files_import"
-                row.updatedAt = now
-
-                changed += 1
-
-            } else {
-
-                let row = IndexedFileDocument(
-                    id: rowId,
-                    stableHash: stableHash,
+                let stableHash = Self.stableHash(
+                    url: url,
                     fileName: fileName,
-                    bodySnippet: extracted,
-                    uti: uti,
-                    sizeBytes: size,
-                    bookmarkData: bookmark,
-                    source: "files_import",
-                    createdAt: now,
-                    updatedAt: now
+                    size: size,
+                    modifiedAt: modifiedAt
                 )
 
-                context.insert(row)
-                existingByHash[stableHash] = row
-                changed += 1
+                let rowId = "file:\(stableHash)"
+
+                let extracted = await extractBody(
+                    from: url,
+                    uti: uti,
+                    fileName: fileName,
+                    sizeBytes: size
+                )
+
+                let bookmark = try? url.bookmarkData(
+                    options: [.minimalBookmark],
+                    includingResourceValuesForKeys: nil,
+                    relativeTo: nil
+                )
+
+                if let row = existingByHash[stableHash] {
+
+                    let hasChanged =
+                        row.fileName != fileName ||
+                        row.bodySnippet != extracted ||
+                        row.uti != uti ||
+                        row.sizeBytes != size ||
+                        row.bookmarkData != bookmark
+
+                    if !hasChanged { continue }
+
+                    row.id = rowId
+                    row.fileName = fileName
+                    row.bodySnippet = extracted
+                    row.uti = uti
+                    row.sizeBytes = size
+                    row.bookmarkData = bookmark
+                    row.source = "files_import"
+                    row.updatedAt = now
+
+                    changed += 1
+
+                } else {
+
+                    let row = IndexedFileDocument(
+                        id: rowId,
+                        stableHash: stableHash,
+                        fileName: fileName,
+                        bodySnippet: extracted,
+                        uti: uti,
+                        sizeBytes: size,
+                        bookmarkData: bookmark,
+                        source: "files_import",
+                        createdAt: now,
+                        updatedAt: now
+                    )
+
+                    context.insert(row)
+                    existingByHash[stableHash] = row
+                    changed += 1
+                }
             }
+
+            if changed > 0 {
+                try context.save()
+                sourceConnectionStore.setHasImportedFiles(true)
+            }
+
+            DataSourceDebug.success(op, count: changed)
+            return changed
+        } catch {
+            DataSourceDebug.failure(op, error)
+            throw error
         }
-
-        if changed > 0 {
-            try context.save()
-            sourceConnectionStore.setHasImportedFiles(true)
-        }
-
-        return changed
     }
 
-    // MARK: - Collect
-
-    func collectDelta(
-        since: Date?,
-        in context: ModelContext
-    ) throws -> (items: [UnifiedItemDTO], entries: [QueryResult.Entry]) {
-
-        let descriptor = FetchDescriptor<IndexedFileDocument>(
-            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-        )
-
-        let rows = try context.fetch(descriptor)
-
-        let filtered = rows.filter { row in
-            guard let since else { return true }
-            return row.updatedAt > since
-        }
-
-        let items = filtered.map(Self.mapIndexedFile)
-        let entries = filtered.map(Self.makeEntry)
-
-        return (items, entries)
-    }
-
-    func hasImportedDocuments(
-        in context: ModelContext
-    ) throws -> Bool {
-
-        let rows = try context.fetch(FetchDescriptor<IndexedFileDocument>())
-        return !rows.isEmpty
-    }
-}
-
-// MARK: - Mapping
-
-extension FilesImportService {
-
-    nonisolated static func mapIndexedFile(
-        _ row: IndexedFileDocument
-    ) -> UnifiedItemDTO {
-
-        UnifiedItemDTO(
-            id: row.id,
-            source: "files",
-            type: .file,
-            title: row.fileName,
-            body: row.bodySnippet,
-            createdAt: row.createdAt,
-            updatedAt: row.updatedAt,
-            startAt: nil,
-            endAt: nil,
-            dueAt: nil,
-            status: [
-                "uti": AnyCodable(row.uti),
-                "size_bytes": AnyCodable(row.sizeBytes),
-                "bookmark_version": AnyCodable(1)
-            ]
-        )
-    }
-
-    nonisolated static func makeEntry(
-        _ row: IndexedFileDocument
-    ) -> QueryResult.Entry {
-
-        QueryResult.Entry(
-            id: UUID(),
-            source: .files,
-            title: row.fileName,
-            body: row.bodySnippet.isEmpty ? nil : row.bodySnippet,
-            date: row.updatedAt
-        )
-    }
-
-    static func stableHash(
-        url: URL,
-        fileName: String,
-        size: Int,
-        modifiedAt: Date
-    ) -> String {
-
-        let signature = "\(url.path)|\(fileName)|\(size)|\(modifiedAt.timeIntervalSince1970)"
-        let digest = SHA256.hash(data: Data(signature.utf8))
-        return digest.map { String(format: "%02x", $0) }.joined()
-    }
 }
 
 // MARK: - Private helpers
@@ -330,5 +254,17 @@ private extension FilesImportService {
         #else
         return nil
         #endif
+    }
+
+    static func stableHash(
+        url: URL,
+        fileName: String,
+        size: Int,
+        modifiedAt: Date
+    ) -> String {
+
+        let signature = "\(url.path)|\(fileName)|\(size)|\(modifiedAt.timeIntervalSince1970)"
+        let digest = SHA256.hash(data: Data(signature.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 }

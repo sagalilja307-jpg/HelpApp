@@ -72,14 +72,20 @@ struct LocationCollectorService: LocationCollecting {
     func captureAndIndex(
         in context: ModelContext
     ) async throws -> Int {
+        let op = "LocationCaptureAndIndex"
+        DataSourceDebug.start(op)
+        do {
+            _ = try pruneExpired(in: context)
 
-        _ = try pruneExpired(in: context)
-
-        _ = try await snapshotService.captureSnapshot(
-            in: context
-        )
-
-        return 1
+            _ = try await snapshotService.captureSnapshot(
+                in: context
+            )
+            DataSourceDebug.success(op, count: 1)
+            return 1
+        } catch {
+            DataSourceDebug.failure(op, error)
+            throw error
+        }
     }
 
     // MARK: - Collect
@@ -88,26 +94,33 @@ struct LocationCollectorService: LocationCollecting {
         since: Date?,
         in context: ModelContext
     ) throws -> (items: [UnifiedItemDTO], entries: [QueryResult.Entry]) {
+        let op = "LocationCollect"
+        DataSourceDebug.start(op)
+        do {
+            let retentionCutoff = nowProvider()
+                .addingTimeInterval(-Double(Self.retentionDays * 24 * 60 * 60))
 
-        let retentionCutoff = nowProvider()
-            .addingTimeInterval(-Double(Self.retentionDays * 24 * 60 * 60))
+            let descriptor = FetchDescriptor<IndexedLocationSnapshot>(
+                predicate: #Predicate { $0.observedAt >= retentionCutoff },
+                sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+            )
 
-        let descriptor = FetchDescriptor<IndexedLocationSnapshot>(
-            predicate: #Predicate { $0.observedAt >= retentionCutoff },
-            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-        )
+            let rows = try context.fetch(descriptor)
 
-        let rows = try context.fetch(descriptor)
+            let filtered = rows.filter { row in
+                guard let since else { return true }
+                return row.updatedAt > since
+            }
 
-        let filtered = rows.filter { row in
-            guard let since else { return true }
-            return row.updatedAt > since
+            let items = filtered.map(Self.mapToUnifiedItem)
+            let entries = filtered.map(Self.makeEntry)
+
+            DataSourceDebug.success(op, count: filtered.count)
+            return (items, entries)
+        } catch {
+            DataSourceDebug.failure(op, error)
+            throw error
         }
-
-        let items = filtered.map(Self.mapToUnifiedItem)
-        let entries = filtered.map(Self.makeEntry)
-
-        return (items, entries)
     }
 
     // MARK: - Prune
@@ -115,25 +128,32 @@ struct LocationCollectorService: LocationCollecting {
     func pruneExpired(
         in context: ModelContext
     ) throws -> Int {
+        let op = "LocationPruneExpired"
+        DataSourceDebug.start(op)
+        do {
+            let cutoff = nowProvider()
+                .addingTimeInterval(-Double(Self.retentionDays * 24 * 60 * 60))
 
-        let cutoff = nowProvider()
-            .addingTimeInterval(-Double(Self.retentionDays * 24 * 60 * 60))
+            let descriptor = FetchDescriptor<IndexedLocationSnapshot>(
+                predicate: #Predicate { $0.observedAt < cutoff }
+            )
 
-        let descriptor = FetchDescriptor<IndexedLocationSnapshot>(
-            predicate: #Predicate { $0.observedAt < cutoff }
-        )
+            let expired = try context.fetch(descriptor)
 
-        let expired = try context.fetch(descriptor)
+            for snapshot in expired {
+                context.delete(snapshot)
+            }
 
-        for snapshot in expired {
-            context.delete(snapshot)
+            if !expired.isEmpty {
+                try context.save()
+            }
+
+            DataSourceDebug.success(op, count: expired.count)
+            return expired.count
+        } catch {
+            DataSourceDebug.failure(op, error)
+            throw error
         }
-
-        if !expired.isEmpty {
-            try context.save()
-        }
-
-        return expired.count
     }
 
     func lastSnapshotDate(
