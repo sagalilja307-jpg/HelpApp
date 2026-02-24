@@ -65,9 +65,9 @@ struct QuerySourceAccess: QuerySourceAccessing, Sendable {
         case .rawEvents:
             return isAllowed(rawEventsAccess)
         case .calendar:
-            return calendarReadAuthorized()
+            return calendarAuthorized()
         case .reminders:
-            return remindersReadAuthorized()
+            return remindersAuthorized()
         case .mail:
             return sourceConnectionStore.isEnabled(.mail) && OAuthTokenManager.shared.hasStoredToken()
         case .contacts:
@@ -104,16 +104,9 @@ struct QuerySourceAccess: QuerySourceAccessing, Sendable {
             )
 
         case .calendar:
-            // ✅ Ge bättre orsak om användaren har write-only
-            if calendarHasWriteOnly() {
-                return "Jag kan inte läsa kalenderhändelser utan full åtkomst. Ändra till Full åtkomst i Inställningar."
-            }
             return "Jag kan inte se kalendern – du har inte godkänt åtkomst."
 
         case .reminders:
-            if remindersHasWriteOnly() {
-                return "Jag kan inte läsa påminnelser utan full åtkomst. Ändra till Full åtkomst i Inställningar."
-            }
             return "Jag kan inte se påminnelser – du har inte godkänt åtkomst."
 
         case .mail:
@@ -167,12 +160,12 @@ private extension QuerySourceAccess {
         }
     }
 
-    // ✅ READ access för kalender (krävs för att kunna lista händelser)
-    func calendarReadAuthorized() -> Bool {
+    // Acceptera både full access och write-only i permission-gating.
+    func calendarAuthorized() -> Bool {
 #if canImport(EventKit)
         let status = EKEventStore.authorizationStatus(for: .event)
         if #available(iOS 17.0, macOS 14.0, *) {
-            return status == .fullAccess
+            return status == .fullAccess || status == .writeOnly
         } else {
             return status == .authorized
         }
@@ -181,38 +174,15 @@ private extension QuerySourceAccess {
 #endif
     }
 
-    // ✅ READ access för påminnelser (om du listar/läser reminders)
-    func remindersReadAuthorized() -> Bool {
+    // Acceptera både full access och write-only i permission-gating.
+    func remindersAuthorized() -> Bool {
 #if canImport(EventKit)
         let status = EKEventStore.authorizationStatus(for: .reminder)
         if #available(iOS 17.0, macOS 14.0, *) {
-            return status == .fullAccess
+            return status == .fullAccess || status == .writeOnly
         } else {
             return status == .authorized
         }
-#else
-        return false
-#endif
-    }
-
-    // För bättre felmeddelanden
-    func calendarHasWriteOnly() -> Bool {
-#if canImport(EventKit)
-        if #available(iOS 17.0, macOS 14.0, *) {
-            return EKEventStore.authorizationStatus(for: .event) == .writeOnly
-        }
-        return false
-#else
-        return false
-#endif
-    }
-
-    func remindersHasWriteOnly() -> Bool {
-#if canImport(EventKit)
-        if #available(iOS 17.0, macOS 14.0, *) {
-            return EKEventStore.authorizationStatus(for: .reminder) == .writeOnly
-        }
-        return false
 #else
         return false
 #endif
@@ -221,7 +191,7 @@ private extension QuerySourceAccess {
     func contactsAuthorized() -> Bool {
 #if canImport(Contacts)
         let status = CNContactStore.authorizationStatus(for: .contacts)
-        return status == .authorized
+        return status == .authorized || status == .limited
 #else
         return false
 #endif

@@ -303,6 +303,15 @@ final class QueryDataFetcher: QueryDataFetching {
     }
 
     private func fetchReminders(in range: DateInterval) async throws -> (items: [UnifiedItemDTO], entries: [QueryResult.Entry]) {
+        #if canImport(EventKit)
+        let status = EKEventStore.authorizationStatus(for: .reminder)
+        if #available(iOS 17.0, *) {
+            guard status == .fullAccess || status == .authorized else { return ([], []) }
+        } else {
+            guard status == .authorized else { return ([], []) }
+        }
+        #endif
+
         let reminders = try await reminderSyncManager.fetchActiveReminders()
         let filtered = reminders.filter { reminder in
             guard let dueDate = reminder.dueDate else { return true }
