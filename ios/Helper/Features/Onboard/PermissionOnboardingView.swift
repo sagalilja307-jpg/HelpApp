@@ -1,7 +1,6 @@
 //
 //  PermissionOnboardingView.swift
 //  Helper
-/ /
 //  Created by Saga Lilja on 2026-01-30.
 //
 

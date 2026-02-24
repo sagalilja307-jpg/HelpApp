@@ -58,7 +58,9 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Helper använder mikrofonen om du väljer att prata med appen.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Helper behöver tillgång till bilder du väljer att analysera.</string>
+	<string>Vi behöver tillgång till dina bilder för att indexera och svara på bildfrågor.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Vi behöver spara bilder vid behov.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>Helper behöver läsa dina påminnelser för att hjälpa dig komma ihåg saker.</string>
 	<key>NSRemindersUsageDescription</key>

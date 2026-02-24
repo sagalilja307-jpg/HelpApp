@@ -160,7 +160,7 @@ final class PermissionManager: NSObject {
         #endif
     }
 
-    // MARK: - Photos (MAX ACCESS ONLY)
+    // MARK: - Photos
 
     private func requestPhotosAccess() async throws -> AppPermissionStatus {
         #if canImport(PhotoKit)
@@ -237,20 +237,22 @@ final class PermissionManager: NSObject {
         #endif
     }
 
+    #if canImport(PhotoKit)
     private func mapPhotosStatus(_ status: PHAuthorizationStatus) -> AppPermissionStatus {
         switch status {
         case .notDetermined:
             return .notDetermined
-        case .authorized:
+        case .authorized, .limited:
             return .granted
-        case .limited:
-            return .denied   // MAX ACCESS ONLY
         case .denied, .restricted:
             return .denied
         @unknown default:
             return .denied
         }
     }
+    #else
+    private func mapPhotosStatus(_ status: Any) -> AppPermissionStatus { return .granted }
+    #endif
 
     #if canImport(CoreLocation)
     private func mapLocationStatus(_ status: CLAuthorizationStatus) -> AppPermissionStatus {
