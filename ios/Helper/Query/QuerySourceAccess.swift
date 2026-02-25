@@ -65,9 +65,9 @@ struct QuerySourceAccess: QuerySourceAccessing, Sendable {
         case .rawEvents:
             return isAllowed(rawEventsAccess)
         case .calendar:
-            return calendarAuthorized()
+            return sourceConnectionStore.isEnabled(.calendar) && calendarAuthorized()
         case .reminders:
-            return remindersAuthorized()
+            return sourceConnectionStore.isEnabled(.reminders) && remindersAuthorized()
         case .mail:
             return sourceConnectionStore.isEnabled(.mail) && OAuthTokenManager.shared.hasStoredToken()
         case .contacts:
@@ -104,9 +104,15 @@ struct QuerySourceAccess: QuerySourceAccessing, Sendable {
             )
 
         case .calendar:
+            if !sourceConnectionStore.isEnabled(.calendar) {
+                return "Kalender är inte aktiverad som datakälla."
+            }
             return "Jag kan inte se kalendern – du har inte godkänt åtkomst."
 
         case .reminders:
+            if !sourceConnectionStore.isEnabled(.reminders) {
+                return "Påminnelser är inte aktiverad som datakälla."
+            }
             return "Jag kan inte se påminnelser – du har inte godkänt åtkomst."
 
         case .mail:

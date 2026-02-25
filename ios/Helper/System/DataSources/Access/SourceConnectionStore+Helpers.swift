@@ -1,6 +1,8 @@
 import Foundation
 
 extension SourceConnectionStore {
+    static let calendarEnabledKey = "helper.stage1.calendar.enabled"
+    static let remindersEnabledKey = "helper.stage1.reminders.enabled"
     static let contactsEnabledKey = "helper.stage2.contacts.enabled"
     static let photosEnabledKey = "helper.stage2.photos.enabled"
     static let filesEnabledKey = "helper.stage2.files.enabled"
@@ -12,6 +14,10 @@ extension SourceConnectionStore {
 
     func enabledKey(for source: QuerySource) -> String? {
         switch source {
+        case .calendar:
+            return Self.calendarEnabledKey
+        case .reminders:
+            return Self.remindersEnabledKey
         case .contacts:
             return Self.contactsEnabledKey
         case .photos:

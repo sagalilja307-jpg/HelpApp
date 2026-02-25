@@ -33,8 +33,9 @@ struct HelperApp: App {
     private let filesImportService: FilesImportService
     private let locationSnapshotService: LocationSnapshotService
 
-    // Onboarding flag (sparas i UserDefaults)
+    // Onboarding flags (sparas i UserDefaults)
     @AppStorage("onboardingComplete") private var onboardingComplete = false
+    @AppStorage("helper.onboarding.done") private var helperOnboardingDone = false
 
     // MARK: - Init
 
@@ -98,7 +99,7 @@ struct HelperApp: App {
 
                 func isEnabled(_ source: QuerySource) -> Bool {
                     switch source {
-                    case .contacts, .photos, .files, .location, .mail:
+                    case .calendar, .reminders, .contacts, .photos, .files, .location, .mail:
                         return sourceConnectionStore.isEnabled(source)
                     default:
                         return true
@@ -279,7 +280,7 @@ struct HelperApp: App {
 
             NavigationStack {
 
-                if onboardingComplete {
+                if hasCompletedOnboarding {
 
                     ChatView(
                         pipeline: queryPipeline,
@@ -291,11 +292,25 @@ struct HelperApp: App {
 
                 } else {
 
-                    PermissionsOnboardingFlow(onboardingComplete: $onboardingComplete)
+                    OnboardingView(onboardingComplete: onboardingState)
 
                 }
             }
             .environment(\.modelContext, modelContext)
         }
+    }
+
+    private var hasCompletedOnboarding: Bool {
+        onboardingComplete || helperOnboardingDone
+    }
+
+    private var onboardingState: Binding<Bool> {
+        Binding(
+            get: { hasCompletedOnboarding },
+            set: { newValue in
+                onboardingComplete = newValue
+                helperOnboardingDone = newValue
+            }
+        )
     }
 }
