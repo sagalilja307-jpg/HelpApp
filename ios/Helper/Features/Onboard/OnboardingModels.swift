@@ -35,6 +35,7 @@ Den hjälper dig förstå – inte bara hitta.
 """
 Helper läser bara det du själv väljer att aktivera.
 All analys sker för att ge dig överblick – inte för att påverka dig.
+Behörigheter frågas först när du aktiverar en källa i Datakällor.
 
 Du kan när som helst:
 • Stänga av en källa

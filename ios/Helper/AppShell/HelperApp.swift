@@ -33,9 +33,8 @@ struct HelperApp: App {
     private let filesImportService: FilesImportService
     private let locationSnapshotService: LocationSnapshotService
 
-    // Onboarding flags (sparas i UserDefaults)
-    @AppStorage("onboardingComplete") private var onboardingComplete = false
-    @AppStorage("helper.onboarding.done") private var helperOnboardingDone = false
+    // Onboarding flag (sparas i UserDefaults)
+    @AppStorage("helper.onboarding.done") private var onboardingDone = false
 
     // MARK: - Init
 
@@ -280,7 +279,7 @@ struct HelperApp: App {
 
             NavigationStack {
 
-                if hasCompletedOnboarding {
+                if onboardingDone {
 
                     ChatView(
                         pipeline: queryPipeline,
@@ -292,7 +291,7 @@ struct HelperApp: App {
 
                 } else {
 
-                    OnboardingView(onboardingComplete: onboardingState)
+                    OnboardingView(onboardingComplete: $onboardingDone)
 
                 }
             }
@@ -300,17 +299,4 @@ struct HelperApp: App {
         }
     }
 
-    private var hasCompletedOnboarding: Bool {
-        onboardingComplete || helperOnboardingDone
-    }
-
-    private var onboardingState: Binding<Bool> {
-        Binding(
-            get: { hasCompletedOnboarding },
-            set: { newValue in
-                onboardingComplete = newValue
-                helperOnboardingDone = newValue
-            }
-        )
-    }
 }

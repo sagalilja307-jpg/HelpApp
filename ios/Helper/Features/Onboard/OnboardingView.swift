@@ -2,14 +2,14 @@ import SwiftUI
 
 struct OnboardingView: View {
     @Binding var onboardingComplete: Bool
-    @AppStorage("helper.onboarding.done") private var onboardingDone: Bool = false
     @State private var index: Int = 0
 
     private let slides = OnboardingContent.slides
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            onboardingBackground
+                .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 TabView(selection: $index) {
@@ -71,9 +71,14 @@ struct OnboardingView: View {
                 .buttonStyle(.plain)
             }
 
-            Text("Du kan ändra detta senare i Inställningar.")
+            Text("Behörigheter frågas när du aktiverar en källa i Datakällor.")
                 .foregroundStyle(Color.white.opacity(0.38))
                 .font(.system(size: 12))
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            Text("Steg \(index + 1) av \(slides.count)")
+                .foregroundStyle(Color.white.opacity(0.38))
+                .font(.system(size: 12, weight: .medium))
                 .frame(maxWidth: .infinity, alignment: .center)
         }
     }
@@ -89,7 +94,31 @@ struct OnboardingView: View {
 
     private func finish() {
         onboardingComplete = true
-        onboardingDone = true
+    }
+
+    private var onboardingBackground: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.07, green: 0.09, blue: 0.15),
+                    Color(red: 0.03, green: 0.04, blue: 0.08)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            Circle()
+                .fill(Color.white.opacity(0.06))
+                .blur(radius: 40)
+                .frame(width: 260, height: 260)
+                .offset(x: 140, y: -220)
+
+            Circle()
+                .fill(Color.white.opacity(0.04))
+                .blur(radius: 48)
+                .frame(width: 280, height: 280)
+                .offset(x: -170, y: 280)
+        }
     }
 }
 
