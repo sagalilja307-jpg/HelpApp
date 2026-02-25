@@ -12,14 +12,18 @@ extension FilesImportService {
         let op = "FilesCollect"
         DataSourceDebug.start(op)
         do {
-            let descriptor = FetchDescriptor<IndexedFileDocument>(
-                sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-            )
-
-            let rows = try context.fetch(descriptor)
-            let filtered = rows.filter { row in
-                guard let since else { return true }
-                return row.updatedAt > since
+            let filtered: [IndexedFileDocument]
+            if let since {
+                let descriptor = FetchDescriptor<IndexedFileDocument>(
+                    predicate: #Predicate { $0.updatedAt > since },
+                    sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+                )
+                filtered = try context.fetch(descriptor)
+            } else {
+                let descriptor = FetchDescriptor<IndexedFileDocument>(
+                    sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+                )
+                filtered = try context.fetch(descriptor)
             }
 
             DataSourceDebug.success(op, count: filtered.count)

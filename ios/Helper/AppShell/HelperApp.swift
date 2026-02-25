@@ -134,14 +134,88 @@ struct HelperApp: App {
                         )
                     }
 
-                    // Prefer exact range API when pipeline supplies a timeframe.
-                    var options = QueryCollectionOptions.default
-                    if source == .location {
-                        options = QueryCollectionOptions(shouldCaptureLocation: true)
-                    } else if source == .calendar {
-                        options = QueryCollectionOptions(shouldCaptureLocation: false, includeCalendar: true, includeReminders: false)
-                    } else if source == .reminders {
-                        options = QueryCollectionOptions(shouldCaptureLocation: false, includeCalendar: false, includeReminders: true)
+                    // Restrict collection to the selected source to avoid expensive cross-source indexing.
+                    let options: QueryCollectionOptions
+                    switch source {
+                    case .memory, .rawEvents:
+                        options = QueryCollectionOptions(
+                            shouldCaptureLocation: false,
+                            includeMemory: true,
+                            includeNotes: true,
+                            includeCalendar: false,
+                            includeReminders: false,
+                            includeContacts: false,
+                            includePhotos: false,
+                            includeFiles: false
+                        )
+                    case .calendar:
+                        options = QueryCollectionOptions(
+                            shouldCaptureLocation: false,
+                            includeMemory: false,
+                            includeNotes: false,
+                            includeCalendar: true,
+                            includeReminders: false,
+                            includeContacts: false,
+                            includePhotos: false,
+                            includeFiles: false
+                        )
+                    case .reminders:
+                        options = QueryCollectionOptions(
+                            shouldCaptureLocation: false,
+                            includeMemory: false,
+                            includeNotes: false,
+                            includeCalendar: false,
+                            includeReminders: true,
+                            includeContacts: false,
+                            includePhotos: false,
+                            includeFiles: false
+                        )
+                    case .contacts:
+                        options = QueryCollectionOptions(
+                            shouldCaptureLocation: false,
+                            includeMemory: false,
+                            includeNotes: false,
+                            includeCalendar: false,
+                            includeReminders: false,
+                            includeContacts: true,
+                            includePhotos: false,
+                            includeFiles: false
+                        )
+                    case .photos:
+                        options = QueryCollectionOptions(
+                            shouldCaptureLocation: false,
+                            includeMemory: false,
+                            includeNotes: false,
+                            includeCalendar: false,
+                            includeReminders: false,
+                            includeContacts: false,
+                            includePhotos: true,
+                            includeFiles: false
+                        )
+                    case .files:
+                        options = QueryCollectionOptions(
+                            shouldCaptureLocation: false,
+                            includeMemory: false,
+                            includeNotes: false,
+                            includeCalendar: false,
+                            includeReminders: false,
+                            includeContacts: false,
+                            includePhotos: false,
+                            includeFiles: true
+                        )
+                    case .location:
+                        options = QueryCollectionOptions(
+                            shouldCaptureLocation: true,
+                            includeMemory: false,
+                            includeNotes: false,
+                            includeCalendar: false,
+                            includeReminders: false,
+                            includeContacts: false,
+                            includePhotos: false,
+                            includeFiles: false
+                        )
+                    case .mail:
+                        options = .default
                     }
 
                     if let tr = timeRange {

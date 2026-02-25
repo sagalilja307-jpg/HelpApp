@@ -28,17 +28,32 @@ struct QueryCollectedData {
 
 struct QueryCollectionOptions: Sendable {
     let shouldCaptureLocation: Bool
+    let includeMemory: Bool
+    let includeNotes: Bool
     let includeCalendar: Bool
     let includeReminders: Bool
+    let includeContacts: Bool
+    let includePhotos: Bool
+    let includeFiles: Bool
 
     init(
         shouldCaptureLocation: Bool = false,
+        includeMemory: Bool = true,
+        includeNotes: Bool = true,
         includeCalendar: Bool = true,
-        includeReminders: Bool = true
+        includeReminders: Bool = true,
+        includeContacts: Bool = true,
+        includePhotos: Bool = true,
+        includeFiles: Bool = true
     ) {
         self.shouldCaptureLocation = shouldCaptureLocation
+        self.includeMemory = includeMemory
+        self.includeNotes = includeNotes
         self.includeCalendar = includeCalendar
         self.includeReminders = includeReminders
+        self.includeContacts = includeContacts
+        self.includePhotos = includePhotos
+        self.includeFiles = includeFiles
     }
 
     static let `default` = QueryCollectionOptions()
@@ -50,6 +65,12 @@ protocol QueryDataFetching {
 }
 
 final class QueryDataFetcher: QueryDataFetching {
+    private static let contactsRefreshCursorKey = "helper.query.contacts.refresh.last"
+    private static let photosRefreshCursorKey = "helper.query.photos.refresh.last"
+    private static let contactsRefreshMinInterval: TimeInterval = 5 * 60
+    private static let photosRefreshMinInterval: TimeInterval = 60
+    private static let locationCaptureMinInterval: TimeInterval = 60
+    private static let locationNearNowWindow: TimeInterval = 10 * 60
 
     struct CalendarSnapshot {
         let identifier: String
@@ -141,16 +162,21 @@ final class QueryDataFetcher: QueryDataFetching {
         var missingAccess: [QuerySource] = []
         var locationFallbackUsed = false
 
-        if access.isAllowed(.memory) {
-            let result = try fetchMemory(in: range)
-            allItems += result.items
-            allEntries += result.entries
-
-            let noteResult = try fetchUserNotes(in: range)
-            allItems += noteResult.items
-            allEntries += noteResult.entries
-        } else {
-            missingAccess.append(.memory)
+        if options.includeMemory || options.includeNotes {
+            if access.isAllowed(.memory) {
+                if options.includeMemory {
+                    let result = try fetchMemory(in: range)
+                    allItems += result.items
+                    allEntries += result.entries
+                }
+                if options.includeNotes {
+                    let noteResult = try fetchUserNotes(in: range)
+                    allItems += noteResult.items
+                    allEntries += noteResult.entries
+                }
+            } else {
+                missingAccess.append(.memory)
+            }
         }
 
         if options.includeCalendar {
@@ -173,11 +199,14 @@ final class QueryDataFetcher: QueryDataFetching {
             }
         }
 
-        if sourceConnectionStore.isEnabled(.contacts) {
+        if options.includeContacts && sourceConnectionStore.isEnabled(.contacts) {
             if access.isAllowed(.contacts) {
                 let context = memoryService.context()
-                _ = try contactsCollector.refreshIndex(in: context)
-                let result = try contactsCollector.collectDelta(since: nil, in: context)
+                if try shouldRefreshContactsIndex(in: context) {
+                    _ = try contactsCollector.refreshIndex(in: context)
+                    markContactsIndexRefreshed()
+                }
+                let result = try contactsCollector.collectDelta(since: range.start, in: context)
                 allItems += result.items
                 allEntries += result.entries
             } else {
@@ -185,11 +214,14 @@ final class QueryDataFetcher: QueryDataFetching {
             }
         }
 
-        if sourceConnectionStore.isEnabled(.photos) {
+        if options.includePhotos && sourceConnectionStore.isEnabled(.photos) {
             if access.isAllowed(.photos) {
                 let context = memoryService.context()
-                _ = try await photosIndexService.indexIncremental(in: context)
-                let result = try photosIndexService.collectDelta(since: nil, in: context)
+                if try shouldRefreshPhotosIndex(in: context) {
+                    _ = try await photosIndexService.indexIncremental(in: context)
+                    markPhotosIndexRefreshed()
+                }
+                let result = try photosIndexService.collectDelta(since: range.start, in: context)
                 allItems += result.items
                 allEntries += result.entries
             } else {
@@ -197,10 +229,10 @@ final class QueryDataFetcher: QueryDataFetching {
             }
         }
 
-        if sourceConnectionStore.isEnabled(.files) {
+        if options.includeFiles && sourceConnectionStore.isEnabled(.files) {
             if access.isAllowed(.files) {
                 let context = memoryService.context()
-                let result = try filesImportService.collectDelta(since: nil, in: context)
+                let result = try filesImportService.collectDelta(since: range.start, in: context)
                 allItems += result.items
                 allEntries += result.entries
             } else {
@@ -214,13 +246,33 @@ final class QueryDataFetcher: QueryDataFetching {
                 if let locationCollector {
                     do {
                         let context = memoryService.context()
-                        _ = try await locationCollector.captureAndIndex(in: context)
-                        let result = try locationCollector.collectDelta(since: nil, in: context)
+                        let now = nowProvider()
+                        let needsFreshLocation = range.end >= now.addingTimeInterval(-Self.locationNearNowWindow)
+                        let lastSnapshot = try locationCollector.lastSnapshotDate(in: context)
+                        let isStale = {
+                            guard let lastSnapshot else { return true }
+                            return now.timeIntervalSince(lastSnapshot) > Self.locationCaptureMinInterval
+                        }()
+                        var capturedFreshSnapshot = false
+
+                        if needsFreshLocation && isStale {
+                            _ = try await locationCollector.captureAndIndex(in: context)
+                            capturedFreshSnapshot = true
+                        }
+
+                        let result = try locationCollector.collectDelta(since: range.start, in: context)
                         allItems += result.items
                         allEntries += result.entries
 
-                        if let lastDate = try? locationCollector.lastSnapshotDate(in: context),
-                           nowProvider().timeIntervalSince(lastDate) > 60 {
+                        let freshnessReferenceDate: Date?
+                        if capturedFreshSnapshot {
+                            freshnessReferenceDate = try? locationCollector.lastSnapshotDate(in: context)
+                        } else {
+                            freshnessReferenceDate = lastSnapshot ?? (try? locationCollector.lastSnapshotDate(in: context))
+                        }
+
+                        if let lastDate = freshnessReferenceDate,
+                           now.timeIntervalSince(lastDate) > 60 {
                             locationFallbackUsed = true
                         }
                     } catch {
@@ -254,10 +306,13 @@ final class QueryDataFetcher: QueryDataFetching {
 
     private func fetchMemory(in range: DateInterval) throws -> (items: [UnifiedItemDTO], entries: [QueryResult.Entry]) {
         let context = memoryService.context()
+        let start = range.start
+        let end = range.end
         let descriptor = FetchDescriptor<RawEvent>(
+            predicate: #Predicate { $0.timestamp >= start && $0.timestamp <= end },
             sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
         )
-        let rawEvents = try context.fetch(descriptor).filter { range.contains($0.timestamp) }
+        let rawEvents = try context.fetch(descriptor)
 
         let mapped = rawEvents.map(Self.mapRawEvent)
         let entries = rawEvents.map(Self.makeMemoryEntry)
@@ -266,10 +321,13 @@ final class QueryDataFetcher: QueryDataFetching {
 
     private func fetchUserNotes(in range: DateInterval) throws -> (items: [UnifiedItemDTO], entries: [QueryResult.Entry]) {
         let context = memoryService.context()
+        let start = range.start
+        let end = range.end
         let descriptor = FetchDescriptor<UserNote>(
+            predicate: #Predicate { $0.updatedAt >= start && $0.updatedAt <= end },
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
-        let notes = try context.fetch(descriptor).filter { range.contains($0.updatedAt) }
+        let notes = try context.fetch(descriptor)
         let items = notes.map(Self.mapUserNote)
         let entries = notes.map(Self.makeUserNoteEntry)
         return (items, entries)
@@ -322,6 +380,53 @@ final class QueryDataFetcher: QueryDataFetching {
         let items = filtered.map { Self.mapReminder($0, now: now) }
         let entries = filtered.map(Self.makeReminderEntry)
         return (items, entries)
+    }
+
+    private func shouldRefreshContactsIndex(in context: ModelContext) throws -> Bool {
+        if Self.shouldRunRefresh(
+            cursorKey: Self.contactsRefreshCursorKey,
+            minimumInterval: Self.contactsRefreshMinInterval,
+            now: nowProvider()
+        ) {
+            return true
+        }
+
+        var descriptor = FetchDescriptor<IndexedContact>()
+        descriptor.fetchLimit = 1
+        return try context.fetch(descriptor).isEmpty
+    }
+
+    private func shouldRefreshPhotosIndex(in context: ModelContext) throws -> Bool {
+        if Self.shouldRunRefresh(
+            cursorKey: Self.photosRefreshCursorKey,
+            minimumInterval: Self.photosRefreshMinInterval,
+            now: nowProvider()
+        ) {
+            return true
+        }
+
+        var descriptor = FetchDescriptor<IndexedPhotoAsset>()
+        descriptor.fetchLimit = 1
+        return try context.fetch(descriptor).isEmpty
+    }
+
+    private func markContactsIndexRefreshed() {
+        UserDefaults.standard.set(nowProvider(), forKey: Self.contactsRefreshCursorKey)
+    }
+
+    private func markPhotosIndexRefreshed() {
+        UserDefaults.standard.set(nowProvider(), forKey: Self.photosRefreshCursorKey)
+    }
+
+    private static func shouldRunRefresh(
+        cursorKey: String,
+        minimumInterval: TimeInterval,
+        now: Date
+    ) -> Bool {
+        guard let previous = UserDefaults.standard.object(forKey: cursorKey) as? Date else {
+            return true
+        }
+        return now.timeIntervalSince(previous) >= minimumInterval
     }
 
     private func dedup(items: [UnifiedItemDTO]) -> [UnifiedItemDTO] {

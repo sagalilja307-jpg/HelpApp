@@ -12,14 +12,18 @@ extension PhotosIndexService {
         let op = "PhotosCollect"
         DataSourceDebug.start(op)
         do {
-            let descriptor = FetchDescriptor<IndexedPhotoAsset>(
-                sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-            )
-
-            let rows = try context.fetch(descriptor)
-            let filtered = rows.filter { row in
-                guard let since else { return true }
-                return row.updatedAt > since
+            let filtered: [IndexedPhotoAsset]
+            if let since {
+                let descriptor = FetchDescriptor<IndexedPhotoAsset>(
+                    predicate: #Predicate { $0.updatedAt > since },
+                    sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+                )
+                filtered = try context.fetch(descriptor)
+            } else {
+                let descriptor = FetchDescriptor<IndexedPhotoAsset>(
+                    sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+                )
+                filtered = try context.fetch(descriptor)
             }
 
             DataSourceDebug.success(op, count: filtered.count)

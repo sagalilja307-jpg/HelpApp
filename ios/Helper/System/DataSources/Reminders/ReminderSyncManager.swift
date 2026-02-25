@@ -7,6 +7,10 @@ final class ReminderSyncManager {
     static let shared = ReminderSyncManager()
 
     private let eventStore = EKEventStore()
+    private let cacheTTL: TimeInterval = 30
+    private let cacheLock = NSLock()
+    private var cachedActiveReminders: [ReminderItem] = []
+    private var lastCacheAt: Date?
 
     private init() {}
 
@@ -35,6 +39,11 @@ final class ReminderSyncManager {
         let op = "RemindersFetchActive"
         DataSourceDebug.start(op)
         do {
+            if let cached = cachedRemindersIfFresh() {
+                DataSourceDebug.success(op, count: cached.count)
+                return cached
+            }
+
             let calendars = eventStore.calendars(for: .reminder)
 
             let reminders = try await withCheckedThrowingContinuation { continuation in
@@ -49,6 +58,7 @@ final class ReminderSyncManager {
                     continuation.resume(returning: items)
                 }
             }
+            updateReminderCache(reminders)
             DataSourceDebug.success(op, count: reminders.count)
             return reminders
         } catch {
@@ -87,5 +97,23 @@ final class ReminderSyncManager {
     func reminderExists(with title: String) async throws -> Bool {
         let reminders = try await fetchActiveReminders()
         return reminders.contains { $0.title == title }
+    }
+
+    private func cachedRemindersIfFresh() -> [ReminderItem]? {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+
+        guard let lastCacheAt else { return nil }
+        if DateService.shared.now().timeIntervalSince(lastCacheAt) <= cacheTTL {
+            return cachedActiveReminders
+        }
+        return nil
+    }
+
+    private func updateReminderCache(_ reminders: [ReminderItem]) {
+        cacheLock.lock()
+        cachedActiveReminders = reminders
+        lastCacheAt = DateService.shared.now()
+        cacheLock.unlock()
     }
 }

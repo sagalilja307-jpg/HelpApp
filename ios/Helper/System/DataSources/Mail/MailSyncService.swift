@@ -65,6 +65,7 @@ private struct MailRawPayload: Codable {
 
 final class MailSyncService {
     static let shared = MailSyncService()
+    private let maxConcurrentMessageFetches = 8
 
     private init() {}
 
@@ -81,19 +82,10 @@ final class MailSyncService {
                 gmailQuery: gmailQuery,
                 maxResults: maxResults
             )
-
-            var result: [GmailMessageSummary] = []
-            result.reserveCapacity(refs.count)
-
-            for ref in refs {
-                if let message = try await fetchMessage(
-                    accessToken: accessToken,
-                    messageId: ref.id,
-                    fallbackThreadId: ref.threadId
-                ) {
-                    result.append(message)
-                }
-            }
+            let result = try await fetchMessageDetails(
+                refs: refs,
+                accessToken: accessToken
+            )
 
             let sorted = result.sorted { $0.internalDate > $1.internalDate }
             DataSourceDebug.success(op, count: sorted.count)
@@ -220,6 +212,53 @@ final class MailSyncService {
 }
 
 private extension MailSyncService {
+    func fetchMessageDetails(
+        refs: [GmailListResponse.MessageRef],
+        accessToken: String
+    ) async throws -> [GmailMessageSummary] {
+        guard !refs.isEmpty else { return [] }
+
+        var messages: [GmailMessageSummary] = []
+        messages.reserveCapacity(refs.count)
+
+        var nextIndex = 0
+
+        return try await withThrowingTaskGroup(of: GmailMessageSummary?.self) { group in
+            let initialCount = min(maxConcurrentMessageFetches, refs.count)
+            for _ in 0..<initialCount {
+                let ref = refs[nextIndex]
+                nextIndex += 1
+                group.addTask { [self] in
+                    try await fetchMessage(
+                        accessToken: accessToken,
+                        messageId: ref.id,
+                        fallbackThreadId: ref.threadId
+                    )
+                }
+            }
+
+            while let message = try await group.next() {
+                if let message {
+                    messages.append(message)
+                }
+
+                if nextIndex < refs.count {
+                    let ref = refs[nextIndex]
+                    nextIndex += 1
+                    group.addTask { [self] in
+                        try await fetchMessage(
+                            accessToken: accessToken,
+                            messageId: ref.id,
+                            fallbackThreadId: ref.threadId
+                        )
+                    }
+                }
+            }
+
+            return messages
+        }
+    }
+
     func listMessageRefs(
         accessToken: String,
         gmailQuery: String?,
@@ -240,6 +279,7 @@ private extension MailSyncService {
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        request.timeoutInterval = 15
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
@@ -275,6 +315,7 @@ private extension MailSyncService {
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        request.timeoutInterval = 15
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 

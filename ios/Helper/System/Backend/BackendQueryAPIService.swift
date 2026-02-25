@@ -22,6 +22,7 @@ enum BackendQueryAPIError: LocalizedError {
 
 final class BackendQueryAPIService: BackendQuerying {
     static let shared = BackendQueryAPIService()
+    private static let lastWorkingBaseURLDefaultsKey = "helper.backend.base_url.last_working"
 
     private let session: URLSession
 
@@ -60,6 +61,7 @@ final class BackendQueryAPIService: BackendQuerying {
 
             var request = URLRequest(url: endpoint)
             request.httpMethod = method
+            request.timeoutInterval = 15
             request.setValue("application/json", forHTTPHeaderField: "Accept")
 
             if let body {
@@ -78,6 +80,7 @@ final class BackendQueryAPIService: BackendQuerying {
                     throw BackendQueryAPIError.serverError(httpResponse.statusCode, message)
                 }
 
+                Self.persistWorkingBaseURL(baseURL)
                 return data
             } catch let urlError as URLError where Self.shouldTryNextBaseURL(urlError) {
                 lastConnectivityError = urlError
@@ -110,7 +113,25 @@ final class BackendQueryAPIService: BackendQuerying {
     }
 
     private static func backendBaseURLs() -> [URL] {
-        AppIntegrationConfig.resolvedBackendBaseURLs()
+        var urls = AppIntegrationConfig.resolvedBackendBaseURLs()
+        guard
+            let raw = UserDefaults.standard.string(forKey: lastWorkingBaseURLDefaultsKey),
+            let preferred = URL(string: raw)
+        else {
+            return urls
+        }
+
+        guard let idx = urls.firstIndex(where: { $0.absoluteString.caseInsensitiveCompare(preferred.absoluteString) == .orderedSame }) else {
+            return urls
+        }
+
+        let hit = urls.remove(at: idx)
+        urls.insert(hit, at: 0)
+        return urls
+    }
+
+    private static func persistWorkingBaseURL(_ baseURL: URL) {
+        UserDefaults.standard.set(baseURL.absoluteString, forKey: lastWorkingBaseURLDefaultsKey)
     }
 
     private static func shouldTryNextBaseURL(_ error: URLError) -> Bool {
