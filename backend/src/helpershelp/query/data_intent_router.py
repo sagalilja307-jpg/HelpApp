@@ -5,7 +5,8 @@ Deterministisk router som mappar användarfrågor till IntentPlanDTO-liknande Da
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Callable, Dict, Optional
+import re
+from typing import Callable, Dict, Optional, cast
 
 from helpershelp.query.intent_plan import (
     Domain,
@@ -14,7 +15,7 @@ from helpershelp.query.intent_plan import (
     TimeScopeDTO,
     TimeScopeType,
 )
-from helpershelp.query.domain_classifier import DomainClassifier
+from helpershelp.llm import get_qwen_classifier
 from helpershelp.query.time_policy import TimePolicy, TimePolicyConfig
 from helpershelp.query.timeframe_resolver import QueryTimeframeResolver, TimeIntent
 from helpershelp.core.time_utils import utcnow_aware
@@ -157,6 +158,39 @@ def _fallback_domain_for_query(query: str) -> Domain:
     return "calendar"
 
 
+def _keyword_domain_for_query(query: str) -> Optional[Domain]:
+    lower_q = (query or "").lower()
+    explicit_map = {
+        "calendar": ["kalender", "möte", "möten", "händelse", "bokning", "agenda"],
+        "mail": ["mejl", "mail", "inkorg", "epost", "e-post"],
+        "reminders": ["påminn", "påminnelse", "uppgift", "uppgifter", "todo", "att göra"],
+        "notes": ["anteckning", "anteckningar", "notes", "notering"],
+        "memory": ["minne", "minnen", "memory", "historik", "mönster", "kom ihåg", "remember"],
+        "files": ["fil", "filer", "dokument", "pdf", "mapp"],
+        "photos": ["bild", "bilder", "foto", "foton", "album", "video", "videor"],
+        "contacts": ["kontakt", "kontakter", "telefonnummer", "adressbok"],
+        "location": ["plats", "position", "var är jag", "var var jag", "besökt", "resa"],
+    }
+    for domain, keywords in explicit_map.items():
+        if any(k in lower_q for k in keywords):
+            return cast(Domain, domain)
+    return None
+
+
+def _is_ambiguous_fallback_query(query: str) -> bool:
+    normalized = re.sub(r"[^\w\såäö]", "", (query or "").lower()).strip()
+    return normalized in {
+        "vad händer",
+        "vad är på gång",
+        "vad ar pa gang",
+        "hur ser det ut",
+        "är det något idag",
+        "ar det nagot idag",
+        "är det lugnt",
+        "ar det lugnt",
+    }
+
+
 class DataIntentRouter:
     def __init__(
         self,
@@ -166,7 +200,7 @@ class DataIntentRouter:
     ) -> None:
         _now = now_provider or utcnow_aware
 
-        self.domain_classifier = DomainClassifier()
+        self.domain_classifier = get_qwen_classifier()
         self.time_resolver = QueryTimeframeResolver(
             timezone_name=timezone_name, now_provider=_now
         )
@@ -177,26 +211,34 @@ class DataIntentRouter:
     def route(self, query: str, language: str = "sv") -> Dict[str, object]:
         q = (query or "").strip()
         filters: Dict[str, object] = {}
+        lower_q = q.lower()
+        ambiguous_fallback = _is_ambiguous_fallback_query(q)
 
-        try:
-            dom = self.domain_classifier.classify(q)
-        except Exception:
-            dom = None
+        # Fast path for explicit source keywords: avoids an LLM roundtrip for common queries.
+        explicit_domain = _keyword_domain_for_query(q)
+        dom = None
+        if explicit_domain is None and not ambiguous_fallback:
+            try:
+                dom = self.domain_classifier.classify(q)
+            except Exception:
+                dom = None
 
         parsed = self.time_resolver.resolve(q)
-        lower_q = q.lower()
-
-        if dom is not None and dom.domain == "mail" and (
-            "oläst" in lower_q or "olästa" in lower_q or "unread" in lower_q
-        ):
-            filters["status"] = "unread"
 
         # Always definitively resolve domain, default to calendar
         resolved_domain: Domain = _fallback_domain_for_query(q)
-        if dom is not None and dom.domain is not None:
-            resolved_domain = dom.domain
-        elif dom is not None and dom.suggestions:
-            resolved_domain = dom.suggestions[0]
+        if explicit_domain is not None:
+            resolved_domain = explicit_domain
+        elif not ambiguous_fallback:
+            if dom is not None and dom.domain is not None:
+                resolved_domain = dom.domain
+            elif dom is not None and dom.suggestions:
+                resolved_domain = dom.suggestions[0]
+
+        if resolved_domain == "mail" and (
+            "oläst" in lower_q or "olästa" in lower_q or "unread" in lower_q
+        ):
+            filters["status"] = "unread"
 
         timeframe = self.time_policy.apply(resolved_domain, parsed)
         time_scope = _time_scope_from_time_intent(parsed.time_intent, timeframe)
