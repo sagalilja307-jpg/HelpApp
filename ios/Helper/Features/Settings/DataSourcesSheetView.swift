@@ -21,6 +21,18 @@ struct DataSourcesSheetView: View {
         NavigationStack {
             List {
                 Section {
+                    NavigationLink {
+                        ShortTermMemoryView()
+                    } label: {
+                        MemoryOverviewRow()
+                    }
+                } header: {
+                    Text("Minne")
+                } footer: {
+                    Text("Korttidsminne visar en samlad överblick. Arbetsminne öppnas per dag från korttidsvyn.")
+                }
+
+                Section {
                     ForEach(DomainCatalog.all) { domain in
                         NavigationLink {
                             DataDomainView(domain: domain)
@@ -69,6 +81,26 @@ struct DataSourcesSheetView: View {
         domain.sources.filter { source in
             settingsStore.isSourceSupported(source.id)
         }.count
+    }
+}
+
+private struct MemoryOverviewRow: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Label("Korttids- och arbetsminne", systemImage: "clock.arrow.circlepath")
+                    .font(.system(size: 17, weight: .semibold))
+                Spacer()
+                Text("Öppna")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            Text("Samlar synkade källor i ett gemensamt flöde med 6h/7d-överblick.")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
     }
 }
 
