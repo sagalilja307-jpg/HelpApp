@@ -133,13 +133,20 @@ public struct ChatView: View {
         }
         .navigationTitle("Fråga hjälparen")
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItemGroup(placement: .topBarLeading) {
+                NavigationLink {
+                    ShortTermMemoryView()
+                } label: {
+                    Image(systemName: "clock.arrow.circlepath")
+                }
+                .accessibilityLabel("Öppna korttidsminne")
+
                 Button {
                     showDataSources = true
                 } label: {
                     Image(systemName: "externaldrive.connected.to.line.below")
                 }
-                .accessibilityLabel("Datakallor")
+                .accessibilityLabel("Datakällor")
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
