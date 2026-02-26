@@ -301,20 +301,47 @@ public struct ChatView: View {
 
     private func summaryCardData(for message: ChatViewModel.ChatMessage?) -> [SummaryCardData] {
         let entries = message?.entries ?? []
+        let latest = latestEntry(from: entries)
         var cards: [SummaryCardData] = [
-            SummaryCardData(title: "Träffar", value: "\(entries.count)")
+            SummaryCardData(
+                title: "Träffar",
+                value: "\(entries.count)",
+                caption: entries.isEmpty ? "Ingen data" : "Synkade poster",
+                icon: "number.circle"
+            )
         ]
 
         if let range = message?.timeRange {
-            cards.append(SummaryCardData(title: "Period", value: formattedRange(range)))
+            cards.append(
+                SummaryCardData(
+                    title: "Period",
+                    value: formattedRange(range),
+                    caption: "Avgränsning",
+                    icon: "calendar"
+                )
+            )
         }
 
         if let status = message?.filters["status"]?.value as? String {
-            cards.append(SummaryCardData(title: "Filter", value: status))
+            cards.append(
+                SummaryCardData(
+                    title: "Filter",
+                    value: status.capitalized,
+                    caption: "Aktivt filter",
+                    icon: "line.3.horizontal.decrease.circle"
+                )
+            )
         }
 
-        if let firstTitle = entries.first?.title, !firstTitle.isEmpty {
-            cards.append(SummaryCardData(title: "Första", value: firstTitle))
+        if let latest {
+            cards.append(
+                SummaryCardData(
+                    title: "Senaste",
+                    value: latest.title,
+                    caption: formatDate(latest.date),
+                    icon: "clock"
+                )
+            )
         }
 
         return Array(cards.prefix(4))
@@ -337,11 +364,16 @@ public struct ChatView: View {
     private func timelineItems(for message: ChatViewModel.ChatMessage?) -> [TimelineItem] {
         let entries = sortedEntries(message?.entries ?? [])
         guard !entries.isEmpty else {
-            return [TimelineItem(title: message?.text ?? "Inga resultat", date: "Nu")]
+            return [TimelineItem(title: message?.text ?? "Inga resultat", date: "Nu", subtitle: nil, source: nil)]
         }
 
         return entries.prefix(10).map { entry in
-            TimelineItem(title: entry.title, date: formatDate(entry.date))
+            TimelineItem(
+                title: entry.title,
+                date: formatDate(entry.date),
+                subtitle: clippedText(entry.body, maxLength: 90),
+                source: localizedSourceName(entry.source)
+            )
         }
     }
 
@@ -374,11 +406,15 @@ public struct ChatView: View {
     private func groupedItems(for message: ChatViewModel.ChatMessage?) -> [GroupedItem] {
         let entries = sortedEntries(message?.entries ?? [])
         guard !entries.isEmpty else {
-            return [GroupedItem(title: message?.text ?? "Inga resultat", group: "Resultat")]
+            return [GroupedItem(title: message?.text ?? "Inga resultat", group: "Resultat", subtitle: nil)]
         }
 
         return entries.map { entry in
-            GroupedItem(title: entry.title, group: localizedSourceName(entry.source))
+            GroupedItem(
+                title: entry.title,
+                group: localizedSourceName(entry.source),
+                subtitle: groupedItemSubtitle(for: entry)
+            )
         }
     }
 
@@ -396,9 +432,14 @@ public struct ChatView: View {
     private func flowSteps(for message: ChatViewModel.ChatMessage?) -> [FlowItem] {
         let entries = sortedEntries(message?.entries ?? [])
         if entries.isEmpty {
-            return [FlowItem(title: "Inga steg")]
+            return [FlowItem(title: "Inga steg", detail: nil)]
         }
-        return entries.prefix(4).map { FlowItem(title: $0.title) }
+        return entries.prefix(4).map { entry in
+            FlowItem(
+                title: entry.title,
+                detail: flowItemDetail(for: entry)
+            )
+        }
     }
 
     private func heatmapValues(for message: ChatViewModel.ChatMessage?) -> [[Double]] {
@@ -474,6 +515,36 @@ public struct ChatView: View {
         case .rawEvents:
             return "Råhändelser"
         }
+    }
+
+    private func groupedItemSubtitle(for entry: QueryResult.Entry) -> String? {
+        let datePart = entry.date.map(formatDate) ?? ""
+        let textPart = clippedText(entry.body, maxLength: 70) ?? ""
+
+        if !datePart.isEmpty && !textPart.isEmpty {
+            return "\(datePart) · \(textPart)"
+        }
+        if !datePart.isEmpty {
+            return datePart
+        }
+        return textPart.isEmpty ? nil : textPart
+    }
+
+    private func flowItemDetail(for entry: QueryResult.Entry) -> String? {
+        if let body = clippedText(entry.body, maxLength: 60), !body.isEmpty {
+            return body
+        }
+        return entry.date.map(formatDate)
+    }
+
+    private func clippedText(_ text: String?, maxLength: Int) -> String? {
+        guard let raw = text?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return nil
+        }
+        let flattened = raw.replacingOccurrences(of: "\n", with: " ")
+        guard flattened.count > maxLength else { return flattened }
+        let endIndex = flattened.index(flattened.startIndex, offsetBy: maxLength)
+        return String(flattened[..<endIndex]).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
     }
 
     private func handleGmailLogin() async {

@@ -200,23 +200,42 @@ private extension QueryPipeline {
         source: QuerySource,
         timeRange: DateInterval?
     ) -> String {
-        // MVP: bara count (ni kan bygga ut senare för list/search)
-        let count = collected.entries.count
-        let src = localizedSource(source)
+        let sourceLabel = localizedSource(source)
+        let period = formattedPeriod(timeRange)
+        let sortedEntries = sortedEntries(
+            collected.entries,
+            source: source,
+            operation: plan.operation
+        )
+        let count = sortedEntries.count
 
-        if let tf = timeRange {
-            var start = tf.start
-            var end = tf.end
-            if start > end { swap(&start, &end) }
-
-            let df = DateService.shared.dateFormatter(dateStyle: .short, timeStyle: .short)
-            let startS = df.string(from: start)
-            let endS = df.string(from: end)
-            // "halvöppet" intervall i backend men vi renderar bara läsbart.
-            return "\(count) saker i \(src) (\(startS) – \(endS))."
-        } else {
-            return "\(count) saker i \(src)."
+        guard count > 0 else {
+            if let period {
+                return "Jag hittade inga poster i \(sourceLabel) för perioden \(period)."
+            }
+            return "Jag hittade inga poster i \(sourceLabel)."
         }
+
+        let previewCount = min(maxDetailRows(for: source), count)
+        let previewEntries = Array(sortedEntries.prefix(previewCount))
+        var lines: [String] = []
+
+        if let period {
+            lines.append("Jag hittade \(count) poster i \(sourceLabel) för perioden \(period).")
+        } else {
+            lines.append("Jag hittade \(count) poster i \(sourceLabel).")
+        }
+        lines.append("Här är detaljerna:")
+
+        for (index, entry) in previewEntries.enumerated() {
+            lines.append(formattedEntryLine(entry, index: index + 1, source: source))
+        }
+
+        if count > previewCount {
+            lines.append("Visar \(previewCount) av \(count) poster.")
+        }
+
+        return lines.joined(separator: "\n")
     }
 
     nonisolated static func localizedSource(_ source: QuerySource) -> String {
@@ -244,6 +263,99 @@ private extension QueryPipeline {
         case .contacts: return "kontakter"
         case .memory: return "minne"
         }
+    }
+
+    static func formattedPeriod(_ range: DateInterval?) -> String? {
+        guard let range else { return nil }
+        var start = range.start
+        var end = range.end
+        if start > end { swap(&start, &end) }
+
+        let formatter = DateService.shared.dateFormatter(dateStyle: .short, timeStyle: .short)
+        return "\(formatter.string(from: start)) – \(formatter.string(from: end))"
+    }
+
+    static func sortedEntries(
+        _ entries: [QueryResult.Entry],
+        source: QuerySource,
+        operation: BackendIntentOperation
+    ) -> [QueryResult.Entry] {
+        let prefersDescendingDates = operation == .latest || source == .mail || source == .files || source == .photos
+
+        if prefersDescendingDates {
+            return entries.sorted { lhs, rhs in
+                (lhs.date ?? .distantPast) > (rhs.date ?? .distantPast)
+            }
+        }
+
+        if source == .calendar || source == .reminders {
+            return entries.sorted { lhs, rhs in
+                (lhs.date ?? .distantFuture) < (rhs.date ?? .distantFuture)
+            }
+        }
+
+        return entries.sorted { lhs, rhs in
+            (lhs.date ?? .distantPast) > (rhs.date ?? .distantPast)
+        }
+    }
+
+    nonisolated static func maxDetailRows(for source: QuerySource) -> Int {
+        switch source {
+        case .calendar, .reminders:
+            return 8
+        case .mail:
+            return 6
+        default:
+            return 7
+        }
+    }
+
+    static func formattedEntryLine(
+        _ entry: QueryResult.Entry,
+        index: Int,
+        source: QuerySource
+    ) -> String {
+        let cleanedTitle = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = cleanedTitle.isEmpty ? "Utan titel" : cleanedTitle
+        let timestamp = formattedEntryTimestamp(entry.date)
+        let snippet = entrySnippet(entry, source: source)
+
+        var line = "\(index). \(title)"
+        if let timestamp, !timestamp.isEmpty {
+            line += " (\(timestamp))"
+        }
+        if let snippet, !snippet.isEmpty {
+            line += "\n   \(snippet)"
+        }
+        return line
+    }
+
+    static func formattedEntryTimestamp(_ date: Date?) -> String? {
+        guard let date else { return nil }
+        let formatter = DateService.shared.dateFormatter(dateStyle: .short, timeStyle: .short)
+        return formatter.string(from: date)
+    }
+
+    nonisolated static func entrySnippet(_ entry: QueryResult.Entry, source: QuerySource) -> String? {
+        let body = (entry.body ?? "")
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !body.isEmpty {
+            return clipped(body, maxLength: 140)
+        }
+
+        if source == .location, let lat = entry.latitude, let lon = entry.longitude {
+            return "Koordinat: \(String(format: "%.5f", lat)), \(String(format: "%.5f", lon))"
+        }
+
+        return nil
+    }
+
+    nonisolated static func clipped(_ text: String, maxLength: Int) -> String {
+        guard text.count > maxLength else { return text }
+        let index = text.index(text.startIndex, offsetBy: maxLength)
+        return text[..<index].trimmingCharacters(in: .whitespacesAndNewlines) + "…"
     }
 
     // Use DateService for all date parsing/formatting to keep locale/timezone consistent
