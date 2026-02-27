@@ -696,6 +696,11 @@ public struct ChatView: View {
             importStatusMessage = importedCount > 0
                 ? "Importerade \(importedCount) fil\(importedCount == 1 ? "" : "er")."
                 : "Filerna finns redan importerade."
+            appendImportDraft(
+                importedCount > 0
+                    ? "Jag har importerat \(importedCount) fil\(importedCount == 1 ? "" : "er"). Hjälp mig med innehållet."
+                    : "Använd mina importerade filer i svaret."
+            )
         } catch {
             vm.error = "Kunde inte importera filer: \(error.localizedDescription)"
         }
@@ -779,6 +784,11 @@ public struct ChatView: View {
         importStatusMessage = totalImported > 0
             ? "Importerade \(totalImported) bild\(totalImported == 1 ? "" : "er")."
             : "Bilderna finns redan importerade."
+        appendImportDraft(
+            totalImported > 0
+                ? "Jag har importerat \(totalImported) bild\(totalImported == 1 ? "" : "er"). Hjälp mig med innehållet."
+                : "Använd mina importerade bilder i svaret."
+        )
     }
 
     private func importCameraImage(_ image: UIImage) async {
@@ -798,9 +808,22 @@ public struct ChatView: View {
             importStatusMessage = importedCount > 0
                 ? "Kamerabild importerad."
                 : "Kamerabilden fanns redan importerad."
+            appendImportDraft("Jag har importerat en kamerabild. Hjälp mig med innehållet.")
         } catch {
             vm.error = "Kunde inte importera kamerabilden: \(error.localizedDescription)"
         }
+    }
+
+    private func appendImportDraft(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        if vm.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            vm.query = trimmed
+        } else if !vm.query.contains(trimmed) {
+            vm.query += "\n\(trimmed)"
+        }
+        focusInput = true
     }
 
     private func ensurePhotosAccess() async -> Bool {

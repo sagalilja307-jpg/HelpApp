@@ -152,11 +152,18 @@ final class MailSyncService {
             }
 
             let entries = messages.map { message in
-                QueryResult.Entry(
+                let fromLine = message.from.trimmingCharacters(in: .whitespacesAndNewlines)
+                let snippetLine = message.snippet.trimmingCharacters(in: .whitespacesAndNewlines)
+                let bodyParts = [
+                    fromLine.isEmpty ? nil : "Från: \(fromLine)",
+                    snippetLine.isEmpty ? nil : snippetLine
+                ].compactMap { $0 }
+
+                return QueryResult.Entry(
                     id: UUID(),
                     source: .mail,
                     title: message.subject.isEmpty ? "(Utan ämne)" : message.subject,
-                    body: message.snippet.isEmpty ? nil : message.snippet,
+                    body: bodyParts.isEmpty ? nil : bodyParts.joined(separator: "\n"),
                     date: message.internalDate
                 )
             }

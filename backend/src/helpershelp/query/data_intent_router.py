@@ -34,10 +34,12 @@ def _map_relative_n_value(n: int) -> str:
 
 
 def _time_scope_from_time_intent(
-    time_intent: TimeIntent, _timeframe: Optional[Dict[str, object]]
+    time_intent: TimeIntent, timeframe: Optional[Dict[str, object]]
 ) -> TimeScopeDTO:
     category = time_intent.category
     payload = time_intent.payload or {}
+    start = timeframe.get("start") if timeframe else None
+    end = timeframe.get("end") if timeframe else None
 
     scope_type: TimeScopeType = "all"
     scope_value: Optional[str] = None
@@ -60,12 +62,21 @@ def _time_scope_from_time_intent(
     elif category == "REL_TOMORROW_MORNING":
         scope_type = "relative"
         scope_value = "tomorrow_morning"
-    elif category in {"REL_THIS_WEEK", "REL_NEXT_WEEK", "REL_LAST_WEEK"}:
+    elif category == "REL_THIS_WEEK":
         scope_type = "relative"
-        scope_value = "7d"
-    elif category in {"REL_THIS_MONTH", "REL_NEXT_MONTH"}:
+        scope_value = "this_week"
+    elif category == "REL_NEXT_WEEK":
         scope_type = "relative"
-        scope_value = "30d"
+        scope_value = "next_week"
+    elif category == "REL_LAST_WEEK":
+        scope_type = "relative"
+        scope_value = "last_week"
+    elif category == "REL_THIS_MONTH":
+        scope_type = "relative"
+        scope_value = "this_month"
+    elif category == "REL_NEXT_MONTH":
+        scope_type = "relative"
+        scope_value = "next_month"
     elif category == "REL_LAST_N_UNITS":
         n = int(payload.get("n", 0))  # pyright: ignore[reportArgumentType]
         scope_type = "relative"
@@ -85,6 +96,8 @@ def _time_scope_from_time_intent(
     return TimeScopeDTO(
         type=scope_type,
         value=scope_value,
+        start=start,
+        end=end,
     )
 
 
@@ -191,6 +204,48 @@ def _is_ambiguous_fallback_query(query: str) -> bool:
     }
 
 
+def _normalize_filter_value(value: str) -> str:
+    cleaned = value.strip().strip("\"'`")
+    cleaned = re.sub(r"[\s\.,;:!?]+$", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned.lower()
+
+
+def _extract_mail_sender_filter(query: str) -> Optional[str]:
+    pattern = re.compile(
+        r"\b(?:från|from)\s+([a-z0-9åäö@._-]+(?:\s+[a-z0-9åäö@._-]+){0,2})",
+        re.IGNORECASE,
+    )
+    match = pattern.search(query)
+    if not match:
+        return None
+
+    sender = _normalize_filter_value(match.group(1))
+    if not sender:
+        return None
+    return sender
+
+
+def _extract_person_filter(query: str) -> Optional[str]:
+    patterns = [
+        re.compile(r"\bfyller\s+([a-zåäö][\wåäö-]*)", re.IGNORECASE),
+        re.compile(
+            r"\b(?:födelsedag|fodelsedag|birthday)\s+(?:för|for)?\s*([a-zåäö][\wåäö-]*)",
+            re.IGNORECASE,
+        ),
+    ]
+
+    for pattern in patterns:
+        match = pattern.search(query)
+        if not match:
+            continue
+        person = _normalize_filter_value(match.group(1))
+        if person:
+            return person
+
+    return None
+
+
 class DataIntentRouter:
     def __init__(
         self,
@@ -239,6 +294,16 @@ class DataIntentRouter:
             "oläst" in lower_q or "olästa" in lower_q or "unread" in lower_q
         ):
             filters["status"] = "unread"
+
+        if resolved_domain == "mail":
+            sender = _extract_mail_sender_filter(q)
+            if sender:
+                filters["from"] = sender
+
+        if resolved_domain in {"calendar", "contacts", "reminders"}:
+            person = _extract_person_filter(q)
+            if person:
+                filters["person"] = person
 
         timeframe = self.time_policy.apply(resolved_domain, parsed)
         time_scope = _time_scope_from_time_intent(parsed.time_intent, timeframe)

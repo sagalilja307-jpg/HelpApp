@@ -162,11 +162,116 @@ final class BackendQueryPipelineTests: XCTestCase {
         XCTAssertNil(collector.lastSource)
     }
 
+    func testPipelineDerivesNextWeekRangeWhenStartEndMissing() async throws {
+        let collector = RecordingCollector()
+        let plan = makePlan(
+            domain: .calendar,
+            operation: .list,
+            type: .relative,
+            value: "next_week"
+        )
+        let pipeline = QueryPipeline(
+            backendQueryService: MockBackendQueryService(response: BackendQueryResponseDTO(intentPlan: plan)),
+            localCollector: collector,
+            accessGate: AllowingAccess()
+        )
+
+        let result = try await pipeline.run(UserQuery(text: "vad gör jag nästa vecka"))
+
+        let range = try XCTUnwrap(result.timeRange)
+        XCTAssertNotNil(collector.lastTimeRange)
+        XCTAssertEqual(collector.lastTimeRange?.start, range.start)
+        XCTAssertEqual(collector.lastTimeRange?.end, range.end)
+        XCTAssertGreaterThan(range.duration, 6 * 24 * 3600)
+        XCTAssertLessThan(range.duration, 8 * 24 * 3600)
+    }
+
+    func testPipelineAppliesEntityFiltersBeforeBuildingAnswer() async throws {
+        let collector = RecordingCollector(
+            stubEntries: [
+                QueryResult.Entry(
+                    id: UUID(),
+                    source: .calendar,
+                    title: "Alva fyller år",
+                    body: nil,
+                    date: DateService.shared.now()
+                ),
+                QueryResult.Entry(
+                    id: UUID(),
+                    source: .calendar,
+                    title: "Möte med teamet",
+                    body: nil,
+                    date: DateService.shared.now()
+                )
+            ]
+        )
+        let plan = makePlan(
+            domain: .calendar,
+            operation: .list,
+            type: .all,
+            value: nil,
+            filters: ["query": AnyCodable("alva")]
+        )
+        let pipeline = QueryPipeline(
+            backendQueryService: MockBackendQueryService(response: BackendQueryResponseDTO(intentPlan: plan)),
+            localCollector: collector,
+            accessGate: AllowingAccess()
+        )
+
+        let result = try await pipeline.run(UserQuery(text: "vilken dag fyller Alva år"))
+
+        XCTAssertEqual(result.entries.count, 1)
+        XCTAssertEqual(result.entries.first?.title, "Alva fyller år")
+    }
+
+    func testPipelineAppliesMailSenderFiltersBeforeBuildingAnswer() async throws {
+        let collector = RecordingCollector(
+            stubEntries: [
+                QueryResult.Entry(
+                    id: UUID(),
+                    source: .mail,
+                    title: "Betalning uppdaterad",
+                    body: "Från: Klarna <no-reply@klarna.com>\nDin faktura är betald.",
+                    date: DateService.shared.now()
+                ),
+                QueryResult.Entry(
+                    id: UUID(),
+                    source: .mail,
+                    title: "Build passed",
+                    body: "Från: GitHub <noreply@github.com>",
+                    date: DateService.shared.now()
+                )
+            ]
+        )
+        let plan = makePlan(
+            domain: .mail,
+            operation: .list,
+            type: .all,
+            value: nil,
+            filters: ["from": AnyCodable("klarna")]
+        )
+        let response = BackendQueryResponseDTO(
+            intentPlan: plan,
+            hasDataIntent: true
+        )
+        let pipeline = QueryPipeline(
+            backendQueryService: MockBackendQueryService(response: response),
+            localCollector: collector,
+            accessGate: AllowingAccess()
+        )
+
+        let result = try await pipeline.run(UserQuery(text: "Vad har jag för mejl från klarna?"))
+
+        XCTAssertEqual(result.entries.count, 1)
+        XCTAssertEqual(result.entries.first?.title, "Betalning uppdaterad")
+    }
+
     private func makePlan(
         domain: BackendIntentDomain,
         operation: BackendIntentOperation,
         type: BackendTimeScopeType,
-        value: String?
+        value: String?,
+        filters: [String: AnyCodable] = [:]
     ) -> BackendIntentPlanDTO {
         BackendIntentPlanDTO(
             domain: domain,
@@ -178,7 +283,7 @@ final class BackendQueryPipelineTests: XCTestCase {
                 start: nil,
                 end: nil
             ),
-            filters: [:],
+            filters: filters,
             grouping: nil,
             sort: nil,
             needsClarification: false,
@@ -213,7 +318,13 @@ private struct FailingBackendQueryService: BackendQuerying {
 }
 
 private final class RecordingCollector: LocalQueryCollecting {
+    private let stubEntries: [QueryResult.Entry]
     private(set) var lastSource: QuerySource?
+    private(set) var lastTimeRange: DateInterval?
+
+    init(stubEntries: [QueryResult.Entry] = []) {
+        self.stubEntries = stubEntries
+    }
 
     func collect(
         source: QuerySource,
@@ -222,6 +333,7 @@ private final class RecordingCollector: LocalQueryCollecting {
         userQuery: UserQuery
     ) async throws -> LocalCollectedResult {
         lastSource = source
-        return LocalCollectedResult(entries: [])
+        lastTimeRange = timeRange
+        return LocalCollectedResult(entries: stubEntries)
     }
 }

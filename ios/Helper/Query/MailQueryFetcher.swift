@@ -106,6 +106,11 @@ private extension MailQueryFetcher {
             terms.append(contentsOf: gmailDateTerms(from: intent.timeScope))
         }
 
+        let senders = senderTerms(from: intent.filters)
+        for sender in senders {
+            terms.append("from:\(gmailQuoted(sender))")
+        }
+
         if let userQuery {
             let lowered = userQuery.lowercased()
             if lowered.contains("oläst") || lowered.contains("olästa") || lowered.contains("unread") {
@@ -117,6 +122,129 @@ private extension MailQueryFetcher {
 
         guard !terms.isEmpty else { return nil }
         return terms.joined(separator: " ")
+    }
+
+    static func senderTerms(from filters: [String: AnyCodable]) -> [String] {
+        let hints = ["from", "sender", "domain", "company", "brand", "org", "organization", "query"]
+        var collected: [String] = []
+
+        for (key, value) in filters {
+            collectSenderTerms(
+                value: value.value,
+                key: key.lowercased(),
+                keyHints: hints,
+                output: &collected
+            )
+        }
+
+        var seen: Set<String> = []
+        return collected.filter { term in
+            let normalized = term.lowercased()
+            guard !normalized.isEmpty, !seen.contains(normalized) else { return false }
+            seen.insert(normalized)
+            return true
+        }
+    }
+
+    static func collectSenderTerms(
+        value: Any,
+        key: String,
+        keyHints: [String],
+        output: inout [String]
+    ) {
+        switch value {
+        case let text as String:
+            guard keyHints.contains(where: { key.contains($0) }) else { return }
+            if key == "query" {
+                output.append(contentsOf: entityTerms(fromQuery: text))
+            } else {
+                output.append(contentsOf: splitTerms(text))
+            }
+
+        case let nested as [String: Any]:
+            for (nestedKey, nestedValue) in nested {
+                collectSenderTerms(
+                    value: nestedValue,
+                    key: nestedKey.lowercased(),
+                    keyHints: keyHints,
+                    output: &output
+                )
+            }
+
+        case let array as [Any]:
+            for item in array {
+                collectSenderTerms(
+                    value: item,
+                    key: key,
+                    keyHints: keyHints,
+                    output: &output
+                )
+            }
+
+        case let nestedAnyCodables as [String: AnyCodable]:
+            for (nestedKey, nestedValue) in nestedAnyCodables {
+                collectSenderTerms(
+                    value: nestedValue.value,
+                    key: nestedKey.lowercased(),
+                    keyHints: keyHints,
+                    output: &output
+                )
+            }
+
+        case let anyCodableArray as [AnyCodable]:
+            for item in anyCodableArray {
+                collectSenderTerms(
+                    value: item.value,
+                    key: key,
+                    keyHints: keyHints,
+                    output: &output
+                )
+            }
+
+        default:
+            return
+        }
+    }
+
+    static func splitTerms(_ raw: String) -> [String] {
+        raw.split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    static func entityTerms(fromQuery query: String) -> [String] {
+        let stopwords: Set<String> = [
+            "vad", "har", "jag", "for", "fran", "från", "med", "mina", "mitt",
+            "vilken", "vilket", "dag", "datum", "gör", "gor", "nasta", "nästa",
+            "vecka", "manad", "månad", "ar", "år", "idag", "imorgon", "igar",
+            "igår", "today", "tomorrow", "yesterday", "week", "month", "year",
+            "mail", "mejl", "email", "from"
+        ]
+
+        let tokens = query
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+            .split(whereSeparator: { $0.isWhitespace || $0.isPunctuation })
+            .map(String.init)
+            .filter { token in
+                guard token.count >= 2 else { return false }
+                return !stopwords.contains(token)
+            }
+
+        if tokens.count <= 3 {
+            return tokens
+        }
+        return []
+    }
+
+    static func gmailQuoted(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return trimmed }
+        if trimmed.contains(" ") {
+            let escaped = trimmed.replacingOccurrences(of: "\"", with: "\\\"")
+            return "\"\(escaped)\""
+        }
+        return trimmed
     }
 
     static func gmailDateTerms(from interval: DateInterval) -> [String] {
