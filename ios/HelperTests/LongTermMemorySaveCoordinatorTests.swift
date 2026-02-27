@@ -124,6 +124,38 @@ final class LongTermMemorySaveCoordinatorTests: XCTestCase {
         XCTAssertEqual(item.normalizedType, .other)
     }
 
+    func testLoadAllItemsReturnsNewestFirstAndSupportsLimit() throws {
+        let context = ModelContext(container)
+
+        let older = LongTermMemoryItem(
+            originalText: "raw-old",
+            cleanText: "old",
+            suggestedType: "Insight",
+            tags: [],
+            embedding: [0.1]
+        )
+        older.createdAt = Date(timeIntervalSince1970: 10)
+
+        let newer = LongTermMemoryItem(
+            originalText: "raw-new",
+            cleanText: "new",
+            suggestedType: "Insight",
+            tags: [],
+            embedding: [0.2]
+        )
+        newer.createdAt = Date(timeIntervalSince1970: 20)
+
+        context.insert(older)
+        context.insert(newer)
+        try context.save()
+
+        let all = coordinator.loadAllItems()
+        XCTAssertEqual(all.map(\.cleanText), ["new", "old"])
+
+        let limited = coordinator.loadAllItems(limit: 1)
+        XCTAssertEqual(limited.map(\.cleanText), ["new"])
+    }
+
     func testQueuedJobEventuallyCreatesItemWhenRetryWorkerRuns() async throws {
         api.results = [
             .failure(MemoryProcessingAPIError.serverError(503, "Unavailable")),

@@ -27,6 +27,25 @@ enum LongTermMemoryType: String, CaseIterable, Sendable {
     }
 }
 
+extension LongTermMemoryType {
+    var displayName: String {
+        switch self {
+        case .insight:
+            return "Insight"
+        case .idea:
+            return "Idea"
+        case .decision:
+            return "Decision"
+        case .question:
+            return "Question"
+        case .risk:
+            return "Risk"
+        case .other:
+            return "Other"
+        }
+    }
+}
+
 @Model
 final class LongTermMemoryItem {
     @Attribute(.unique)

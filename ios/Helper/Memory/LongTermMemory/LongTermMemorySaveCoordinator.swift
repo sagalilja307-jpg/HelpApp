@@ -97,12 +97,18 @@ struct LongTermMemorySaveCoordinator {
         return (try? service.loadClusters(in: context, preferredClusterCount: preferredClusterCount)) ?? []
     }
 
-    func loadItems(for cluster: LongTermMemoryCluster) -> [LongTermMemoryItem] {
+    func loadAllItems(limit: Int? = nil) -> [LongTermMemoryItem] {
         let context = makeContext()
         let descriptor = FetchDescriptor<LongTermMemoryItem>(
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
-        guard let allItems = try? context.fetch(descriptor) else { return [] }
+        guard let items = try? context.fetch(descriptor) else { return [] }
+        guard let limit, limit > 0 else { return items }
+        return Array(items.prefix(limit))
+    }
+
+    func loadItems(for cluster: LongTermMemoryCluster) -> [LongTermMemoryItem] {
+        let allItems = loadAllItems()
         let memberIDs = Set(cluster.memberIDs)
         return allItems.filter { memberIDs.contains($0.id) }
     }

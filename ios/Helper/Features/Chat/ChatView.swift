@@ -203,13 +203,13 @@ public struct ChatView: View {
                 .accessibilityLabel("Öppna korttidsminne")
 
                 NavigationLink {
-                    LongTermMemoryClustersView(
+                    LongTermMemoryLibraryView(
                         longTermMemorySaveCoordinator: longTermMemorySaveCoordinator
                     )
                 } label: {
                     Image(systemName: "square.grid.2x2")
                 }
-                .accessibilityLabel("Öppna långtidsminneskluster")
+                .accessibilityLabel("Öppna långtidsminne")
 
                 Button {
                     showDataSources = true

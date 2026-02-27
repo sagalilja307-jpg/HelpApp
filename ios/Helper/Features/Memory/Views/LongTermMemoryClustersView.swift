@@ -116,7 +116,7 @@ private struct LongTermMemoryClusterCard: View {
             }
 
             HStack(spacing: 8) {
-                TagChip(text: typeText(cluster.dominantType), systemImage: "tag")
+                TagChip(text: cluster.dominantType.displayName, systemImage: "tag")
                 ForEach(cluster.topTags.prefix(3), id: \.self) { tag in
                     TagChip(text: tag, systemImage: nil)
                 }
@@ -128,18 +128,7 @@ private struct LongTermMemoryClusterCard: View {
         if let firstTag = cluster.topTags.first {
             return firstTag.capitalized
         }
-        return typeText(cluster.dominantType)
-    }
-
-    private func typeText(_ type: LongTermMemoryType) -> String {
-        switch type {
-        case .insight: return "Insight"
-        case .idea: return "Idea"
-        case .decision: return "Decision"
-        case .question: return "Question"
-        case .risk: return "Risk"
-        case .other: return "Other"
-        }
+        return cluster.dominantType.displayName
     }
 }
 
