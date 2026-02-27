@@ -180,6 +180,30 @@ final class LongTermMemorySaveCoordinatorTests: XCTestCase {
         XCTAssertEqual(items[0].cleanText, "Saved from copied coordinator")
         XCTAssertTrue(jobs.isEmpty)
     }
+
+    func testRepeated503EventuallyMarksJobFailedAfterMaxRetries() async throws {
+        api.results = Array(
+            repeating: .failure(MemoryProcessingAPIError.serverError(503, "Unavailable")),
+            count: 8
+        )
+
+        let firstOutcome = await coordinator.save(text: "Always down", language: "sv")
+        XCTAssertEqual(firstOutcome, .queued)
+
+        // Initial save() consumes attempt #1. Advance time and process six more attempts.
+        // On attempt #7 the job should transition to failed.
+        for _ in 0..<6 {
+            clock.now = clock.now.addingTimeInterval(60_000)
+            await coordinator.processPendingJobs()
+        }
+
+        let context = ModelContext(container)
+        let jobs = try context.fetch(FetchDescriptor<LongTermMemoryPendingJob>())
+        XCTAssertEqual(jobs.count, 1)
+        XCTAssertEqual(jobs[0].status, .failed)
+        XCTAssertEqual(jobs[0].attemptCount, 7)
+        XCTAssertEqual(jobs[0].lastError, "Tjänsten för minnessparning är tillfälligt otillgänglig (503).")
+    }
 }
 
 private final class MockMemoryProcessingAPI: MemoryProcessingAPI {

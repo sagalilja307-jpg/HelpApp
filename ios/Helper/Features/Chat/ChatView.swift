@@ -597,12 +597,16 @@ public struct ChatView: View {
 
     private func saveButtonTitle(for status: MessageSaveStatus) -> String {
         switch status {
+        case .idle:
+            return "Spara"
         case .saving:
             return "Sparar..."
         case .saved:
             return "Sparad"
-        default:
-            return "Spara"
+        case .queued:
+            return "Köad"
+        case .failed:
+            return "Spara igen"
         }
     }
 
@@ -615,7 +619,7 @@ public struct ChatView: View {
         case .saved:
             return "Sparad lokalt"
         case .queued:
-            return "Köad för retry"
+            return "Köad – försöker igen automatiskt"
         case .failed(let error):
             return error
         }

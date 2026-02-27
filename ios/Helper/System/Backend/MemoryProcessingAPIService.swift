@@ -18,7 +18,16 @@ enum MemoryProcessingAPIError: LocalizedError {
         case .encodingFailed:
             return "Kunde inte serialisera memory processing-request."
         case let .serverError(statusCode, message):
-            return "Memory processing misslyckades (\(statusCode)): \(message)"
+            switch statusCode {
+            case 503:
+                return "Tjänsten för minnessparning är tillfälligt otillgänglig (503)."
+            case 429:
+                return "För många förfrågningar just nu. Försök igen om en stund."
+            case 500...599:
+                return "Backendfel vid minnessparning (\(statusCode))."
+            default:
+                return "Memory processing misslyckades (\(statusCode)): \(message)"
+            }
         }
     }
 }

@@ -16,20 +16,26 @@ class _FakeEmbeddingService:
         self,
         *,
         embedding_model: str = "bge-m3",
+        model_available: bool = True,
         vectors: list[list[float]] | None = None,
         embed_error: Exception | None = None,
+        status_error: Exception | None = None,
     ):
         self._embedding_model = embedding_model
+        self._model_available = model_available
         self._vectors = vectors or [[0.1, -0.2, 0.3]]
         self._embed_error = embed_error
+        self._status_error = status_error
 
     def status(self) -> EmbeddingStatus:
+        if self._status_error:
+            raise self._status_error
         return EmbeddingStatus(
             ollama_host="http://localhost:11434",
             embedding_model=self._embedding_model,
             ollama_reachable=True,
-            model_available=True,
-            missing_models=[],
+            model_available=self._model_available,
+            missing_models=[] if self._model_available else [self._embedding_model],
             active_embed_endpoint="/api/embed",
         )
 
@@ -115,6 +121,50 @@ class ProcessMemoryRouteTests(unittest.TestCase):
                     "/process-memory",
                     json={"text": "Spara detta minne", "language": "sv"},
                 )
+
+        self.assertEqual(response.status_code, 503)
+
+    def test_health_ready_returns_200_when_bge_m3_is_available(self):
+        fake = _FakeEmbeddingService(embedding_model="bge-m3:latest", model_available=True)
+
+        with patch("helpershelp.api.routes.health.get_embedding_service", return_value=fake):
+            response = self.client.get("/health/ready")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("status"), "ready")
+        self.assertEqual(payload.get("embeddingModel"), "bge-m3:latest")
+
+    def test_health_ready_returns_503_when_runtime_model_is_wrong(self):
+        fake = _FakeEmbeddingService(embedding_model="nomic-embed-text", model_available=True)
+
+        with patch("helpershelp.api.routes.health.get_embedding_service", return_value=fake):
+            response = self.client.get("/health/ready")
+
+        self.assertEqual(response.status_code, 503)
+
+    def test_health_ready_returns_503_when_model_is_unavailable(self):
+        fake = _FakeEmbeddingService(embedding_model="bge-m3", model_available=False)
+
+        with patch("helpershelp.api.routes.health.get_embedding_service", return_value=fake):
+            response = self.client.get("/health/ready")
+
+        self.assertEqual(response.status_code, 503)
+
+    def test_health_ready_returns_503_when_runtime_status_throws(self):
+        fake = _FakeEmbeddingService(status_error=RuntimeError("offline"))
+
+        with patch("helpershelp.api.routes.health.get_embedding_service", return_value=fake):
+            response = self.client.get("/health/ready")
+
+        self.assertEqual(response.status_code, 503)
+
+    def test_health_ready_returns_503_when_config_model_is_not_bge(self):
+        fake = _FakeEmbeddingService(embedding_model="bge-m3", model_available=True)
+
+        with patch("helpershelp.api.routes.health.OLLAMA_EMBED_MODEL", "nomic-embed-text"):
+            with patch("helpershelp.api.routes.health.get_embedding_service", return_value=fake):
+                response = self.client.get("/health/ready")
 
         self.assertEqual(response.status_code, 503)
 
