@@ -256,14 +256,14 @@ private extension QueryPipeline {
         let senderTerms = source == .mail
             ? filterTerms(
                 in: plan.filters,
-                keyHints: ["from", "sender", "domain", "company", "brand", "mailbox", "email", "org", "organization"],
+                keyHints: ["from", "sender", "participants", "participant", "domain", "company", "brand", "mailbox", "email", "org", "organization", "source_account"],
                 includeQueryHints: true
             )
             : []
 
         let entityTerms = filterTerms(
             in: plan.filters,
-            keyHints: ["name", "person", "contact", "participant", "attendee", "who", "query", "keyword", "subject", "title"],
+            keyHints: ["name", "person", "contact", "participant", "attendee", "who", "query", "keyword", "subject", "title", "text_contains", "location", "tags", "priority"],
             includeQueryHints: true
         )
 

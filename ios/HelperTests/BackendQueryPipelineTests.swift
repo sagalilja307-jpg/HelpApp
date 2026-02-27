@@ -248,7 +248,7 @@ final class BackendQueryPipelineTests: XCTestCase {
             operation: .list,
             type: .all,
             value: nil,
-            filters: ["from": AnyCodable("klarna")]
+            filters: ["participants": AnyCodable(["klarna"])]
         )
         let response = BackendQueryResponseDTO(
             intentPlan: plan,

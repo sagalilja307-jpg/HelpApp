@@ -40,8 +40,18 @@ class QueryIntentFilterTests(unittest.TestCase):
         self.assertEqual(time_scope.get("value"), "next_week")
         self.assertIsNotNone(time_scope.get("start"))
         self.assertIsNotNone(time_scope.get("end"))
+        self.assertEqual(payload.get("filters"), {
+            "status": None,
+            "participants": [],
+            "location": None,
+            "text_contains": None,
+            "tags": [],
+            "priority": None,
+            "has_attachment": None,
+            "source_account": None,
+        })
 
-    def test_birthday_query_sets_person_filter(self):
+    def test_birthday_query_sets_participants_filter(self):
         response = self.client.post(
             "/query",
             json={"query": "Vilken dag fyller Alva år?", "language": "sv"},
@@ -51,9 +61,9 @@ class QueryIntentFilterTests(unittest.TestCase):
         filters = payload.get("filters") or {}
 
         self.assertEqual(payload.get("domain"), "calendar")
-        self.assertEqual(filters.get("person"), "alva")
+        self.assertEqual(filters.get("participants"), ["alva"])
 
-    def test_mail_query_sets_from_filter(self):
+    def test_mail_query_sets_mail_filters(self):
         response = self.client.post(
             "/query",
             json={"query": "Vad har jag för mejl från klarna?", "language": "sv"},
@@ -63,7 +73,8 @@ class QueryIntentFilterTests(unittest.TestCase):
         filters = payload.get("filters") or {}
 
         self.assertEqual(payload.get("domain"), "mail")
-        self.assertEqual(filters.get("from"), "klarna")
+        self.assertEqual(filters.get("participants"), ["klarna"])
+        self.assertEqual(filters.get("status"), None)
 
 
 if __name__ == "__main__":

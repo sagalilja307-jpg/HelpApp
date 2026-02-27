@@ -95,9 +95,8 @@ private extension MailQueryFetcher {
     ) -> String? {
         var terms: [String] = []
 
-        if let status = intent.filters["status"]?.value as? String,
-           status.lowercased() == "unread" {
-            terms.append("is:unread")
+        if let statusTerm = statusSearchTerm(from: intent.filters) {
+            terms.append(statusTerm)
         }
 
         if let timeRange {
@@ -106,9 +105,22 @@ private extension MailQueryFetcher {
             terms.append(contentsOf: gmailDateTerms(from: intent.timeScope))
         }
 
+        if let attachmentTerm = attachmentSearchTerm(from: intent.filters) {
+            terms.append(attachmentTerm)
+        }
+
+        if let priorityTerm = prioritySearchTerm(from: intent.filters) {
+            terms.append(priorityTerm)
+        }
+
         let senders = senderTerms(from: intent.filters)
         for sender in senders {
             terms.append("from:\(gmailQuoted(sender))")
+        }
+
+        let textContainsTerms = textSearchTerms(from: intent.filters)
+        for term in textContainsTerms {
+            terms.append(gmailQuoted(term))
         }
 
         if let userQuery {
@@ -125,7 +137,7 @@ private extension MailQueryFetcher {
     }
 
     static func senderTerms(from filters: [String: AnyCodable]) -> [String] {
-        let hints = ["from", "sender", "domain", "company", "brand", "org", "organization", "query"]
+        let hints = ["from", "sender", "participants", "participant", "domain", "company", "brand", "org", "organization"]
         var collected: [String] = []
 
         for (key, value) in filters {
@@ -155,11 +167,7 @@ private extension MailQueryFetcher {
         switch value {
         case let text as String:
             guard keyHints.contains(where: { key.contains($0) }) else { return }
-            if key == "query" {
-                output.append(contentsOf: entityTerms(fromQuery: text))
-            } else {
-                output.append(contentsOf: splitTerms(text))
-            }
+            output.append(contentsOf: splitTerms(text))
 
         case let nested as [String: Any]:
             for (nestedKey, nestedValue) in nested {
@@ -210,6 +218,52 @@ private extension MailQueryFetcher {
         raw.split(separator: ",")
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+    }
+
+    static func statusSearchTerm(from filters: [String: AnyCodable]) -> String? {
+        guard let status = filters["status"]?.value as? String else { return nil }
+        switch status.lowercased() {
+        case "unread":
+            return "is:unread"
+        default:
+            return nil
+        }
+    }
+
+    static func attachmentSearchTerm(from filters: [String: AnyCodable]) -> String? {
+        guard let hasAttachment = filters["has_attachment"]?.value as? Bool else { return nil }
+        return hasAttachment ? "has:attachment" : "-has:attachment"
+    }
+
+    static func prioritySearchTerm(from filters: [String: AnyCodable]) -> String? {
+        guard let priority = filters["priority"]?.value as? String else { return nil }
+        switch priority.lowercased() {
+        case "high":
+            return "is:important"
+        default:
+            return nil
+        }
+    }
+
+    static func textSearchTerms(from filters: [String: AnyCodable]) -> [String] {
+        guard let raw = filters["text_contains"]?.value else { return [] }
+
+        switch raw {
+        case let text as String:
+            return splitTerms(text)
+        case let values as [String]:
+            return values
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        case let values as [Any]:
+            return values.compactMap { value in
+                guard let text = value as? String else { return nil }
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : trimmed
+            }
+        default:
+            return []
+        }
     }
 
     static func entityTerms(fromQuery query: String) -> [String] {

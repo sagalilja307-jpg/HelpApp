@@ -204,6 +204,19 @@ def _is_ambiguous_fallback_query(query: str) -> bool:
     }
 
 
+def _default_filters() -> Dict[str, object]:
+    return {
+        "status": None,
+        "participants": [],
+        "location": None,
+        "text_contains": None,
+        "tags": [],
+        "priority": None,
+        "has_attachment": None,
+        "source_account": None,
+    }
+
+
 def _normalize_filter_value(value: str) -> str:
     cleaned = value.strip().strip("\"'`")
     cleaned = re.sub(r"[\s\.,;:!?]+$", "", cleaned)
@@ -211,38 +224,138 @@ def _normalize_filter_value(value: str) -> str:
     return cleaned.lower()
 
 
-def _extract_mail_sender_filter(query: str) -> Optional[str]:
-    pattern = re.compile(
-        r"\b(?:från|from)\s+([a-z0-9åäö@._-]+(?:\s+[a-z0-9åäö@._-]+){0,2})",
-        re.IGNORECASE,
-    )
-    match = pattern.search(query)
-    if not match:
-        return None
-
-    sender = _normalize_filter_value(match.group(1))
-    if not sender:
-        return None
-    return sender
+def _dedupe_terms(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    output: list[str] = []
+    for value in values:
+        normalized = _normalize_filter_value(value)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        output.append(normalized)
+    return output
 
 
-def _extract_person_filter(query: str) -> Optional[str]:
+def _extract_status(query: str, domain: Domain) -> Optional[str]:
+    q = (query or "").lower()
+    if domain == "mail" and re.search(r"\b(oläst|olästa|unread)\b", q):
+        return "unread"
+    if re.search(r"\b(inställd|cancelled|canceled|avbokad)\b", q):
+        return "cancelled"
+    if re.search(r"\b(klar|klart|färdig|done|completed|slutförd|avklarad)\b", q):
+        return "completed"
+    if re.search(r"\b(pending|öppen|open|todo|ogjord|ofärdig)\b", q) or "att göra" in q:
+        return "pending"
+    return None
+
+
+def _extract_participants(query: str) -> list[str]:
+    candidates: list[str] = []
     patterns = [
+        re.compile(r"\b(?:från|from|med|till)\s+([a-z0-9åäö@._-]+(?:\s+[a-z0-9åäö@._-]+){0,2})", re.IGNORECASE),
         re.compile(r"\bfyller\s+([a-zåäö][\wåäö-]*)", re.IGNORECASE),
         re.compile(
             r"\b(?:födelsedag|fodelsedag|birthday)\s+(?:för|for)?\s*([a-zåäö][\wåäö-]*)",
             re.IGNORECASE,
         ),
     ]
+    for pattern in patterns:
+        candidates.extend(match.group(1) for match in pattern.finditer(query))
+
+    disallowed = {
+        "mig",
+        "jag",
+        "oss",
+        "vi",
+        "dig",
+        "du",
+        "idag",
+        "imorgon",
+        "igår",
+        "vecka",
+        "månad",
+        "år",
+        "mail",
+        "mejl",
+        "kalender",
+    }
+    cleaned = [c for c in _dedupe_terms(candidates) if c not in disallowed]
+    return cleaned
+
+
+def _extract_location(query: str) -> Optional[str]:
+    pattern = re.compile(
+        r"\b(?:i|på|at|in)\s+([a-zåäö][\wåäö-]*(?:\s+[a-zåäö][\wåäö-]*){0,2})",
+        re.IGNORECASE,
+    )
+    for match in pattern.finditer(query):
+        candidate = _normalize_filter_value(match.group(1))
+        if candidate in {
+            "dag",
+            "vecka",
+            "månad",
+            "år",
+            "morse",
+            "eftermiddag",
+            "kväll",
+            "helgen",
+            "inkorg",
+        }:
+            continue
+        return candidate
+    return None
+
+
+def _extract_text_contains(query: str) -> Optional[str]:
+    patterns = [
+        re.compile(r"\b(?:om|about|innehåller|innehaller|contains?|med ämne|med amne|subject)\s+\"([^\"]+)\"", re.IGNORECASE),
+        re.compile(r"\b(?:om|about|innehåller|innehaller|contains?|med ämne|med amne|subject)\s+([a-z0-9åäö][\wåäö\s@._-]{2,60})$", re.IGNORECASE),
+        re.compile(r"\b(?:sök|sok|search|hitta|find)\s+(?:efter\s+)?([a-z0-9åäö][\wåäö\s@._-]{2,60})$", re.IGNORECASE),
+    ]
 
     for pattern in patterns:
         match = pattern.search(query)
         if not match:
             continue
-        person = _normalize_filter_value(match.group(1))
-        if person:
-            return person
+        value = _normalize_filter_value(match.group(1))
+        if value:
+            return value
+    return None
 
+
+def _extract_tags(query: str) -> list[str]:
+    tags = re.findall(r"#([a-zA-Z0-9åäöÅÄÖ_-]{2,32})", query)
+    return _dedupe_terms(tags)
+
+
+def _extract_priority(query: str) -> Optional[str]:
+    q = (query or "").lower()
+    if any(word in q for word in ("hög prioritet", "hog prioritet", "prio hög", "prio hog", "urgent", "high priority")):
+        return "high"
+    if any(word in q for word in ("medel prioritet", "medium priority", "prio medel")):
+        return "medium"
+    if any(word in q for word in ("låg prioritet", "lag prioritet", "low priority", "prio låg", "prio lag")):
+        return "low"
+    return None
+
+
+def _extract_has_attachment(query: str) -> Optional[bool]:
+    q = (query or "").lower()
+    if any(phrase in q for phrase in ("utan bilaga", "without attachment", "utan bilagor")):
+        return False
+    if any(phrase in q for phrase in ("med bilaga", "med bilagor", "has attachment", "with attachment")):
+        return True
+    return None
+
+
+def _extract_source_account(query: str) -> Optional[str]:
+    q = (query or "").lower()
+    if any(word in q for word in ("gmail", "google mail")):
+        return "gmail"
+    if any(word in q for word in ("outlook", "hotmail", "live.com")):
+        return "outlook"
+    if any(word in q for word in ("icloud", "apple mail")):
+        return "icloud"
     return None
 
 
@@ -265,8 +378,7 @@ class DataIntentRouter:
 
     def route(self, query: str, language: str = "sv") -> Dict[str, object]:
         q = (query or "").strip()
-        filters: Dict[str, object] = {}
-        lower_q = q.lower()
+        filters: Dict[str, object] = _default_filters()
         ambiguous_fallback = _is_ambiguous_fallback_query(q)
 
         # Fast path for explicit source keywords: avoids an LLM roundtrip for common queries.
@@ -290,20 +402,37 @@ class DataIntentRouter:
             elif dom is not None and dom.suggestions:
                 resolved_domain = dom.suggestions[0]
 
-        if resolved_domain == "mail" and (
-            "oläst" in lower_q or "olästa" in lower_q or "unread" in lower_q
-        ):
-            filters["status"] = "unread"
+        status = _extract_status(q, resolved_domain)
+        if status is not None:
+            filters["status"] = status
 
-        if resolved_domain == "mail":
-            sender = _extract_mail_sender_filter(q)
-            if sender:
-                filters["from"] = sender
+        participants = _extract_participants(q)
+        if participants:
+            filters["participants"] = participants
 
-        if resolved_domain in {"calendar", "contacts", "reminders"}:
-            person = _extract_person_filter(q)
-            if person:
-                filters["person"] = person
+        location = _extract_location(q)
+        if location and resolved_domain in {"calendar", "reminders", "location"}:
+            filters["location"] = location
+
+        text_contains = _extract_text_contains(q)
+        if text_contains:
+            filters["text_contains"] = text_contains
+
+        tags = _extract_tags(q)
+        if tags:
+            filters["tags"] = tags
+
+        priority = _extract_priority(q)
+        if priority and resolved_domain in {"reminders", "mail"}:
+            filters["priority"] = priority
+
+        has_attachment = _extract_has_attachment(q)
+        if has_attachment is not None and resolved_domain in {"mail", "files"}:
+            filters["has_attachment"] = has_attachment
+
+        source_account = _extract_source_account(q)
+        if source_account and resolved_domain == "mail":
+            filters["source_account"] = source_account
 
         timeframe = self.time_policy.apply(resolved_domain, parsed)
         time_scope = _time_scope_from_time_intent(parsed.time_intent, timeframe)
