@@ -184,6 +184,15 @@ public struct ChatView: View {
                 }
                 .accessibilityLabel("Öppna korttidsminne")
 
+                NavigationLink {
+                    LongTermMemoryClustersView(
+                        longTermMemorySaveCoordinator: longTermMemorySaveCoordinator
+                    )
+                } label: {
+                    Image(systemName: "square.grid.2x2")
+                }
+                .accessibilityLabel("Öppna långtidsminneskluster")
+
                 Button {
                     showDataSources = true
                 } label: {
