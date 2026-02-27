@@ -44,33 +44,39 @@ class QueryResponse(BaseModel):
 
 @router.post("/query", response_model=QueryResponse, tags=["query"])
 async def unified_query(request: QueryRequest) -> QueryResponse:
+    tz = request.timezone or "Europe/Stockholm"
     try:
         user_query = request.resolved_query
         if not user_query:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty query")
-
-        tz = request.timezone or "Europe/Stockholm"
-        logger.info(
-            "Processing query route lang=%s tz=%s chars=%d",
-            request.language,
-            tz,
-            len(user_query),
-        )
 
         router_service = DataIntentRouter(timezone_name=tz)
         plan = router_service.route(user_query, language=request.language)
 
         # Convert router result (dict) into a DataIntent model instance
         data_intent = DataIntent.model_validate(plan)
+        logger.info(
+            "Query request route=/query lang=%s tz=%s status=%d",
+            request.language,
+            tz,
+            status.HTTP_200_OK,
+        )
         return QueryResponse(data_intent=data_intent)
 
-    except HTTPException:
+    except HTTPException as exc:
+        logger.warning(
+            "Query request route=/query lang=%s tz=%s status=%d",
+            request.language,
+            tz,
+            exc.status_code,
+        )
         raise
     except Exception as exc:
         logger.error(
-            "Query processing failed route=/query lang=%s tz=%s exc_type=%s",
+            "Query request route=/query lang=%s tz=%s status=%d exc_type=%s",
             request.language,
-            request.timezone or "Europe/Stockholm",
+            tz,
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
             exc.__class__.__name__,
         )
         raise HTTPException(

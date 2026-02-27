@@ -114,12 +114,18 @@ def _tags(clean_text: str) -> List[str]:
 
 @router.post("/process-memory", response_model=ProcessMemoryResponse, tags=["memory"])
 async def process_memory(request: ProcessMemoryRequest) -> ProcessMemoryResponse:
-    # No content logging. Only metadata.
-    logger.info("Processing memory payload lang=%s chars=%d", request.language, len(request.text))
+    route = "/process-memory"
+    timezone_name = "n/a"
 
     configured_model = (OLLAMA_EMBED_MODEL or "").strip()
     if not _is_allowed_model(configured_model):
-        logger.error("Embedding config rejected for process-memory")
+        logger.error(
+            "Memory request route=%s lang=%s tz=%s status=%d reason=config_model",
+            route,
+            request.language,
+            timezone_name,
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Embedding service unavailable",
@@ -129,19 +135,38 @@ async def process_memory(request: ProcessMemoryRequest) -> ProcessMemoryResponse
     try:
         runtime = embed_service.status()
     except Exception as exc:
-        logger.warning("Embedding runtime status unavailable: %s", exc.__class__.__name__)
+        logger.warning(
+            "Memory request route=%s lang=%s tz=%s status=%d reason=runtime_status exc_type=%s",
+            route,
+            request.language,
+            timezone_name,
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            exc.__class__.__name__,
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Embedding service unavailable",
         ) from exc
     if not _is_allowed_model(runtime.embedding_model):
-        logger.error("Embedding runtime model rejected for process-memory")
+        logger.error(
+            "Memory request route=%s lang=%s tz=%s status=%d reason=runtime_model",
+            route,
+            request.language,
+            timezone_name,
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Embedding service unavailable",
         )
     if not runtime.model_available:
-        logger.warning("Embedding runtime unavailable for process-memory")
+        logger.warning(
+            "Memory request route=%s lang=%s tz=%s status=%d reason=model_unavailable",
+            route,
+            request.language,
+            timezone_name,
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Embedding service unavailable",
@@ -154,18 +179,39 @@ async def process_memory(request: ProcessMemoryRequest) -> ProcessMemoryResponse
     try:
         vectors = embed_service.embed_texts([clean_text])
     except Exception as exc:
-        logger.warning("Embedding backend unavailable for process-memory: %s", exc.__class__.__name__)
+        logger.warning(
+            "Memory request route=%s lang=%s tz=%s status=%d reason=embed_backend exc_type=%s",
+            route,
+            request.language,
+            timezone_name,
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            exc.__class__.__name__,
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Embedding service unavailable",
         ) from exc
 
     if not vectors or not vectors[0]:
-        logger.error("Embedding backend returned empty vector")
+        logger.error(
+            "Memory request route=%s lang=%s tz=%s status=%d reason=empty_vector",
+            route,
+            request.language,
+            timezone_name,
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Embedding service unavailable",
         )
+
+    logger.info(
+        "Memory request route=%s lang=%s tz=%s status=%d",
+        route,
+        request.language,
+        timezone_name,
+        status.HTTP_200_OK,
+    )
 
     return ProcessMemoryResponse(
         cleanText=clean_text,

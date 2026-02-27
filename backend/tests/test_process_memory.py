@@ -188,6 +188,9 @@ class ProcessMemoryRouteTests(unittest.TestCase):
 
         joined = "\n".join(handler.messages)
         self.assertNotIn(sentinel, joined)
+        self.assertIn("route=/query", joined)
+        self.assertIn("status=200", joined)
+        self.assertIn("tz=Europe/Stockholm", joined)
 
     def test_query_exception_logs_do_not_include_raw_text(self):
         sentinel = "SECRET_QUERY_EXCEPTION_789"
@@ -210,6 +213,8 @@ class ProcessMemoryRouteTests(unittest.TestCase):
 
         joined = "\n".join(handler.messages)
         self.assertNotIn(sentinel, joined)
+        self.assertIn("route=/query", joined)
+        self.assertIn("status=500", joined)
 
     def test_process_memory_logs_do_not_include_raw_text(self):
         sentinel = "SECRET_MEMORY_PAYLOAD_456"
@@ -233,6 +238,8 @@ class ProcessMemoryRouteTests(unittest.TestCase):
 
         joined = "\n".join(handler.messages)
         self.assertNotIn(sentinel, joined)
+        self.assertIn("route=/process-memory", joined)
+        self.assertIn("status=200", joined)
 
     def test_unhandled_exception_logs_do_not_include_raw_text(self):
         sentinel = "SECRET_UNHANDLED_101"
