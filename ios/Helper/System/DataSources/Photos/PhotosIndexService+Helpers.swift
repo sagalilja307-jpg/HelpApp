@@ -37,6 +37,44 @@ extension PhotosIndexService {
         #endif
     }
 
+    @MainActor
+    func indexAssets(
+        localIdentifiers: [String],
+        in context: ModelContext
+    ) async throws -> Int {
+        #if canImport(Photos)
+        let filteredIdentifiers = Array(Set(localIdentifiers.map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }))
+
+        guard !filteredIdentifiers.isEmpty else { return 0 }
+
+        let assetsResult = PHAsset.fetchAssets(
+            withLocalIdentifiers: filteredIdentifiers,
+            options: nil
+        )
+        guard assetsResult.count > 0 else { return 0 }
+
+        var assets: [PHAsset] = []
+        assets.reserveCapacity(assetsResult.count)
+        assetsResult.enumerateObjects { asset, _, _ in
+            assets.append(asset)
+        }
+
+        let ocrEnabled = sourceConnectionStore.isOCREnabled(for: .photos)
+        var snapshots: [AssetSnapshot] = []
+        snapshots.reserveCapacity(assets.count)
+
+        for asset in assets {
+            snapshots.append(await makeSnapshot(for: asset, ocrEnabled: ocrEnabled))
+        }
+
+        return try upsertSnapshots(snapshots, in: context)
+        #else
+        return 0
+        #endif
+    }
+
     #if canImport(Photos)
     func fetchSnapshots(
         modifiedAfter since: Date?,

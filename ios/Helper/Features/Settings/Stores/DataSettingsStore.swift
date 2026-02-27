@@ -4,6 +4,8 @@ import Combine
 
 @MainActor
 final class DataSettingsStore: ObservableObject {
+    private static let cameraEnabledKey = "helper.stage3.camera.enabled"
+
     private let sourceConnectionStore: SourceConnectionStore
     private let defaults: UserDefaults
 
@@ -34,9 +36,9 @@ final class DataSettingsStore: ObservableObject {
 
     func isSourceSupported(_ source: DataSourceID) -> Bool {
         switch source {
-        case .calendar, .reminders, .contacts, .mail, .files, .photos, .location:
+        case .calendar, .reminders, .contacts, .mail, .files, .photos, .camera, .location:
             return true
-        case .notifications, .camera, .healthActivity, .sleep, .mentalHealth, .vitals:
+        case .notifications, .healthActivity, .sleep, .mentalHealth, .vitals:
             return false
         }
     }
@@ -64,6 +66,12 @@ final class DataSettingsStore: ObservableObject {
         guard enabled else {
             setSourceEnabledLocally(source, enabled: false)
             return true
+        }
+
+        if source == .mail, OAuthTokenManager.shared.hasStoredToken() == false {
+            permissionStates[source] = .unknown
+            setSourceEnabledLocally(source, enabled: false)
+            return false
         }
 
         if let permissionType = permissionType(for: source) {
@@ -125,11 +133,18 @@ final class DataSettingsStore: ObservableObject {
         var nextSourceEnabled: [DataSourceID: Bool] = [:]
 
         for source in DataSourceID.allCases {
-            guard isSourceSupported(source), let querySource = querySource(for: source) else {
+            guard isSourceSupported(source) else {
                 nextSourceEnabled[source] = false
                 continue
             }
-            nextSourceEnabled[source] = sourceConnectionStore.isEnabled(querySource)
+
+            if let querySource = querySource(for: source) {
+                nextSourceEnabled[source] = sourceConnectionStore.isEnabled(querySource)
+            } else if source == .camera {
+                nextSourceEnabled[source] = defaults.bool(forKey: Self.cameraEnabledKey)
+            } else {
+                nextSourceEnabled[source] = false
+            }
         }
 
         sourceEnabled = nextSourceEnabled
@@ -162,6 +177,11 @@ final class DataSettingsStore: ObservableObject {
         sourceEnabled[source] = enabled
         if let querySource = querySource(for: source) {
             sourceConnectionStore.setEnabled(enabled, for: querySource)
+            return
+        }
+
+        if source == .camera {
+            defaults.set(enabled, forKey: Self.cameraEnabledKey)
         }
     }
 
@@ -203,7 +223,9 @@ final class DataSettingsStore: ObservableObject {
             return .photos
         case .location:
             return .location
-        case .notifications, .camera, .healthActivity, .sleep, .mentalHealth, .vitals:
+        case .notifications, .healthActivity, .sleep, .mentalHealth, .vitals:
+            return nil
+        case .camera:
             return nil
         }
     }
@@ -218,9 +240,11 @@ final class DataSettingsStore: ObservableObject {
             return .contacts
         case .photos:
             return .photos
+        case .camera:
+            return .camera
         case .location:
             return .location
-        case .mail, .files, .notifications, .camera, .healthActivity, .sleep, .mentalHealth, .vitals:
+        case .mail, .files, .notifications, .healthActivity, .sleep, .mentalHealth, .vitals:
             return nil
         }
     }

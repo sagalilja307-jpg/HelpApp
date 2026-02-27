@@ -89,7 +89,7 @@ private struct MemorySourceToggleRow: View {
                 .foregroundStyle(.secondary)
 
             if source == .mail, settings.permissionState(for: .mail) != .granted {
-                Text("Logga in på Gmail i chatten för att aktivera mail här.")
+                Text("Anslut Gmail i Datakällor för att aktivera mail här.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

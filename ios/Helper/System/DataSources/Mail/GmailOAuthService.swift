@@ -21,6 +21,14 @@ private struct GmailOAuthTokenResponse: Codable {
     }
 }
 
+private struct GmailProfileResponse: Codable {
+    let emailAddress: String
+
+    enum CodingKeys: String, CodingKey {
+        case emailAddress
+    }
+}
+
 enum GmailOAuthServiceError: LocalizedError {
     case missingClientID
     case invalidAuthorizationURL
@@ -29,6 +37,7 @@ enum GmailOAuthServiceError: LocalizedError {
     case callbackFailed
     case invalidTokenResponse
     case missingRefreshToken
+    case invalidProfileResponse
 
     var errorDescription: String? {
         switch self {
@@ -46,6 +55,8 @@ enum GmailOAuthServiceError: LocalizedError {
             return "Ogiltigt token-svar från Google."
         case .missingRefreshToken:
             return "Saknar refresh token för att kunna uppdatera access token."
+        case .invalidProfileResponse:
+            return "Kunde inte läsa kontoadress från Gmail."
         }
     }
 }
@@ -160,6 +171,32 @@ final class GmailOAuthService {
             DataSourceDebug.failure(op, error)
             throw error
         }
+    }
+
+    func fetchPrimaryEmail(accessToken: String) async throws -> String {
+        guard let url = URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/profile") else {
+            throw URLError(.badURL)
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 15
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+
+        let payload = try JSONDecoder().decode(GmailProfileResponse.self, from: data)
+        let email = payload.emailAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !email.isEmpty else {
+            throw GmailOAuthServiceError.invalidProfileResponse
+        }
+
+        return email
     }
 
     static func parseCallbackURL(_ url: URL) -> (code: String?, state: String?) {

@@ -29,7 +29,6 @@ final class ChatViewModel {
 
     var messages: [ChatMessage] = []
     var query: String = ""
-    var extraContext: String = ""
     var isSending = false
     var error: String? = nil
 
@@ -62,21 +61,8 @@ final class ChatViewModel {
         ))
         query = ""
 
-        let fullPrompt: String
-        if !extraContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            fullPrompt = """
-            Kontext:
-            \(extraContext)
-
-            Fråga:
-            \(trimmed)
-            """
-        } else {
-            fullPrompt = trimmed
-        }
-
         do {
-            let userQuery = UserQuery(text: fullPrompt, source: .userTyped)
+            let userQuery = UserQuery(text: trimmed, source: .userTyped)
             let result = try await pipeline.run(userQuery)
             let responseText = normalizedResponseText(from: result)
             messages.append(.init(

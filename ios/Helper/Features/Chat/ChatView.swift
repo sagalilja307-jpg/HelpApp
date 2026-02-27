@@ -8,6 +8,9 @@
 import SwiftData
 import SwiftUI
 import CoreLocation
+import PhotosUI
+import UniformTypeIdentifiers
+import UIKit
 
 private enum MessageSaveStatus: Equatable {
     case idle
@@ -23,16 +26,17 @@ public struct ChatView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @FocusState private var focusInput: Bool
-    @State private var showContext = false
+    @State private var showImportOptions = false
     @State private var showSupportSettings = false
     @State private var showCreateNote = false
     @State private var showDataSources = false
     @State private var supportSettingsViewModel = SupportSettingsViewModel()
-    @State private var gmailOAuthService = GmailOAuthService()
-    @State private var gmailConnected = false
-    @State private var syncStatusMessage: String?
     @State private var noteTitle = ""
     @State private var noteBody = ""
+    @State private var showFileImporter = false
+    @State private var showCameraCapture = false
+    @State private var selectedPhotoItems: [PhotosPickerItem] = []
+    @State private var importStatusMessage: String?
     @State private var saveStatuses: [UUID: MessageSaveStatus] = [:]
 
     private let sourceConnectionStore: SourceConnectionStore
@@ -87,43 +91,57 @@ public struct ChatView: View {
                 }
             }
 
-            if showContext {
+            if showImportOptions {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Lägg till kontext (valfritt)")
+                    Text("Importera filer, bilder, kamera och andra datakällor")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
 
-                    TextEditor(text: $bindableVM.extraContext)
-                        .frame(minHeight: 80, maxHeight: 160)
-                        .padding(8)
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(.quaternary))
-                }
-                .padding([.horizontal, .top])
-            }
+                    HStack(spacing: 8) {
+                        Button {
+                            showFileImporter = true
+                        } label: {
+                            Label("Filer", systemImage: "doc.badge.plus")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
 
-            if !gmailConnected {
-                HStack(alignment: .center, spacing: 10) {
-                    Image(systemName: "envelope.badge.person.crop")
-                        .foregroundStyle(.secondary)
+                        PhotosPicker(
+                            selection: $selectedPhotoItems,
+                            maxSelectionCount: 20,
+                            matching: .images
+                        ) {
+                            Label("Bilder", systemImage: "photo.badge.plus")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Gmail är inte anslutet")
-                            .font(.subheadline.weight(.semibold))
-                        Text("Logga in för att aktivera mejlsvar i chatten.")
+                        Button {
+                            Task {
+                                await startCameraCaptureFlow()
+                            }
+                        } label: {
+                            Label("Kamera", systemImage: "camera.badge.ellipsis")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+
+                        Button {
+                            showDataSources = true
+                        } label: {
+                            Label("Datakällor", systemImage: "externaldrive.connected.to.line.below")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+
+                    if let importStatusMessage {
+                        Text(importStatusMessage)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-
-                    Spacer(minLength: 8)
-
-                    Button("Logga in") {
-                        Task { await handleGmailLogin() }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 4)
+                .padding([.horizontal, .top])
             }
 
             HStack {
@@ -151,11 +169,11 @@ public struct ChatView: View {
 
             HStack(spacing: 8) {
                 Button {
-                    showContext.toggle()
+                    showImportOptions.toggle()
                 } label: {
-                    Image(systemName: showContext ? "doc.text.magnifyingglass" : "doc.badge.plus")
+                    Image(systemName: showImportOptions ? "externaldrive.connected.to.line.below.fill" : "square.and.arrow.down.on.square")
                 }
-                .accessibilityLabel("Visa eller dölj kontextruta")
+                .accessibilityLabel("Visa eller dölj import av filer, bilder, kamera och datakällor")
 
                 TextField("Skriv en fråga…", text: $bindableVM.query, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
@@ -258,34 +276,46 @@ public struct ChatView: View {
                 }
             }
         }
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: true
+        ) { result in
+            switch result {
+            case .success(let urls):
+                Task {
+                    await importSelectedFiles(urls)
+                }
+            case .failure(let error):
+                vm.error = "Kunde inte välja filer: \(error.localizedDescription)"
+            }
+        }
+        .sheet(isPresented: $showCameraCapture) {
+            CameraCaptureSheet { image in
+                Task {
+                    await importCameraImage(image)
+                }
+            }
+            .ignoresSafeArea()
+        }
         .alert("Fel", isPresented: .constant(vm.error != nil)) {
             Button("OK") { vm.error = nil }
         } message: {
             Text(vm.error ?? "")
         }
-        .alert(
-            "Gmail",
-            isPresented: Binding(
-                get: { syncStatusMessage != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        syncStatusMessage = nil
-                    }
-                }
-            )
-        ) {
-            Button("OK") { syncStatusMessage = nil }
-        } message: {
-            Text(syncStatusMessage ?? "")
-        }
         .task {
-            await refreshGmailConnectionState()
             await longTermMemorySaveCoordinator.processPendingJobs()
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             Task {
                 await longTermMemorySaveCoordinator.processPendingJobs()
+            }
+        }
+        .onChange(of: selectedPhotoItems) { _, newItems in
+            guard !newItems.isEmpty else { return }
+            Task {
+                await importSelectedPhotos(newItems)
             }
         }
     }
@@ -331,9 +361,22 @@ public struct ChatView: View {
                     }
                     Spacer()
                 }
-            } else if autoSaveEnabled || status != .idle {
-                HStack {
+            } else {
+                HStack(spacing: 8) {
                     Spacer()
+                    if !autoSaveEnabled {
+                        Button {
+                            Task {
+                                await saveMessage(msg)
+                            }
+                        } label: {
+                            Label(saveButtonTitle(for: status), systemImage: "bookmark")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(status == .saving)
+                    }
+
                     if let text = saveStatusDetail(for: status) {
                         Text(text)
                             .font(.caption)
@@ -640,6 +683,169 @@ public struct ChatView: View {
         return String(flattened[..<endIndex]).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
     }
 
+    private func importSelectedFiles(_ urls: [URL]) async {
+        guard !urls.isEmpty else { return }
+
+        do {
+            let importedCount = try await filesImportService.importDocuments(
+                urls: urls,
+                in: modelContext
+            )
+            sourceConnectionStore.setEnabled(true, for: .files)
+            sourceConnectionStore.setHasImportedFiles(true)
+            importStatusMessage = importedCount > 0
+                ? "Importerade \(importedCount) fil\(importedCount == 1 ? "" : "er")."
+                : "Filerna finns redan importerade."
+        } catch {
+            vm.error = "Kunde inte importera filer: \(error.localizedDescription)"
+        }
+    }
+
+    private func startCameraCaptureFlow() async {
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+            vm.error = "Kameran är inte tillgänglig på den här enheten."
+            return
+        }
+
+        let hasCameraAccess = await ensureCameraAccess()
+        guard hasCameraAccess else {
+            vm.error = "Kameraåtkomst nekades. Tillåt kamera i Inställningar."
+            return
+        }
+
+        showCameraCapture = true
+    }
+
+    private func importSelectedPhotos(_ items: [PhotosPickerItem]) async {
+        defer { selectedPhotoItems = [] }
+        guard !items.isEmpty else { return }
+
+        var photosImportedCount = 0
+        var filesImportedCount = 0
+
+        let hasPhotosAccess = await ensurePhotosAccess()
+        if hasPhotosAccess {
+            let localIdentifiers = items.compactMap(\.itemIdentifier)
+            if !localIdentifiers.isEmpty {
+                do {
+                    photosImportedCount = try await photosIndexService.indexAssets(
+                        localIdentifiers: localIdentifiers,
+                        in: modelContext
+                    )
+                    sourceConnectionStore.setEnabled(true, for: .photos)
+                } catch {
+                    vm.error = "Kunde inte importera bilder: \(error.localizedDescription)"
+                    return
+                }
+            }
+        }
+
+        let fallbackItems = hasPhotosAccess
+            ? items.filter { $0.itemIdentifier == nil }
+            : items
+
+        if !fallbackItems.isEmpty {
+            do {
+                var tempURLs: [URL] = []
+                tempURLs.reserveCapacity(fallbackItems.count)
+
+                for item in fallbackItems {
+                    guard let data = try await item.loadTransferable(type: Data.self) else {
+                        continue
+                    }
+                    let preferredType = item.supportedContentTypes.first
+                    let fileURL = try writeTemporaryImageFile(
+                        data: data,
+                        preferredType: preferredType
+                    )
+                    tempURLs.append(fileURL)
+                }
+
+                if !tempURLs.isEmpty {
+                    filesImportedCount = try await filesImportService.importDocuments(
+                        urls: tempURLs,
+                        in: modelContext
+                    )
+                    sourceConnectionStore.setEnabled(true, for: .files)
+                    sourceConnectionStore.setHasImportedFiles(true)
+                }
+            } catch {
+                vm.error = "Kunde inte läsa valda bilder: \(error.localizedDescription)"
+                return
+            }
+        }
+
+        let totalImported = photosImportedCount + filesImportedCount
+        importStatusMessage = totalImported > 0
+            ? "Importerade \(totalImported) bild\(totalImported == 1 ? "" : "er")."
+            : "Bilderna finns redan importerade."
+    }
+
+    private func importCameraImage(_ image: UIImage) async {
+        guard let data = image.jpegData(compressionQuality: 0.9) else {
+            vm.error = "Kunde inte läsa kamerabilden."
+            return
+        }
+
+        do {
+            let url = try writeTemporaryImageFile(data: data, preferredType: .jpeg)
+            let importedCount = try await filesImportService.importDocuments(
+                urls: [url],
+                in: modelContext
+            )
+            sourceConnectionStore.setEnabled(true, for: .files)
+            sourceConnectionStore.setHasImportedFiles(true)
+            importStatusMessage = importedCount > 0
+                ? "Kamerabild importerad."
+                : "Kamerabilden fanns redan importerad."
+        } catch {
+            vm.error = "Kunde inte importera kamerabilden: \(error.localizedDescription)"
+        }
+    }
+
+    private func ensurePhotosAccess() async -> Bool {
+        do {
+            var status = await PermissionManager.shared.status(for: .photos)
+            if status == .notDetermined {
+                status = try await PermissionManager.shared.requestAccess(for: .photos)
+            }
+            return status == .granted
+        } catch {
+            return false
+        }
+    }
+
+    private func ensureCameraAccess() async -> Bool {
+        do {
+            var status = await PermissionManager.shared.status(for: .camera)
+            if status == .notDetermined {
+                status = try await PermissionManager.shared.requestAccess(for: .camera)
+            }
+            return status == .granted
+        } catch {
+            return false
+        }
+    }
+
+    private func writeTemporaryImageFile(
+        data: Data,
+        preferredType: UTType?
+    ) throws -> URL {
+        let fileManager = FileManager.default
+        let directory = fileManager.temporaryDirectory
+            .appendingPathComponent("helper-chat-imports", isDirectory: true)
+        try fileManager.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+
+        let fileExtension = preferredType?.preferredFilenameExtension ?? "jpg"
+        let filename = "image-\(UUID().uuidString).\(fileExtension)"
+        let fileURL = directory.appendingPathComponent(filename)
+        try data.write(to: fileURL, options: .atomic)
+        return fileURL
+    }
+
     private func saveStatus(for messageID: UUID) -> MessageSaveStatus {
         saveStatuses[messageID] ?? .idle
     }
@@ -719,27 +925,6 @@ public struct ChatView: View {
         }
     }
 
-    private func handleGmailLogin() async {
-        if OAuthTokenManager.shared.hasStoredToken() {
-            gmailConnected = true
-            syncStatusMessage = "Gmail är redan ansluten."
-            return
-        }
-
-        do {
-            _ = try await gmailOAuthService.startAuthorization()
-            gmailConnected = true
-            syncStatusMessage = "Gmail anslöts."
-        } catch {
-            gmailConnected = false
-            syncStatusMessage = "Kunde inte ansluta Gmail: \(error.localizedDescription)"
-        }
-    }
-
-    private func refreshGmailConnectionState() async {
-        gmailConnected = OAuthTokenManager.shared.hasStoredToken()
-    }
-
     private func createNote() {
         let service = NotesStoreService()
         do {
@@ -755,5 +940,47 @@ public struct ChatView: View {
         noteTitle = ""
         noteBody = ""
         showCreateNote = false
+    }
+}
+
+private struct CameraCaptureSheet: UIViewControllerRepresentable {
+    let onImageCaptured: (UIImage) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.cameraCaptureMode = .photo
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        private let parent: CameraCaptureSheet
+
+        init(parent: CameraCaptureSheet) {
+            self.parent = parent
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
+        }
+
+        func imagePickerController(
+            _ picker: UIImagePickerController,
+            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+        ) {
+            if let image = info[.originalImage] as? UIImage {
+                parent.onImageCaptured(image)
+            }
+            parent.dismiss()
+        }
     }
 }

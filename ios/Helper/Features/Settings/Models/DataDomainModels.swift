@@ -99,7 +99,7 @@ enum DomainCatalog {
             .init(id: .mail, title: "Mejl", subtitle: "Används endast vid aktiv förfrågan.", systemPermissionHint: nil),
             .init(id: .files, title: "Filer", subtitle: "Används endast vid aktiv förfrågan.", systemPermissionHint: nil),
             .init(id: .photos, title: "Bilder", subtitle: "Används endast vid aktiv förfrågan.", systemPermissionHint: "Bildåtkomst"),
-            .init(id: .camera, title: "Kamera", subtitle: "Kommer i en senare version.", systemPermissionHint: "Kameraåtkomst")
+            .init(id: .camera, title: "Kamera", subtitle: "Importera bilder direkt med kameran.", systemPermissionHint: "Kameraåtkomst")
         ],
         sensitiveAccent: false
     )

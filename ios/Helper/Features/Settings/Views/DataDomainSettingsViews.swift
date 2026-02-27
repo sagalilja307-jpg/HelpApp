@@ -154,17 +154,40 @@ private struct DataSourceRow: View {
     let source: DataSource
 
     @EnvironmentObject private var store: DataSettingsStore
+    @ObservedObject private var connectedMailStore = ConnectedMailStore.shared
+    @State private var gmailOAuthService = GmailOAuthService()
+    @State private var isMailAuthorizing = false
+    @State private var mailError: String?
 
     private var isSupported: Bool {
         store.isSourceSupported(source.id)
     }
 
+    private var isMailSource: Bool {
+        source.id == .mail
+    }
+
+    private var connectedMailAddresses: [String] {
+        connectedMailStore.emails
+    }
+
     private var isToggleEnabled: Bool {
-        domainEnabled && isSupported
+        domainEnabled && isSupported && !isMailAuthorizing
     }
 
     private var statusText: String {
         isSupported ? store.permissionState(for: source.id).label : "Oaktiverad"
+    }
+
+    private var sourceToggleBinding: Binding<Bool> {
+        Binding(
+            get: { store.isSourceEnabled(source.id) },
+            set: { newValue in
+                Task {
+                    await handleToggleChanged(newValue)
+                }
+            }
+        )
     }
 
     var body: some View {
@@ -184,6 +207,24 @@ private struct DataSourceRow: View {
                     .font(.system(size: 12))
                     .foregroundStyle(Color.secondary.opacity(0.9))
 
+                if isMailSource, store.isSourceEnabled(.mail), !connectedMailAddresses.isEmpty {
+                    Text(connectedMailAddresses.joined(separator: ", "))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.primary)
+                }
+
+                if isMailSource, isMailAuthorizing {
+                    Text("Ansluter mejl…")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+
+                if let mailError, isMailSource {
+                    Text(mailError)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.red)
+                }
+
                 if !isSupported {
                     Text("Inte tillgänglig i appen ännu.")
                         .font(.system(size: 12))
@@ -193,17 +234,27 @@ private struct DataSourceRow: View {
 
             Spacer()
 
-            Toggle("", isOn: Binding(
-                get: { store.isSourceEnabled(source.id) },
-                set: { newValue in
-                    Task {
-                        _ = await store.setSource(source.id, enabled: newValue)
+            VStack(alignment: .trailing, spacing: 8) {
+                Toggle("", isOn: sourceToggleBinding)
+                    .labelsHidden()
+                    .disabled(!isToggleEnabled)
+                    .opacity(isToggleEnabled ? 1.0 : 0.45)
+
+                if isMailSource, store.isSourceEnabled(.mail), isSupported {
+                    Button {
+                        Task {
+                            await addAdditionalMailAccount()
+                        }
+                    } label: {
+                        Image(systemName: "plus.circle")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.secondary)
                     }
+                    .buttonStyle(.plain)
+                    .disabled(isMailAuthorizing)
+                    .accessibilityLabel("Lägg till mejlkonto")
                 }
-            ))
-            .labelsHidden()
-            .disabled(!isToggleEnabled)
-            .opacity(isToggleEnabled ? 1.0 : 0.45)
+            }
         }
         .padding(14)
         .background(
@@ -214,6 +265,80 @@ private struct DataSourceRow: View {
                         .stroke(Color.primary.opacity(0.06), lineWidth: 1)
                 )
         )
+    }
+
+    private func handleToggleChanged(_ enabled: Bool) async {
+        mailError = nil
+
+        guard isMailSource else {
+            _ = await store.setSource(source.id, enabled: enabled)
+            return
+        }
+
+        guard enabled else {
+            _ = await store.setSource(.mail, enabled: false)
+            return
+        }
+
+        isMailAuthorizing = true
+        defer { isMailAuthorizing = false }
+
+        do {
+            let email = try await ensureMailAuthorization(forceReauthorize: !OAuthTokenManager.shared.hasStoredToken())
+            let didEnable = await store.setSource(.mail, enabled: true)
+            guard didEnable else {
+                mailError = "Kunde inte aktivera mejl."
+                return
+            }
+            if let email {
+                connectedMailStore.addEmail(email)
+            }
+        } catch {
+            _ = await store.setSource(.mail, enabled: false)
+            mailError = "Kunde inte ansluta mejl: \(error.localizedDescription)"
+        }
+    }
+
+    private func addAdditionalMailAccount() async {
+        mailError = nil
+        isMailAuthorizing = true
+        defer { isMailAuthorizing = false }
+
+        do {
+            if let email = try await ensureMailAuthorization(forceReauthorize: true) {
+                connectedMailStore.addEmail(email)
+            }
+            _ = await store.setSource(.mail, enabled: true)
+        } catch {
+            mailError = "Kunde inte lägga till mejlkonto: \(error.localizedDescription)"
+        }
+    }
+
+    private func ensureMailAuthorization(forceReauthorize: Bool) async throws -> String? {
+        let accessToken: String
+
+        if forceReauthorize || !OAuthTokenManager.shared.hasStoredToken() {
+            let result = try await gmailOAuthService.startAuthorization()
+            accessToken = result.accessToken
+        } else {
+            accessToken = try await validAccessToken()
+        }
+
+        return try? await gmailOAuthService.fetchPrimaryEmail(accessToken: accessToken)
+    }
+
+    private func validAccessToken() async throws -> String {
+        let token = try OAuthTokenManager.shared.loadStoredToken()
+        guard token.isExpired else {
+            return token.accessToken
+        }
+
+        guard let refreshToken = token.refreshToken, !refreshToken.isEmpty else {
+            throw GmailOAuthServiceError.missingRefreshToken
+        }
+
+        let refreshed = try await gmailOAuthService.refreshAuthorization(refreshToken: refreshToken)
+        return refreshed.accessToken
     }
 
     private var icon: some View {
