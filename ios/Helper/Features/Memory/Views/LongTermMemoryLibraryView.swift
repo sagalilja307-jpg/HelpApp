@@ -353,6 +353,8 @@ private struct LongTermMemoryItemDetailView: View {
     let item: LongTermMemoryItem
 
     var body: some View {
+        let embedding = item.embedding
+
         List {
             Section {
                 HStack {
@@ -388,9 +390,51 @@ private struct LongTermMemoryItemDetailView: View {
                     }
                 }
             }
+
+            Section("Detaljer") {
+                LongTermMemoryMetadataRow(
+                    label: "Typ (rå)",
+                    value: item.suggestedType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? "Saknas"
+                        : item.suggestedType
+                )
+                LongTermMemoryMetadataRow(label: "Typ (mappad)", value: item.normalizedType.displayName)
+                LongTermMemoryMetadataRow(
+                    label: "Skapad",
+                    value: item.createdAt.formatted(date: .complete, time: .standard)
+                )
+                LongTermMemoryMetadataRow(
+                    label: "ID",
+                    value: item.id.uuidString,
+                    isMonospaced: true
+                )
+                LongTermMemoryMetadataRow(
+                    label: "Användarredigerad",
+                    value: item.isUserEdited ? "Ja" : "Nej"
+                )
+                LongTermMemoryMetadataRow(label: "Taggar", value: "\(item.tags.count)")
+                LongTermMemoryMetadataRow(label: "Embedding-dimension", value: "\(embedding.count)")
+                LongTermMemoryMetadataRow(label: "Originaltext längd", value: "\(item.originalText.count)")
+                LongTermMemoryMetadataRow(label: "Strukturerad längd", value: "\(item.cleanText.count)")
+            }
+
+            if !embedding.isEmpty {
+                Section("Embedding (preview)") {
+                    Text(embeddingPreview(embedding))
+                        .font(.footnote.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
         }
         .navigationTitle("Minne")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func embeddingPreview(_ embedding: [Float]) -> String {
+        let previewValues = embedding.prefix(8).map { String(format: "%.4f", $0) }
+        let suffix = embedding.count > 8 ? ", …" : ""
+        return "[\(previewValues.joined(separator: ", "))\(suffix)]"
     }
 }
 
@@ -433,5 +477,31 @@ private struct LongTermMemoryTagChip: View {
             Capsule()
                 .strokeBorder(.separator.opacity(0.55), lineWidth: 0.5)
         )
+    }
+}
+
+private struct LongTermMemoryMetadataRow: View {
+    let label: String
+    let value: String
+    var isMonospaced = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if isMonospaced {
+                Text(value)
+                    .font(.footnote.monospaced())
+                    .foregroundStyle(.primary)
+                    .textSelection(.enabled)
+            } else {
+                Text(value)
+                    .font(.footnote)
+                    .foregroundStyle(.primary)
+                    .textSelection(.enabled)
+            }
+        }
+        .padding(.vertical, 2)
     }
 }
