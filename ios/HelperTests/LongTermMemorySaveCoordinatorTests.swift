@@ -5,8 +5,16 @@ import SwiftData
 @MainActor
 final class LongTermMemorySaveCoordinatorTests: XCTestCase {
 
+    private final class MutableClock {
+        var now: Date
+
+        init(now: Date) {
+            self.now = now
+        }
+    }
+
     private var container: ModelContainer!
-    private var now: Date!
+    private var clock: MutableClock!
     private var api: MockMemoryProcessingAPI!
     private var coordinator: LongTermMemorySaveCoordinator!
 
@@ -20,14 +28,13 @@ final class LongTermMemorySaveCoordinatorTests: XCTestCase {
             for: schema,
             configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
         )
-        now = Date(timeIntervalSince1970: 1_700_000_000)
+        clock = MutableClock(now: Date(timeIntervalSince1970: 1_700_000_000))
         api = MockMemoryProcessingAPI()
-        let fixedNow = now!
         coordinator = LongTermMemorySaveCoordinator(
             container: container,
             memoryProcessingAPI: api,
             nowProvider: {
-                fixedNow
+                self.clock.now
             }
         )
     }
@@ -35,7 +42,7 @@ final class LongTermMemorySaveCoordinatorTests: XCTestCase {
     override func tearDownWithError() throws {
         coordinator = nil
         api = nil
-        now = nil
+        clock = nil
         container = nil
         try super.tearDownWithError()
     }
@@ -82,7 +89,7 @@ final class LongTermMemorySaveCoordinatorTests: XCTestCase {
         XCTAssertEqual(jobs.count, 1)
         XCTAssertEqual(jobs[0].status, .pending)
         XCTAssertEqual(jobs[0].attemptCount, 1)
-        XCTAssertGreaterThan(jobs[0].nextRetryAt, now)
+        XCTAssertGreaterThan(jobs[0].nextRetryAt, clock.now)
         XCTAssertTrue(items.isEmpty)
     }
 
@@ -115,6 +122,63 @@ final class LongTermMemorySaveCoordinatorTests: XCTestCase {
         )
 
         XCTAssertEqual(item.normalizedType, .other)
+    }
+
+    func testQueuedJobEventuallyCreatesItemWhenRetryWorkerRuns() async throws {
+        api.results = [
+            .failure(MemoryProcessingAPIError.serverError(503, "Unavailable")),
+            .success(
+                ProcessMemoryResponseDTO(
+                    cleanText: "Efter retry",
+                    suggestedType: "Insight",
+                    tags: ["retry", "memory"],
+                    embedding: [0.3, 0.4]
+                )
+            )
+        ]
+
+        let firstOutcome = await coordinator.save(text: "Retry flow", language: "sv")
+        XCTAssertEqual(firstOutcome, .queued)
+
+        clock.now = clock.now.addingTimeInterval(31)
+        await coordinator.processPendingJobs()
+
+        let context = ModelContext(container)
+        let items = try context.fetch(FetchDescriptor<LongTermMemoryItem>())
+        let jobs = try context.fetch(FetchDescriptor<LongTermMemoryPendingJob>())
+
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items[0].cleanText, "Efter retry")
+        XCTAssertTrue(jobs.isEmpty)
+    }
+
+    func testValueCopiedCoordinatorCanProcessExistingQueue() async throws {
+        api.results = [
+            .failure(MemoryProcessingAPIError.serverError(503, "Unavailable")),
+            .success(
+                ProcessMemoryResponseDTO(
+                    cleanText: "Saved from copied coordinator",
+                    suggestedType: "Insight",
+                    tags: ["copy"],
+                    embedding: [0.8]
+                )
+            )
+        ]
+
+        let firstOutcome = await coordinator.save(text: "Copy me", language: "sv")
+        XCTAssertEqual(firstOutcome, .queued)
+
+        let copiedCoordinator = coordinator!
+        clock.now = clock.now.addingTimeInterval(31)
+        await copiedCoordinator.processPendingJobs()
+
+        let context = ModelContext(container)
+        let items = try context.fetch(FetchDescriptor<LongTermMemoryItem>())
+        let jobs = try context.fetch(FetchDescriptor<LongTermMemoryPendingJob>())
+
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items[0].cleanText, "Saved from copied coordinator")
+        XCTAssertTrue(jobs.isEmpty)
     }
 }
 

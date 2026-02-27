@@ -139,6 +139,28 @@ class ProcessMemoryRouteTests(unittest.TestCase):
         joined = "\n".join(handler.messages)
         self.assertNotIn(sentinel, joined)
 
+    def test_query_exception_logs_do_not_include_raw_text(self):
+        sentinel = "SECRET_QUERY_EXCEPTION_789"
+        logger = logging.getLogger("helpershelp.api.routes.query")
+        handler = _CaptureHandler()
+        logger.addHandler(handler)
+        previous_level = logger.level
+        logger.setLevel(logging.INFO)
+
+        try:
+            with patch("helpershelp.api.routes.query.DataIntentRouter.route", side_effect=RuntimeError(sentinel)):
+                response = self.client.post(
+                    "/query",
+                    json={"query": "Hej", "language": "sv"},
+                )
+            self.assertEqual(response.status_code, 500)
+        finally:
+            logger.removeHandler(handler)
+            logger.setLevel(previous_level)
+
+        joined = "\n".join(handler.messages)
+        self.assertNotIn(sentinel, joined)
+
     def test_process_memory_logs_do_not_include_raw_text(self):
         sentinel = "SECRET_MEMORY_PAYLOAD_456"
         fake = _FakeEmbeddingService()
@@ -155,6 +177,34 @@ class ProcessMemoryRouteTests(unittest.TestCase):
                     json={"text": sentinel, "language": "sv"},
                 )
                 self.assertEqual(response.status_code, 200)
+        finally:
+            logger.removeHandler(handler)
+            logger.setLevel(previous_level)
+
+        joined = "\n".join(handler.messages)
+        self.assertNotIn(sentinel, joined)
+
+    def test_unhandled_exception_logs_do_not_include_raw_text(self):
+        sentinel = "SECRET_UNHANDLED_101"
+        fake = _FakeEmbeddingService()
+        logger = logging.getLogger("helpershelp.api.app")
+        handler = _CaptureHandler()
+        logger.addHandler(handler)
+        previous_level = logger.level
+        logger.setLevel(logging.INFO)
+
+        try:
+            from helpershelp.api.app import app  # noqa: PLC0415
+
+            with TestClient(app, raise_server_exceptions=False) as client:
+                with patch("helpershelp.api.routes.process_memory.get_embedding_service", return_value=fake):
+                    with patch("helpershelp.api.routes.process_memory._clean_text", side_effect=RuntimeError(sentinel)):
+                        response = client.post(
+                            "/process-memory",
+                            json={"text": "hej", "language": "sv"},
+                        )
+            self.assertEqual(response.status_code, 500)
+            self.assertEqual(response.json()["error"]["message"], "Internal server error")
         finally:
             logger.removeHandler(handler)
             logger.setLevel(previous_level)

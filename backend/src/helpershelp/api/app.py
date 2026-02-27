@@ -67,8 +67,12 @@ async def validation_exception_handler(_: Request, exc: RequestValidationError):
 
 
 @app.exception_handler(Exception)
-async def unhandled_exception_handler(_: Request, exc: Exception):
-    logger.error("Unhandled error: %s", exc, exc_info=True)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.error(
+        "Unhandled error route=%s exc_type=%s",
+        request.url.path,
+        exc.__class__.__name__,
+    )
     return _error_response(
         status.HTTP_500_INTERNAL_SERVER_ERROR,
         "Internal server error",

@@ -67,7 +67,12 @@ async def unified_query(request: QueryRequest) -> QueryResponse:
     except HTTPException:
         raise
     except Exception as exc:
-        logger.error("Query processing failed: %s", exc, exc_info=True)
+        logger.error(
+            "Query processing failed route=/query lang=%s tz=%s exc_type=%s",
+            request.language,
+            request.timezone or "Europe/Stockholm",
+            exc.__class__.__name__,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal error",
