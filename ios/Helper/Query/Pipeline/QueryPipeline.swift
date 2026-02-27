@@ -263,7 +263,7 @@ private extension QueryPipeline {
 
         let entityTerms = filterTerms(
             in: plan.filters,
-            keyHints: ["name", "person", "contact", "participant", "attendee", "who", "query", "keyword", "subject", "title", "text_contains", "location", "tags", "priority"],
+            keyHints: ["name", "person", "contact", "participant", "attendee", "who", "query", "keyword", "subject", "title", "text_contains", "location", "tags", "priority", "status"],
             includeQueryHints: true
         )
 

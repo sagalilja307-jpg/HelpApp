@@ -76,6 +76,11 @@ final class ReminderSyncManager {
             let reminder = EKReminder(eventStore: eventStore)
             reminder.title = item.title
             reminder.calendar = eventStore.defaultCalendarForNewReminders()
+            reminder.notes = item.notes
+            reminder.location = item.location
+            if let priority = item.priority {
+                reminder.priority = priority
+            }
 
             if let dueDate = item.dueDate {
                 reminder.dueDateComponents = DateService.shared.dateComponents(

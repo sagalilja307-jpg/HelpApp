@@ -266,6 +266,44 @@ final class BackendQueryPipelineTests: XCTestCase {
         XCTAssertEqual(result.entries.first?.title, "Betalning uppdaterad")
     }
 
+    func testPipelineAppliesReminderStatusFilter() async throws {
+        let collector = RecordingCollector(
+            stubEntries: [
+                QueryResult.Entry(
+                    id: UUID(),
+                    source: .reminders,
+                    title: "Skicka kvitto",
+                    body: "Status: pending\nPrioritet: high",
+                    date: DateService.shared.now()
+                ),
+                QueryResult.Entry(
+                    id: UUID(),
+                    source: .reminders,
+                    title: "Boka tandläkare",
+                    body: "Status: completed\nPrioritet: low",
+                    date: DateService.shared.now()
+                )
+            ]
+        )
+        let plan = makePlan(
+            domain: .reminders,
+            operation: .list,
+            type: .all,
+            value: nil,
+            filters: ["status": AnyCodable("pending")]
+        )
+        let pipeline = QueryPipeline(
+            backendQueryService: MockBackendQueryService(response: BackendQueryResponseDTO(intentPlan: plan)),
+            localCollector: collector,
+            accessGate: AllowingAccess()
+        )
+
+        let result = try await pipeline.run(UserQuery(text: "visa pending påminnelser"))
+
+        XCTAssertEqual(result.entries.count, 1)
+        XCTAssertEqual(result.entries.first?.title, "Skicka kvitto")
+    }
+
     private func makePlan(
         domain: BackendIntentDomain,
         operation: BackendIntentOperation,

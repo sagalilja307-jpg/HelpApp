@@ -7,6 +7,9 @@ private struct ReminderRawPayload: Codable {
     let title: String
     let dueDate: Date?
     let isCompleted: Bool
+    let notes: String?
+    let location: String?
+    let priority: Int?
 }
 
 extension ReminderSyncManager {
@@ -27,7 +30,10 @@ extension ReminderSyncManager {
                 reminderId: item.id,
                 title: item.title,
                 dueDate: item.dueDate,
-                isCompleted: item.isCompleted
+                isCompleted: item.isCompleted,
+                notes: item.notes,
+                location: item.location,
+                priority: item.priority
             )
 
             let data = try encoder.encode(payload)

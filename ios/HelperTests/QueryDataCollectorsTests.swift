@@ -31,6 +31,8 @@ final class QueryDataCollectorsTests: XCTestCase {
         XCTAssertEqual(mapped.source, "reminders")
         XCTAssertEqual(mapped.type, .reminder)
         XCTAssertEqual(mapped.title, "Kop mjolk")
+        XCTAssertEqual(mapped.status["is_completed"], AnyCodable(false))
+        XCTAssertTrue(mapped.body.contains("Status: pending"))
         XCTAssertNil(mapped.dueAt)
         XCTAssertEqual(mapped.createdAt, now)
         XCTAssertEqual(mapped.updatedAt, now)
@@ -45,6 +47,8 @@ final class QueryDataCollectorsTests: XCTestCase {
             title: "Resdag",
             notes: "Flyg 08:00",
             location: "Arlanda",
+            attendees: ["Alva", "Agnes"],
+            status: "confirmed",
             startDate: start,
             endDate: end,
             isAllDay: true,
@@ -56,6 +60,8 @@ final class QueryDataCollectorsTests: XCTestCase {
             title: "Middag",
             notes: nil,
             location: "Plaka",
+            attendees: [],
+            status: "tentative",
             startDate: start,
             endDate: end,
             isAllDay: false,
@@ -71,8 +77,12 @@ final class QueryDataCollectorsTests: XCTestCase {
         XCTAssertEqual(allDayMapped.startAt, start)
         XCTAssertEqual(allDayMapped.endAt, end)
         XCTAssertEqual(allDayMapped.status["is_all_day"], AnyCodable(true))
+        XCTAssertEqual(allDayMapped.status["event_status"], AnyCodable("confirmed"))
+        XCTAssertTrue(allDayMapped.body.contains("Deltagare: Alva, Agnes"))
+        XCTAssertTrue(allDayMapped.body.contains("Plats: Arlanda"))
 
         XCTAssertEqual(timedMapped.id, "calendar:ev-timed")
         XCTAssertEqual(timedMapped.status["is_all_day"], AnyCodable(false))
+        XCTAssertEqual(timedMapped.status["event_status"], AnyCodable("tentative"))
     }
 }

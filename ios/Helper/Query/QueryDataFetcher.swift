@@ -77,6 +77,8 @@ final class QueryDataFetcher: QueryDataFetching {
         let title: String
         let notes: String?
         let location: String?
+        let attendees: [String]
+        let status: String?
         let startDate: Date
         let endDate: Date
         let isAllDay: Bool
@@ -521,31 +523,39 @@ extension QueryDataFetcher {
         now: Date = Date()
     ) -> UnifiedItemDTO {
         let baseDate = reminder.dueDate ?? now
+        let body = reminderBody(reminder) ?? ""
+        let priorityLabel = reminderPriorityLabel(reminder.priority)
+
+        var status: [String: AnyCodable] = [
+            "is_completed": AnyCodable(reminder.isCompleted)
+        ]
+        if let priorityLabel {
+            status["priority"] = AnyCodable(priorityLabel)
+        }
+
         return UnifiedItemDTO(
             id: "reminder:\(reminder.id)",
             source: "reminders",
             type: .reminder,
             title: reminder.title,
-            body: "",
+            body: body,
             createdAt: baseDate,
             updatedAt: baseDate,
             startAt: nil,
             endAt: nil,
             dueAt: reminder.dueDate,
-            status: [
-                "is_completed": AnyCodable(reminder.isCompleted)
-            ]
+            status: status
         )
     }
 
     nonisolated static func mapCalendarSnapshot(_ event: CalendarSnapshot) -> UnifiedItemDTO {
-        let detailParts = [event.location, event.notes]
-            .compactMap { value -> String? in
-                guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
-                    return nil
-                }
-                return trimmed
-            }
+        let detailParts = calendarDetailLines(event)
+        var status: [String: AnyCodable] = [
+            "is_all_day": AnyCodable(event.isAllDay)
+        ]
+        if let eventStatus = event.status {
+            status["event_status"] = AnyCodable(eventStatus)
+        }
 
         return UnifiedItemDTO(
             id: "calendar:\(event.identifier)",
@@ -558,9 +568,7 @@ extension QueryDataFetcher {
             startAt: event.startDate,
             endAt: event.endDate,
             dueAt: nil,
-            status: [
-                "is_all_day": AnyCodable(event.isAllDay)
-            ]
+            status: status
         )
     }
 
@@ -589,19 +597,13 @@ extension QueryDataFetcher {
             id: UUID(),
             source: .reminders,
             title: reminder.title,
-            body: nil,
+            body: reminderBody(reminder),
             date: reminder.dueDate
         )
     }
 
     nonisolated static func makeCalendarEntry(_ snapshot: CalendarSnapshot) -> QueryResult.Entry {
-        let detailParts = [snapshot.location, snapshot.notes]
-            .compactMap { value -> String? in
-                guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
-                    return nil
-                }
-                return trimmed
-            }
+        let detailParts = calendarDetailLines(snapshot)
 
         return QueryResult.Entry(
             id: UUID(),
@@ -614,11 +616,18 @@ extension QueryDataFetcher {
 
     #if canImport(EventKit)
     nonisolated static func snapshot(from event: EKEvent) -> CalendarSnapshot {
-        CalendarSnapshot(
+        let attendeeNames: [String] = (event.attendees ?? [])
+            .compactMap { attendee in
+                participantToken(from: attendee)
+            }
+
+        return CalendarSnapshot(
             identifier: event.eventIdentifier ?? UUID().uuidString,
             title: event.title ?? "Händelse",
             notes: event.notes,
             location: event.location,
+            attendees: attendeeNames,
+            status: calendarEventStatus(event.status),
             startDate: event.startDate,
             endDate: event.endDate,
             isAllDay: event.isAllDay,
@@ -626,4 +635,87 @@ extension QueryDataFetcher {
         )
     }
     #endif
+
+    nonisolated static func reminderBody(_ reminder: ReminderItem) -> String? {
+        var lines: [String] = []
+        lines.append("Status: \(reminder.isCompleted ? "completed" : "pending")")
+
+        if let priority = reminderPriorityLabel(reminder.priority) {
+            lines.append("Prioritet: \(priority)")
+        }
+
+        if let location = cleanedText(reminder.location) {
+            lines.append("Plats: \(location)")
+        }
+
+        if let notes = cleanedText(reminder.notes) {
+            lines.append(notes)
+        }
+
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
+    }
+
+    nonisolated static func reminderPriorityLabel(_ priority: Int?) -> String? {
+        guard let priority, priority > 0 else { return nil }
+        switch priority {
+        case 1...4:
+            return "high"
+        case 5:
+            return "medium"
+        default:
+            return "low"
+        }
+    }
+
+    nonisolated static func calendarDetailLines(_ snapshot: CalendarSnapshot) -> [String] {
+        var lines: [String] = []
+
+        if let location = cleanedText(snapshot.location) {
+            lines.append("Plats: \(location)")
+        }
+        if !snapshot.attendees.isEmpty {
+            lines.append("Deltagare: \(snapshot.attendees.joined(separator: ", "))")
+        }
+        if let status = cleanedText(snapshot.status) {
+            lines.append("Status: \(status)")
+        }
+        if let notes = cleanedText(snapshot.notes) {
+            lines.append(notes)
+        }
+
+        return lines
+    }
+
+    #if canImport(EventKit)
+    nonisolated static func participantToken(from participant: EKParticipant) -> String? {
+        if let name = cleanedText(participant.name) {
+            return name
+        }
+        let absolute = participant.url.absoluteString
+        if let mail = cleanedText(absolute.replacingOccurrences(of: "mailto:", with: "")) {
+            return mail
+        }
+        return nil
+    }
+
+    nonisolated static func calendarEventStatus(_ status: EKEventStatus) -> String {
+        switch status {
+        case .confirmed:
+            return "confirmed"
+        case .tentative:
+            return "tentative"
+        case .canceled:
+            return "cancelled"
+        default:
+            return "unknown"
+        }
+    }
+    #endif
+
+    nonisolated static func cleanedText(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
+    }
 }
