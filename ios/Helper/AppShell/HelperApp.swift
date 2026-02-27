@@ -32,6 +32,7 @@ struct HelperApp: App {
     private let photosIndexService: PhotosIndexService
     private let filesImportService: FilesImportService
     private let locationSnapshotService: LocationSnapshotService
+    private let longTermMemorySaveCoordinator: LongTermMemorySaveCoordinator
 
     // Onboarding flag (sparas i UserDefaults)
     @AppStorage("helper.onboarding.done") private var onboardingDone = false
@@ -39,9 +40,10 @@ struct HelperApp: App {
     // MARK: - Init
 
     init() {
+        let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
         do {
             // 1️⃣ Initiera MemoryService (root dependency)
-            let service = try MemoryService()
+            let service = try MemoryService(inMemory: isRunningTests)
             self.memoryService = service
 
             // 2️⃣ Skapa ModelContext för SwiftUI environment
@@ -90,6 +92,38 @@ struct HelperApp: App {
             )
             let mailQueryFetcher = MailQueryFetcher(memoryService: service)
             let backendQueryService = BackendQueryAPIService.shared
+            let memoryProcessingAPIService = MemoryProcessingAPIService.shared
+            let longTermSchema = Schema([
+                LongTermMemoryItem.self,
+                LongTermMemoryPendingJob.self,
+            ])
+            let longTermConfig: ModelConfiguration
+            if isRunningTests {
+                longTermConfig = ModelConfiguration(
+                    schema: longTermSchema,
+                    isStoredInMemoryOnly: true
+                )
+            } else {
+                let applicationSupportURL = try FileManager.default.url(
+                    for: .applicationSupportDirectory,
+                    in: .userDomainMask,
+                    appropriateFor: nil,
+                    create: true
+                )
+                let storeURL = applicationSupportURL.appendingPathComponent("long_term_memory.store")
+                longTermConfig = ModelConfiguration(
+                    schema: longTermSchema,
+                    url: storeURL
+                )
+            }
+            let longTermContainer = try ModelContainer(
+                for: longTermSchema,
+                configurations: [longTermConfig]
+            )
+            let longTermMemorySaveCoordinator = LongTermMemorySaveCoordinator(
+                container: longTermContainer,
+                memoryProcessingAPI: memoryProcessingAPIService
+            )
             // Adapter: wrap existing QueryDataFetcher and QuerySourceAccess into
             // the smaller interfaces expected by the updated `QueryPipeline`.
             struct AccessAdapter: QuerySourceAccessChecking {
@@ -248,6 +282,7 @@ struct HelperApp: App {
             self.photosIndexService = photosIndexService
             self.filesImportService = filesImportService
             self.locationSnapshotService = locationSnapshotService
+            self.longTermMemorySaveCoordinator = longTermMemorySaveCoordinator
             
             let supportSettingsService = SupportSettingsAPIService.shared
             self.supportSettingsService = supportSettingsService
@@ -259,10 +294,10 @@ struct HelperApp: App {
             )
             self.shareImportService = shareImportService
 
-            let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
             if !isRunningTests {
                 Task {
                     await supportSettingsService.syncSupportSettingsCache()
+                    await longTermMemorySaveCoordinator.processPendingJobs()
                     _ = try? shareImportService.importPendingSharedItems()
                 }
             }
@@ -286,7 +321,8 @@ struct HelperApp: App {
                         sourceConnectionStore: sourceConnectionStore,
                         photosIndexService: photosIndexService,
                         filesImportService: filesImportService,
-                        locationSnapshotService: locationSnapshotService
+                        locationSnapshotService: locationSnapshotService,
+                        longTermMemorySaveCoordinator: longTermMemorySaveCoordinator
                     )
 
                 } else {

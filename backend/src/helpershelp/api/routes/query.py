@@ -50,7 +50,12 @@ async def unified_query(request: QueryRequest) -> QueryResponse:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty query")
 
         tz = request.timezone or "Europe/Stockholm"
-        logger.info("Processing query=%r lang=%s tz=%s", user_query, request.language, tz)
+        logger.info(
+            "Processing query route lang=%s tz=%s chars=%d",
+            request.language,
+            tz,
+            len(user_query),
+        )
 
         router_service = DataIntentRouter(timezone_name=tz)
         plan = router_service.route(user_query, language=request.language)

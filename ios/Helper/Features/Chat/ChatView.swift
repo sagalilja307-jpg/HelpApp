@@ -9,9 +9,18 @@ import SwiftData
 import SwiftUI
 import CoreLocation
 
+private enum MessageSaveStatus: Equatable {
+    case idle
+    case saving
+    case saved
+    case queued
+    case failed(String)
+}
+
 public struct ChatView: View {
     @Bindable var vm: ChatViewModel
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @FocusState private var focusInput: Bool
     @State private var showContext = false
     @State private var showSupportSettings = false
@@ -23,24 +32,28 @@ public struct ChatView: View {
     @State private var syncStatusMessage: String?
     @State private var noteTitle = ""
     @State private var noteBody = ""
+    @State private var saveStatuses: [UUID: MessageSaveStatus] = [:]
 
     private let sourceConnectionStore: SourceConnectionStore
     private let photosIndexService: PhotosIndexService
     private let filesImportService: FilesImportService
     private let locationSnapshotService: LocationSnapshotService?
+    private let longTermMemorySaveCoordinator: LongTermMemorySaveCoordinator
 
     init(
         pipeline: QueryPipeline,
         sourceConnectionStore: SourceConnectionStore,
         photosIndexService: PhotosIndexService,
         filesImportService: FilesImportService,
-        locationSnapshotService: LocationSnapshotService? = nil
+        locationSnapshotService: LocationSnapshotService? = nil,
+        longTermMemorySaveCoordinator: LongTermMemorySaveCoordinator
     ) {
         self.vm = ChatViewModel(pipeline: pipeline)
         self.sourceConnectionStore = sourceConnectionStore
         self.photosIndexService = photosIndexService
         self.filesImportService = filesImportService
         self.locationSnapshotService = locationSnapshotService
+        self.longTermMemorySaveCoordinator = longTermMemorySaveCoordinator
     }
 
     public var body: some View {
@@ -228,6 +241,13 @@ public struct ChatView: View {
         }
         .task {
             await refreshGmailConnectionState()
+            await longTermMemorySaveCoordinator.processPendingJobs()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task {
+                await longTermMemorySaveCoordinator.processPendingJobs()
+            }
         }
     }
 
@@ -248,6 +268,29 @@ public struct ChatView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 14))
                     .textSelection(.enabled)
                 if !isUser { Spacer() }
+            }
+
+            if !isUser {
+                HStack(spacing: 8) {
+                    Button {
+                        Task {
+                            await saveAssistantMessage(msg)
+                        }
+                    } label: {
+                        Label(saveButtonTitle(for: saveStatus(for: msg.id)), systemImage: "bookmark")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(saveStatus(for: msg.id) == .saving)
+
+                    if let text = saveStatusDetail(for: saveStatus(for: msg.id)) {
+                        Text(text)
+                            .font(.caption)
+                            .foregroundStyle(saveStatusColor(for: saveStatus(for: msg.id)))
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                }
             }
         }
     }
@@ -545,6 +588,73 @@ public struct ChatView: View {
         guard flattened.count > maxLength else { return flattened }
         let endIndex = flattened.index(flattened.startIndex, offsetBy: maxLength)
         return String(flattened[..<endIndex]).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
+    }
+
+    private func saveStatus(for messageID: UUID) -> MessageSaveStatus {
+        saveStatuses[messageID] ?? .idle
+    }
+
+    private func saveButtonTitle(for status: MessageSaveStatus) -> String {
+        switch status {
+        case .saving:
+            return "Sparar..."
+        case .saved:
+            return "Sparad"
+        default:
+            return "Spara"
+        }
+    }
+
+    private func saveStatusDetail(for status: MessageSaveStatus) -> String? {
+        switch status {
+        case .idle:
+            return nil
+        case .saving:
+            return "Bearbetar..."
+        case .saved:
+            return "Sparad lokalt"
+        case .queued:
+            return "Köad för retry"
+        case .failed(let error):
+            return error
+        }
+    }
+
+    private func saveStatusColor(for status: MessageSaveStatus) -> Color {
+        switch status {
+        case .failed:
+            return .red
+        case .queued:
+            return .orange
+        case .saved:
+            return .green
+        default:
+            return .secondary
+        }
+    }
+
+    private func saveAssistantMessage(_ message: ChatViewModel.ChatMessage) async {
+        let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            saveStatuses[message.id] = .failed("Tom text kan inte sparas.")
+            return
+        }
+
+        saveStatuses[message.id] = .saving
+        let language = Locale.current.language.languageCode?.identifier ?? "sv"
+        let result = await longTermMemorySaveCoordinator.save(
+            text: trimmed,
+            language: language
+        )
+
+        switch result {
+        case .saved:
+            saveStatuses[message.id] = .saved
+        case .queued:
+            saveStatuses[message.id] = .queued
+        case .failed(let error):
+            saveStatuses[message.id] = .failed(error)
+        }
     }
 
     private func handleGmailLogin() async {

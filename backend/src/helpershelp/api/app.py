@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from helpershelp.api.routes.health import router as health_router
+from helpershelp.api.routes.process_memory import router as process_memory_router
 from helpershelp.api.routes.query import router as query_router
 
 logger = logging.getLogger(__name__)
@@ -75,4 +76,5 @@ async def unhandled_exception_handler(_: Request, exc: Exception):
 
 
 app.include_router(query_router)
+app.include_router(process_memory_router)
 app.include_router(health_router)

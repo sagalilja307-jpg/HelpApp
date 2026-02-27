@@ -1,0 +1,137 @@
+import XCTest
+import SwiftData
+@testable import Helper
+
+@MainActor
+final class LongTermMemorySaveCoordinatorTests: XCTestCase {
+
+    private var container: ModelContainer!
+    private var now: Date!
+    private var api: MockMemoryProcessingAPI!
+    private var coordinator: LongTermMemorySaveCoordinator!
+
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        let schema = Schema([
+            LongTermMemoryItem.self,
+            LongTermMemoryPendingJob.self,
+        ])
+        container = try ModelContainer(
+            for: schema,
+            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        )
+        now = Date(timeIntervalSince1970: 1_700_000_000)
+        api = MockMemoryProcessingAPI()
+        let fixedNow = now!
+        coordinator = LongTermMemorySaveCoordinator(
+            container: container,
+            memoryProcessingAPI: api,
+            nowProvider: {
+                fixedNow
+            }
+        )
+    }
+
+    override func tearDownWithError() throws {
+        coordinator = nil
+        api = nil
+        now = nil
+        container = nil
+        try super.tearDownWithError()
+    }
+
+    func testSaveSuccessCreatesLongTermItemAndClearsQueue() async throws {
+        api.results = [
+            .success(
+                ProcessMemoryResponseDTO(
+                    cleanText: "Strukturerad text",
+                    suggestedType: "Insight",
+                    tags: ["product", "memory"],
+                    embedding: [0.1, 0.2]
+                )
+            )
+        ]
+
+        let outcome = await coordinator.save(text: "  Originaltext  ", language: "sv")
+        XCTAssertEqual(outcome, .saved)
+
+        let context = ModelContext(container)
+        let items = try context.fetch(FetchDescriptor<LongTermMemoryItem>())
+        let jobs = try context.fetch(FetchDescriptor<LongTermMemoryPendingJob>())
+
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items.first?.originalText, "Originaltext")
+        XCTAssertEqual(items.first?.cleanText, "Strukturerad text")
+        XCTAssertEqual(items.first?.tags, ["product", "memory"])
+        XCTAssertEqual(items.first?.embedding, [0.1, 0.2])
+        XCTAssertTrue(jobs.isEmpty)
+    }
+
+    func testSaveQueuesRetryOnBackendFailure() async throws {
+        api.results = [
+            .failure(MemoryProcessingAPIError.serverError(503, "Unavailable"))
+        ]
+
+        let outcome = await coordinator.save(text: "Retry me", language: "sv")
+        XCTAssertEqual(outcome, .queued)
+
+        let context = ModelContext(container)
+        let jobs = try context.fetch(FetchDescriptor<LongTermMemoryPendingJob>())
+        let items = try context.fetch(FetchDescriptor<LongTermMemoryItem>())
+
+        XCTAssertEqual(jobs.count, 1)
+        XCTAssertEqual(jobs[0].status, .pending)
+        XCTAssertEqual(jobs[0].attemptCount, 1)
+        XCTAssertGreaterThan(jobs[0].nextRetryAt, now)
+        XCTAssertTrue(items.isEmpty)
+    }
+
+    func testSaveMarksFailedOnClientValidationFailure() async throws {
+        api.results = [
+            .failure(MemoryProcessingAPIError.serverError(400, "Bad request"))
+        ]
+
+        let outcome = await coordinator.save(text: "Bad input", language: "sv")
+        switch outcome {
+        case .failed:
+            break
+        default:
+            XCTFail("Expected failed outcome, got \(outcome)")
+        }
+
+        let context = ModelContext(container)
+        let jobs = try context.fetch(FetchDescriptor<LongTermMemoryPendingJob>())
+        XCTAssertEqual(jobs.count, 1)
+        XCTAssertEqual(jobs[0].status, .failed)
+    }
+
+    func testUnknownSuggestedTypeMapsToOther() {
+        let item = LongTermMemoryItem(
+            originalText: "raw",
+            cleanText: "clean",
+            suggestedType: "SomethingUnexpected",
+            tags: [],
+            embedding: [0.01]
+        )
+
+        XCTAssertEqual(item.normalizedType, .other)
+    }
+}
+
+private final class MockMemoryProcessingAPI: MemoryProcessingAPI {
+    var results: [Result<ProcessMemoryResponseDTO, Error>] = []
+
+    func processMemory(text: String, language: String) async throws -> ProcessMemoryResponseDTO {
+        if results.isEmpty {
+            return ProcessMemoryResponseDTO(
+                cleanText: text,
+                suggestedType: "Insight",
+                tags: ["memory"],
+                embedding: [0.0]
+            )
+        }
+
+        let next = results.removeFirst()
+        return try next.get()
+    }
+}

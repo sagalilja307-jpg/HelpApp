@@ -56,9 +56,32 @@ enum MemorySchemaV2: VersionedSchema {
     }
 }
 
+enum MemorySchemaV3: VersionedSchema {
+    static var versionIdentifier: Schema.Version = .init(3, 0, 0)
+
+    static var models: [any PersistentModel.Type] {
+        [
+            RawEvent.self,
+            Cluster.self,
+            ClusterItem.self,
+            DecisionLogEntry.self,
+            BehaviorPattern.self,
+            SemanticEmbedding.self,
+            ActorRaw.self,
+            TitleConfidenceRaw.self,
+            UserNote.self,
+            IndexedContact.self,
+            IndexedPhotoAsset.self,
+            IndexedFileDocument.self,
+            LongTermMemoryItem.self,
+            LongTermMemoryPendingJob.self
+        ]
+    }
+}
+
 enum MemorySchemaMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [MemorySchemaV1.self, MemorySchemaV2.self]
+        [MemorySchemaV1.self, MemorySchemaV2.self, MemorySchemaV3.self]
     }
 
     static var stages: [MigrationStage] {
@@ -66,6 +89,10 @@ enum MemorySchemaMigrationPlan: SchemaMigrationPlan {
             .lightweight(
                 fromVersion: MemorySchemaV1.self,
                 toVersion: MemorySchemaV2.self
+            ),
+            .lightweight(
+                fromVersion: MemorySchemaV2.self,
+                toVersion: MemorySchemaV3.self
             )
         ]
     }

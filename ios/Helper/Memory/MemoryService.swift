@@ -23,7 +23,7 @@ public final class MemoryService {
         inMemory: Bool = false,
         storeURL: URL? = nil
     ) throws {
-        let schema = Schema(versionedSchema: MemorySchemaV2.self)
+        let schema = Schema(versionedSchema: MemorySchemaV3.self)
         let config: ModelConfiguration
 
         if inMemory {
@@ -41,11 +41,18 @@ public final class MemoryService {
         }
 
         do {
-            self.container = try ModelContainer(
-                for: schema,
-                migrationPlan: MemorySchemaMigrationPlan.self,
-                configurations: [config]
-            )
+            if inMemory {
+                self.container = try ModelContainer(
+                    for: schema,
+                    configurations: [config]
+                )
+            } else {
+                self.container = try ModelContainer(
+                    for: schema,
+                    migrationPlan: MemorySchemaMigrationPlan.self,
+                    configurations: [config]
+                )
+            }
         } catch {
             self.container = try ModelContainer(
                 for: schema,
