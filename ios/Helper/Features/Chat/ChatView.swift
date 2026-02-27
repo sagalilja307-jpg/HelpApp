@@ -19,6 +19,7 @@ private enum MessageSaveStatus: Equatable {
 
 public struct ChatView: View {
     @State private var vm: ChatViewModel
+    @AppStorage("helper.chat.autosave.enabled") private var autoSaveEnabled = false
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @FocusState private var focusInput: Bool
@@ -78,6 +79,11 @@ public struct ChatView: View {
                             proxy.scrollTo(last.id, anchor: .bottom)
                         }
                     }
+                    guard autoSaveEnabled, newValue > oldValue else { return }
+                    let appended = Array(vm.messages.suffix(newValue - oldValue))
+                    Task {
+                        await autoSaveMessagesIfNeeded(appended)
+                    }
                 }
             }
 
@@ -119,6 +125,29 @@ public struct ChatView: View {
                 .padding(.horizontal)
                 .padding(.bottom, 4)
             }
+
+            HStack {
+                Button {
+                    autoSaveEnabled.toggle()
+                    guard autoSaveEnabled else { return }
+                    let unsavedMessages = vm.messages.filter { saveStatus(for: $0.id) == .idle }
+                    guard !unsavedMessages.isEmpty else { return }
+                    Task {
+                        await autoSaveMessagesIfNeeded(unsavedMessages)
+                    }
+                } label: {
+                    Label(
+                        autoSaveEnabled ? "Auto-spara: På" : "Auto-spara: Av",
+                        systemImage: autoSaveEnabled ? "bookmark.fill" : "bookmark"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Spacer()
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 4)
 
             HStack(spacing: 8) {
                 Button {
@@ -256,6 +285,7 @@ public struct ChatView: View {
 
     @ViewBuilder private func bubble(for msg: ChatViewModel.ChatMessage) -> some View {
         let isUser = (msg.role == .user)
+        let status = saveStatus(for: msg.id)
         VStack(alignment: isUser ? .trailing : .leading, spacing: 8) {
             if !isUser, let component = msg.visualizationComponent {
                 visualizationView(for: component, message: msg)
@@ -275,22 +305,32 @@ public struct ChatView: View {
                 HStack(spacing: 8) {
                     Button {
                         Task {
-                            await saveAssistantMessage(msg)
+                            await saveMessage(msg)
                         }
                     } label: {
-                        Label(saveButtonTitle(for: saveStatus(for: msg.id)), systemImage: "bookmark")
+                        Label(saveButtonTitle(for: status), systemImage: "bookmark")
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .disabled(saveStatus(for: msg.id) == .saving)
+                    .disabled(status == .saving)
 
-                    if let text = saveStatusDetail(for: saveStatus(for: msg.id)) {
+                    if let text = saveStatusDetail(for: status) {
                         Text(text)
                             .font(.caption)
-                            .foregroundStyle(saveStatusColor(for: saveStatus(for: msg.id)))
+                            .foregroundStyle(saveStatusColor(for: status))
                             .lineLimit(1)
                     }
                     Spacer()
+                }
+            } else if autoSaveEnabled || status != .idle {
+                HStack {
+                    Spacer()
+                    if let text = saveStatusDetail(for: status) {
+                        Text(text)
+                            .font(.caption)
+                            .foregroundStyle(saveStatusColor(for: status))
+                            .lineLimit(1)
+                    }
                 }
             }
         }
@@ -638,7 +678,15 @@ public struct ChatView: View {
         }
     }
 
-    private func saveAssistantMessage(_ message: ChatViewModel.ChatMessage) async {
+    private func autoSaveMessagesIfNeeded(_ messages: [ChatViewModel.ChatMessage]) async {
+        guard autoSaveEnabled else { return }
+        for message in messages {
+            guard saveStatus(for: message.id) == .idle else { continue }
+            await saveMessage(message)
+        }
+    }
+
+    private func saveMessage(_ message: ChatViewModel.ChatMessage) async {
         let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             saveStatuses[message.id] = .failed("Tom text kan inte sparas.")
