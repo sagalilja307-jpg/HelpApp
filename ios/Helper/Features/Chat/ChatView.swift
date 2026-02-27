@@ -18,7 +18,7 @@ private enum MessageSaveStatus: Equatable {
 }
 
 public struct ChatView: View {
-    @Bindable var vm: ChatViewModel
+    @State private var vm: ChatViewModel
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @FocusState private var focusInput: Bool
@@ -48,7 +48,7 @@ public struct ChatView: View {
         locationSnapshotService: LocationSnapshotService? = nil,
         longTermMemorySaveCoordinator: LongTermMemorySaveCoordinator
     ) {
-        self.vm = ChatViewModel(pipeline: pipeline)
+        _vm = State(initialValue: ChatViewModel(pipeline: pipeline))
         self.sourceConnectionStore = sourceConnectionStore
         self.photosIndexService = photosIndexService
         self.filesImportService = filesImportService
@@ -57,6 +57,7 @@ public struct ChatView: View {
     }
 
     public var body: some View {
+        @Bindable var bindableVM = vm
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
@@ -86,7 +87,7 @@ public struct ChatView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
 
-                    TextEditor(text: $vm.extraContext)
+                    TextEditor(text: $bindableVM.extraContext)
                         .frame(minHeight: 80, maxHeight: 160)
                         .padding(8)
                         .overlay(RoundedRectangle(cornerRadius: 12).stroke(.quaternary))
@@ -127,7 +128,7 @@ public struct ChatView: View {
                 }
                 .accessibilityLabel("Visa eller dölj kontextruta")
 
-                TextField("Skriv en fråga…", text: $vm.query, axis: .vertical)
+                TextField("Skriv en fråga…", text: $bindableVM.query, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .focused($focusInput)
                     .lineLimit(1...4)

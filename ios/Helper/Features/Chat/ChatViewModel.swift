@@ -8,6 +8,7 @@
 import Foundation
 import Observation
 
+@MainActor
 @Observable
 final class ChatViewModel {
 
@@ -47,6 +48,7 @@ final class ChatViewModel {
         guard !trimmed.isEmpty, !isSending else { return }
 
         isSending = true
+        defer { isSending = false }
         error = nil
 
         messages.append(.init(
@@ -76,7 +78,7 @@ final class ChatViewModel {
         do {
             let userQuery = UserQuery(text: fullPrompt, source: .userTyped)
             let result = try await pipeline.run(userQuery)
-            let responseText = result.answer ?? "Jag hittar ingen data att svara på ännu."
+            let responseText = normalizedResponseText(from: result)
             messages.append(.init(
                 role: .assistant,
                 text: responseText,
@@ -98,8 +100,19 @@ final class ChatViewModel {
                 intentPlan: nil
             ))
         }
+    }
 
-        isSending = false
+    private func normalizedResponseText(from result: QueryResult) -> String {
+        let trimmed = result.answer?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmed.isEmpty {
+            return trimmed
+        }
+
+        if result.entries.isEmpty {
+            return "Jag hittar ingen data att svara på ännu."
+        }
+
+        return "Jag hittade \(result.entries.count) poster. Kolla visualiseringen för detaljer."
     }
 
     private func resolveVisualizationComponent(from plan: BackendIntentPlanDTO?) -> VisualizationComponent? {
