@@ -175,7 +175,8 @@ private struct LongTermMemoryTimelineItemCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                LongTermMemoryTagChip(text: item.normalizedType.displayName, systemImage: "tag")
+                LongTermMemoryTagChip(text: item.normalizedType.displayName, systemImage: "brain.head.profile")
+                LongTermMemoryTagChip(text: item.normalizedDomain.displayName, systemImage: "square.grid.2x2")
 
                 Spacer()
 
@@ -192,6 +193,11 @@ private struct LongTermMemoryTimelineItemCard: View {
                 .font(.body)
                 .foregroundStyle(.primary)
                 .lineLimit(3)
+
+            HStack(spacing: 8) {
+                LongTermMemoryTagChip(text: item.normalizedActionState.displayName, systemImage: "checklist")
+                LongTermMemoryTagChip(text: item.normalizedTimeRelation.displayName, systemImage: "calendar")
+            }
 
             if !item.tags.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -358,9 +364,14 @@ struct LongTermMemoryItemDetailView: View {
 
         List {
             Section {
-                HStack {
-                    LongTermMemoryTagChip(text: item.normalizedType.displayName, systemImage: "tag")
-                    Spacer()
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        LongTermMemoryTagChip(text: item.normalizedType.displayName, systemImage: "brain.head.profile")
+                        LongTermMemoryTagChip(text: item.normalizedDomain.displayName, systemImage: "square.grid.2x2")
+                        LongTermMemoryTagChip(text: item.normalizedActionState.displayName, systemImage: "checklist")
+                        LongTermMemoryTagChip(text: item.normalizedTimeRelation.displayName, systemImage: "calendar")
+                    }
+
                     Text(item.createdAt.formatted(date: .abbreviated, time: .shortened))
                         .font(.caption)
                         .foregroundStyle(.tertiary)
@@ -394,15 +405,25 @@ struct LongTermMemoryItemDetailView: View {
 
             Section("Detaljer") {
                 LongTermMemoryMetadataRow(
-                    label: "Typ (rå)",
-                    value: item.suggestedType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    label: "Kognitiv (rå)",
+                    value: item.cognitiveType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                         ? "Saknas"
-                        : item.suggestedType
+                        : item.cognitiveType
                 )
-                LongTermMemoryMetadataRow(label: "Typ (mappad)", value: item.normalizedType.displayName)
+                LongTermMemoryMetadataRow(label: "Kognitiv", value: item.normalizedType.displayName)
+                LongTermMemoryMetadataRow(label: "Domän (rå)", value: item.domain)
+                LongTermMemoryMetadataRow(label: "Domän", value: item.normalizedDomain.displayName)
+                LongTermMemoryMetadataRow(label: "Action (rå)", value: item.actionState)
+                LongTermMemoryMetadataRow(label: "Action", value: item.normalizedActionState.displayName)
+                LongTermMemoryMetadataRow(label: "Tid (rå)", value: item.timeRelation)
+                LongTermMemoryMetadataRow(label: "Tid", value: item.normalizedTimeRelation.displayName)
                 LongTermMemoryMetadataRow(
                     label: "Skapad",
                     value: item.createdAt.formatted(date: .complete, time: .standard)
+                )
+                LongTermMemoryMetadataRow(
+                    label: "Uppdaterad",
+                    value: item.updatedAt.formatted(date: .complete, time: .standard)
                 )
                 LongTermMemoryMetadataRow(
                     label: "ID",

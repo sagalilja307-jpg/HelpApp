@@ -5,11 +5,93 @@ struct LongTermMemorySyncRecord: Codable, Sendable {
     let id: String
     let originalText: String
     let cleanText: String
-    let suggestedType: String
+    let cognitiveType: String
+    let domain: String
+    let actionState: String
+    let timeRelation: String
     let tags: [String]
     let embedding: [Float]
     let createdAt: Date
+    let updatedAt: Date?
     let isUserEdited: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case originalText
+        case cleanText
+        case cognitiveType
+        case suggestedType
+        case domain
+        case actionState
+        case timeRelation
+        case tags
+        case embedding
+        case createdAt
+        case updatedAt
+        case isUserEdited
+    }
+
+    init(
+        id: String,
+        originalText: String,
+        cleanText: String,
+        cognitiveType: String,
+        domain: String,
+        actionState: String,
+        timeRelation: String,
+        tags: [String],
+        embedding: [Float],
+        createdAt: Date,
+        updatedAt: Date?,
+        isUserEdited: Bool
+    ) {
+        self.id = id
+        self.originalText = originalText
+        self.cleanText = cleanText
+        self.cognitiveType = cognitiveType
+        self.domain = domain
+        self.actionState = actionState
+        self.timeRelation = timeRelation
+        self.tags = tags
+        self.embedding = embedding
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.isUserEdited = isUserEdited
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        originalText = try container.decode(String.self, forKey: .originalText)
+        cleanText = try container.decode(String.self, forKey: .cleanText)
+        let decodedCognitiveType = try container.decodeIfPresent(String.self, forKey: .cognitiveType)
+        let legacySuggestedType = try container.decodeIfPresent(String.self, forKey: .suggestedType)
+        cognitiveType = decodedCognitiveType ?? legacySuggestedType ?? "other"
+        domain = try container.decodeIfPresent(String.self, forKey: .domain) ?? "other"
+        actionState = try container.decodeIfPresent(String.self, forKey: .actionState) ?? "info"
+        timeRelation = try container.decodeIfPresent(String.self, forKey: .timeRelation) ?? "none"
+        tags = try container.decode([String].self, forKey: .tags)
+        embedding = try container.decode([Float].self, forKey: .embedding)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
+        isUserEdited = try container.decode(Bool.self, forKey: .isUserEdited)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(originalText, forKey: .originalText)
+        try container.encode(cleanText, forKey: .cleanText)
+        try container.encode(cognitiveType, forKey: .cognitiveType)
+        try container.encode(domain, forKey: .domain)
+        try container.encode(actionState, forKey: .actionState)
+        try container.encode(timeRelation, forKey: .timeRelation)
+        try container.encode(tags, forKey: .tags)
+        try container.encode(embedding, forKey: .embedding)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encodeIfPresent(updatedAt, forKey: .updatedAt)
+        try container.encode(isUserEdited, forKey: .isUserEdited)
+    }
 }
 
 struct LongTermMemorySaveCoordinator {
@@ -138,10 +220,14 @@ struct LongTermMemorySaveCoordinator {
                 id: item.id.uuidString,
                 originalText: item.originalText,
                 cleanText: item.cleanText,
-                suggestedType: item.suggestedType,
+                cognitiveType: item.cognitiveType,
+                domain: item.domain,
+                actionState: item.actionState,
+                timeRelation: item.timeRelation,
                 tags: item.tags,
                 embedding: item.embedding,
                 createdAt: item.createdAt,
+                updatedAt: item.updatedAt,
                 isUserEdited: item.isUserEdited
             )
         }
@@ -170,12 +256,16 @@ struct LongTermMemorySaveCoordinator {
             let item = LongTermMemoryItem(
                 originalText: record.originalText,
                 cleanText: record.cleanText,
-                suggestedType: record.suggestedType,
+                cognitiveType: record.cognitiveType,
+                domain: record.domain,
+                actionState: record.actionState,
+                timeRelation: record.timeRelation,
                 tags: record.tags,
                 embedding: record.embedding
             )
             item.id = id
             item.createdAt = record.createdAt
+            item.updatedAt = record.updatedAt ?? record.createdAt
             item.isUserEdited = record.isUserEdited
             context.insert(item)
             existingIDs.insert(id)
@@ -219,7 +309,10 @@ struct LongTermMemorySaveCoordinator {
             let item = LongTermMemoryItem(
                 originalText: text,
                 cleanText: processed.cleanText,
-                suggestedType: processed.suggestedType,
+                cognitiveType: processed.cognitiveType,
+                domain: processed.domain,
+                actionState: processed.actionState,
+                timeRelation: processed.timeRelation,
                 tags: processed.tags,
                 embedding: processed.embedding
             )

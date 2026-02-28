@@ -77,15 +77,32 @@ class ProcessMemoryRouteTests(unittest.TestCase):
         with patch("helpershelp.api.routes.process_memory.get_embedding_service", return_value=fake):
             response = self.client.post(
                 "/process-memory",
-                json={"text": "  En idé om produkten  ", "language": "sv"},
+                json={"text": "  En idé om projektet som jag ska göra imorgon  ", "language": "sv"},
             )
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertEqual(payload.get("cleanText"), "En idé om produkten")
-        self.assertEqual(payload.get("suggestedType"), "Idea")
+        self.assertEqual(payload.get("cleanText"), "En idé om projektet som jag ska göra imorgon")
+        self.assertEqual(payload.get("cognitiveType"), "idea")
+        self.assertEqual(payload.get("domain"), "project")
+        self.assertEqual(payload.get("actionState"), "todo")
+        self.assertEqual(payload.get("timeRelation"), "relativeTime")
         self.assertTrue(payload.get("tags"))
         self.assertEqual(payload.get("embedding"), [0.01, 0.02, -0.03])
+
+    def test_process_memory_detects_explicit_date_time_relation(self):
+        fake = _FakeEmbeddingService(vectors=[[0.7, -0.1]])
+
+        with patch("helpershelp.api.routes.process_memory.get_embedding_service", return_value=fake):
+            response = self.client.post(
+                "/process-memory",
+                json={"text": "Alva fyller år 14 juni", "language": "sv"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("timeRelation"), "explicitDate")
+        self.assertEqual(payload.get("domain"), "relationship")
 
     def test_process_memory_rejects_empty_text(self):
         response = self.client.post(

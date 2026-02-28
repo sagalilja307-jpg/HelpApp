@@ -43,9 +43,92 @@ struct ProcessMemoryRequestDTO: Codable, Sendable {
 
 struct ProcessMemoryResponseDTO: Codable, Sendable, Equatable {
     let cleanText: String
-    let suggestedType: String
+    let cognitiveType: String
+    let domain: String
+    let actionState: String
+    let timeRelation: String
     let tags: [String]
     let embedding: [Float]
+
+    init(
+        cleanText: String,
+        cognitiveType: String,
+        domain: String = "other",
+        actionState: String = "info",
+        timeRelation: String = "none",
+        tags: [String],
+        embedding: [Float]
+    ) {
+        self.cleanText = cleanText
+        self.cognitiveType = cognitiveType
+        self.domain = domain
+        self.actionState = actionState
+        self.timeRelation = timeRelation
+        self.tags = tags
+        self.embedding = embedding
+    }
+
+    init(
+        cleanText: String,
+        suggestedType: String,
+        tags: [String],
+        embedding: [Float]
+    ) {
+        self.init(
+            cleanText: cleanText,
+            cognitiveType: suggestedType,
+            domain: "other",
+            actionState: "info",
+            timeRelation: "none",
+            tags: tags,
+            embedding: embedding
+        )
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case cleanText
+        case cognitiveType
+        case suggestedType
+        case domain
+        case actionState
+        case timeRelation
+        case tags
+        case embedding
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let cleanText = try container.decode(String.self, forKey: .cleanText)
+        let decodedCognitiveType = try container.decodeIfPresent(String.self, forKey: .cognitiveType)
+        let legacySuggestedType = try container.decodeIfPresent(String.self, forKey: .suggestedType)
+        let cognitiveType = decodedCognitiveType ?? legacySuggestedType ?? "other"
+        let domain = try container.decodeIfPresent(String.self, forKey: .domain) ?? "other"
+        let actionState = try container.decodeIfPresent(String.self, forKey: .actionState) ?? "info"
+        let timeRelation = try container.decodeIfPresent(String.self, forKey: .timeRelation) ?? "none"
+        let tags = try container.decode([String].self, forKey: .tags)
+        let embedding = try container.decode([Float].self, forKey: .embedding)
+
+        self.init(
+            cleanText: cleanText,
+            cognitiveType: cognitiveType,
+            domain: domain,
+            actionState: actionState,
+            timeRelation: timeRelation,
+            tags: tags,
+            embedding: embedding
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(cleanText, forKey: .cleanText)
+        try container.encode(cognitiveType, forKey: .cognitiveType)
+        try container.encode(domain, forKey: .domain)
+        try container.encode(actionState, forKey: .actionState)
+        try container.encode(timeRelation, forKey: .timeRelation)
+        try container.encode(tags, forKey: .tags)
+        try container.encode(embedding, forKey: .embedding)
+    }
 }
 
 final class MemoryProcessingAPIService: MemoryProcessingAPI {

@@ -52,7 +52,10 @@ final class LongTermMemorySaveCoordinatorTests: XCTestCase {
             .success(
                 ProcessMemoryResponseDTO(
                     cleanText: "Strukturerad text",
-                    suggestedType: "Insight",
+                    cognitiveType: "decision",
+                    domain: "relationship",
+                    actionState: "todo",
+                    timeRelation: "future",
                     tags: ["product", "memory"],
                     embedding: [0.1, 0.2]
                 )
@@ -69,6 +72,10 @@ final class LongTermMemorySaveCoordinatorTests: XCTestCase {
         XCTAssertEqual(items.count, 1)
         XCTAssertEqual(items.first?.originalText, "Originaltext")
         XCTAssertEqual(items.first?.cleanText, "Strukturerad text")
+        XCTAssertEqual(items.first?.cognitiveType, "decision")
+        XCTAssertEqual(items.first?.domain, "relationship")
+        XCTAssertEqual(items.first?.actionState, "todo")
+        XCTAssertEqual(items.first?.timeRelation, "future")
         XCTAssertEqual(items.first?.tags, ["product", "memory"])
         XCTAssertEqual(items.first?.embedding, [0.1, 0.2])
         XCTAssertTrue(jobs.isEmpty)
@@ -235,6 +242,53 @@ final class LongTermMemorySaveCoordinatorTests: XCTestCase {
         XCTAssertEqual(jobs[0].status, .failed)
         XCTAssertEqual(jobs[0].attemptCount, 7)
         XCTAssertEqual(jobs[0].lastError, "Tjänsten för minnessparning är tillfälligt otillgänglig (503).")
+    }
+
+    func testProcessMemoryResponseDTODecodesLegacySuggestedTypePayload() throws {
+        let json = """
+        {
+          "cleanText": "legacy",
+          "suggestedType": "Insight",
+          "tags": ["legacy"],
+          "embedding": [0.1]
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(
+            ProcessMemoryResponseDTO.self,
+            from: Data(json.utf8)
+        )
+
+        XCTAssertEqual(decoded.cleanText, "legacy")
+        XCTAssertEqual(decoded.cognitiveType, "Insight")
+        XCTAssertEqual(decoded.domain, "other")
+        XCTAssertEqual(decoded.actionState, "info")
+        XCTAssertEqual(decoded.timeRelation, "none")
+    }
+
+    func testLongTermMemorySyncRecordDecodesLegacySuggestedTypePayload() throws {
+        let json = """
+        {
+          "id": "2D2D4A3B-8A1F-4A1D-BF6A-C5D391E6EAA8",
+          "originalText": "raw",
+          "cleanText": "clean",
+          "suggestedType": "Idea",
+          "tags": ["legacy"],
+          "embedding": [0.2],
+          "createdAt": "2026-02-28T12:00:00Z",
+          "isUserEdited": false
+        }
+        """
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(LongTermMemorySyncRecord.self, from: Data(json.utf8))
+
+        XCTAssertEqual(decoded.cognitiveType, "Idea")
+        XCTAssertEqual(decoded.domain, "other")
+        XCTAssertEqual(decoded.actionState, "info")
+        XCTAssertEqual(decoded.timeRelation, "none")
+        XCTAssertNil(decoded.updatedAt)
     }
 }
 

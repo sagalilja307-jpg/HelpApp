@@ -206,8 +206,11 @@ private struct LongTermMemoryClusterDetailView: View {
                                 .font(.body)
                                 .lineLimit(3)
 
-                            HStack(spacing: 8) {
-                                IOS26Style.badge(item.suggestedType, prominence: .secondary)
+                            FlowChips {
+                                IOS26Style.badge(item.normalizedType.displayName, systemImage: "brain.head.profile", prominence: .secondary)
+                                IOS26Style.badge(item.normalizedDomain.displayName, systemImage: "square.grid.2x2", prominence: .secondary)
+                                IOS26Style.badge(item.normalizedActionState.displayName, systemImage: "checklist", prominence: .secondary)
+                                IOS26Style.badge(item.normalizedTimeRelation.displayName, systemImage: "calendar", prominence: .secondary)
                                 Text(item.createdAt.formatted(date: .abbreviated, time: .shortened))
                                     .font(.caption)
                                     .foregroundStyle(.tertiary)
@@ -231,7 +234,10 @@ private struct LongTermMemoryClusterDetailView: View {
         let q = searchText.lowercased()
         return items.filter {
             $0.cleanText.lowercased().contains(q) ||
-            $0.suggestedType.lowercased().contains(q)
+            $0.cognitiveType.lowercased().contains(q) ||
+            $0.domain.lowercased().contains(q) ||
+            $0.actionState.lowercased().contains(q) ||
+            $0.timeRelation.lowercased().contains(q)
         }
     }
 

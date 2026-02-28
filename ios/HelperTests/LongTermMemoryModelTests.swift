@@ -34,7 +34,10 @@ final class LongTermMemoryModelTests: XCTestCase {
         let item = LongTermMemoryItem(
             originalText: "raw",
             cleanText: "clean",
-            suggestedType: "Insight",
+            cognitiveType: "insight",
+            domain: "learning",
+            actionState: "observe",
+            timeRelation: "present",
             tags: ["a", "b"],
             embedding: [0.1, -0.2]
         )
@@ -43,6 +46,10 @@ final class LongTermMemoryModelTests: XCTestCase {
 
         let items = try context.fetch(FetchDescriptor<LongTermMemoryItem>())
         XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items[0].cognitiveType, "insight")
+        XCTAssertEqual(items[0].domain, "learning")
+        XCTAssertEqual(items[0].actionState, "observe")
+        XCTAssertEqual(items[0].timeRelation, "present")
         XCTAssertEqual(items[0].tags, ["a", "b"])
         XCTAssertEqual(items[0].embedding, [0.1, -0.2])
     }
