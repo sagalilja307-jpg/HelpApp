@@ -163,7 +163,96 @@ JSON:"""
         )
 
 
+class QwenFilterStructurer:
+    """
+    Qwen2.5 via Ollama for filter structuring.
+
+    Returns a best-effort filter dict. Any parse/model error returns {}.
+    Strict validation/sanitization is expected to happen in the router layer.
+    """
+
+    def __init__(
+        self,
+        ollama: Optional[OllamaClient] = None,
+        model: Optional[str] = None,
+        request_timeout_seconds: int = 12,
+    ):
+        self.model = (model or OLLAMA_MODEL or "qwen2.5:7b").strip() or "qwen2.5:7b"
+        self.request_timeout_seconds = max(1, int(request_timeout_seconds))
+        try:
+            self.ollama = ollama or OllamaClient()
+        except OllamaUnavailable:
+            self.ollama = None
+
+    def _build_prompt(self, *, query: str, domain: Domain, language: str) -> str:
+        safe_query = json.dumps(query, ensure_ascii=False)
+        safe_domain = json.dumps(domain, ensure_ascii=False)
+        safe_language = json.dumps((language or "sv").strip().lower(), ensure_ascii=False)
+
+        return f"""Du strukturerar filter för en användarfråga.
+
+Regler:
+- Svara EXAKT och ENDAST med ett JSON-objekt.
+- JSON-format:
+{{
+  "filters": {{
+    "status": null | "unread" | "cancelled" | "completed" | "pending",
+    "participants": string[],
+    "location": null | string,
+    "text_contains": null | string,
+    "tags": string[],
+    "priority": null | "high" | "medium" | "low",
+    "has_attachment": null | true | false,
+    "source_account": null | "gmail" | "outlook" | "icloud",
+    "subdomain": null | "activity" | "wellbeing",
+    "metric": null | "step_count" | "distance" | "exercise_time" | "workout" | "sleep" | "mindful_session" | "state_of_mind" | "heart_rate" | "resting_heart_rate" | "hrv" | "respiratory_rate" | "blood_oxygen",
+    "workout_type": null | "running" | "cycling" | "strength",
+    "aggregation": null | "sum" | "average" | "count" | "duration"
+  }}
+}}
+- Sätt null eller [] när något inte framgår.
+- Hitta inte på värden.
+
+Domän: {safe_domain}
+Språk: {safe_language}
+Användarfråga: {safe_query}
+JSON:"""
+
+    def structure_filters(self, *, query: str, domain: Domain, language: str = "sv") -> Dict[str, Any]:
+        normalized_query = (query or "").strip()
+        if not normalized_query or self.ollama is None:
+            return {}
+
+        payload = {
+            "model": self.model,
+            "prompt": self._build_prompt(query=normalized_query, domain=domain, language=language),
+            "stream": False,
+            "options": {
+                "temperature": 0,
+                "top_p": 0.9,
+            },
+        }
+
+        try:
+            response = self.ollama.post_json(
+                "/api/generate",
+                payload,
+                timeout_s=self.request_timeout_seconds,
+            )
+            raw_content = str(response.get("response", "")).strip()
+            data = QwenClassifier._parse_json_block(raw_content)
+        except (OllamaUnavailable, ValueError, json.JSONDecodeError):
+            return {}
+
+        if isinstance(data.get("filters"), dict):
+            return cast(Dict[str, Any], data.get("filters"))
+        if isinstance(data, dict):
+            return data
+        return {}
+
+
 _qwen_classifier: Optional[QwenClassifier] = None
+_qwen_filter_structurer: Optional[QwenFilterStructurer] = None
 
 
 def get_qwen_classifier() -> QwenClassifier:
@@ -171,3 +260,10 @@ def get_qwen_classifier() -> QwenClassifier:
     if _qwen_classifier is None:
         _qwen_classifier = QwenClassifier()
     return _qwen_classifier
+
+
+def get_qwen_filter_structurer() -> QwenFilterStructurer:
+    global _qwen_filter_structurer
+    if _qwen_filter_structurer is None:
+        _qwen_filter_structurer = QwenFilterStructurer()
+    return _qwen_filter_structurer

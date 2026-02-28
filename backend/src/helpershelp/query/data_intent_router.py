@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import re
-from typing import Callable, Dict, Optional, cast
+from typing import Any, Callable, Dict, Optional, cast
 
 from helpershelp.query.intent_plan import (
     Domain,
@@ -15,7 +15,7 @@ from helpershelp.query.intent_plan import (
     TimeScopeDTO,
     TimeScopeType,
 )
-from helpershelp.llm import get_qwen_classifier
+from helpershelp.llm import get_qwen_classifier, get_qwen_filter_structurer
 from helpershelp.query.time_policy import TimePolicy, TimePolicyConfig
 from helpershelp.query.timeframe_resolver import QueryTimeframeResolver, TimeIntent
 from helpershelp.core.time_utils import utcnow_aware
@@ -86,6 +86,30 @@ HEALTH_WELLBEING_METRICS: set[str] = {
     "respiratory_rate",
     "blood_oxygen",
 }
+
+ALLOWED_STATUS_VALUES: set[str] = {
+    "unread",
+    "cancelled",
+    "completed",
+    "pending",
+}
+
+ALLOWED_PRIORITY_VALUES: set[str] = {
+    "high",
+    "medium",
+    "low",
+}
+
+ALLOWED_SOURCE_ACCOUNT_VALUES: set[str] = {
+    "gmail",
+    "outlook",
+    "icloud",
+}
+
+ALLOWED_HEALTH_METRICS: set[str] = HEALTH_ACTIVITY_METRICS.union(HEALTH_WELLBEING_METRICS)
+ALLOWED_HEALTH_SUBDOMAINS: set[str] = {"activity", "wellbeing"}
+ALLOWED_HEALTH_WORKOUT_TYPES: set[str] = {"running", "cycling", "strength"}
+ALLOWED_HEALTH_AGGREGATIONS: set[str] = {"sum", "average", "count", "duration"}
 
 
 def _looks_like_health_query(query: str) -> bool:
@@ -439,6 +463,37 @@ def _dedupe_terms(values: list[str]) -> list[str]:
     return output
 
 
+def _coerce_choice(value: object, *, allowed: set[str]) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    normalized = _normalize_filter_value(value)
+    if normalized in allowed:
+        return normalized
+    return None
+
+
+def _coerce_optional_text(value: object) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    normalized = _normalize_filter_value(value)
+    if not normalized:
+        return None
+    return normalized
+
+
+def _coerce_string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    values = [v for v in value if isinstance(v, str)]
+    return _dedupe_terms(values)
+
+
+def _coerce_optional_bool(value: object) -> Optional[bool]:
+    if isinstance(value, bool):
+        return value
+    return None
+
+
 def _extract_status(query: str, domain: Domain) -> Optional[str]:
     q = (query or "").lower()
     if domain == "mail" and re.search(r"\b(oläst|olästa|unread)\b", q):
@@ -562,6 +617,127 @@ def _extract_source_account(query: str) -> Optional[str]:
     return None
 
 
+def _resolve_non_health_filters(query: str, domain: Domain) -> Dict[str, object]:
+    filters = _default_filters()
+
+    status = _extract_status(query, domain)
+    if status is not None:
+        filters["status"] = status
+
+    participants = _extract_participants(query)
+    if participants:
+        filters["participants"] = participants
+
+    location = _extract_location(query)
+    if location and domain in {"calendar", "reminders", "location"}:
+        filters["location"] = location
+
+    text_contains = _extract_text_contains(query)
+    if text_contains:
+        filters["text_contains"] = text_contains
+
+    tags = _extract_tags(query)
+    if tags:
+        filters["tags"] = tags
+
+    priority = _extract_priority(query)
+    if priority and domain in {"reminders", "mail"}:
+        filters["priority"] = priority
+
+    has_attachment = _extract_has_attachment(query)
+    if has_attachment is not None and domain in {"mail", "files"}:
+        filters["has_attachment"] = has_attachment
+
+    source_account = _extract_source_account(query)
+    if source_account and domain == "mail":
+        filters["source_account"] = source_account
+
+    return filters
+
+
+def _sanitize_llm_filters(raw_filters: Dict[str, object], *, domain: Domain) -> Dict[str, object]:
+    sanitized: Dict[str, object] = {}
+
+    if domain == "health":
+        subdomain = _coerce_choice(raw_filters.get("subdomain"), allowed=ALLOWED_HEALTH_SUBDOMAINS)
+        if subdomain is not None:
+            sanitized["subdomain"] = subdomain
+
+        metric = _coerce_choice(raw_filters.get("metric"), allowed=ALLOWED_HEALTH_METRICS)
+        if metric is not None:
+            sanitized["metric"] = metric
+
+        workout_type = _coerce_choice(raw_filters.get("workout_type"), allowed=ALLOWED_HEALTH_WORKOUT_TYPES)
+        if workout_type is not None:
+            sanitized["workout_type"] = workout_type
+
+        aggregation = _coerce_choice(raw_filters.get("aggregation"), allowed=ALLOWED_HEALTH_AGGREGATIONS)
+        if aggregation is not None:
+            sanitized["aggregation"] = aggregation
+
+        return sanitized
+
+    status = _coerce_choice(raw_filters.get("status"), allowed=ALLOWED_STATUS_VALUES)
+    if status is not None:
+        sanitized["status"] = status
+
+    participants = _coerce_string_list(raw_filters.get("participants"))
+    if participants:
+        sanitized["participants"] = participants
+
+    location = _coerce_optional_text(raw_filters.get("location"))
+    if location is not None and domain in {"calendar", "reminders", "location"}:
+        sanitized["location"] = location
+
+    text_contains = _coerce_optional_text(raw_filters.get("text_contains"))
+    if text_contains is not None:
+        sanitized["text_contains"] = text_contains
+
+    tags = _coerce_string_list(raw_filters.get("tags"))
+    if tags:
+        sanitized["tags"] = tags
+
+    priority = _coerce_choice(raw_filters.get("priority"), allowed=ALLOWED_PRIORITY_VALUES)
+    if priority is not None and domain in {"reminders", "mail"}:
+        sanitized["priority"] = priority
+
+    has_attachment = _coerce_optional_bool(raw_filters.get("has_attachment"))
+    if has_attachment is not None and domain in {"mail", "files"}:
+        sanitized["has_attachment"] = has_attachment
+
+    source_account = _coerce_choice(raw_filters.get("source_account"), allowed=ALLOWED_SOURCE_ACCOUNT_VALUES)
+    if source_account is not None and domain == "mail":
+        sanitized["source_account"] = source_account
+
+    return sanitized
+
+
+def _merge_filters(
+    *,
+    query: str,
+    domain: Domain,
+    deterministic_filters: Dict[str, object],
+    llm_filters: Dict[str, object],
+) -> Dict[str, object]:
+    if not llm_filters:
+        return deterministic_filters
+
+    merged = dict(deterministic_filters)
+    merged.update(llm_filters)
+
+    if domain == "health":
+        metric = merged.get("metric")
+        metric_str = str(metric) if metric is not None else ""
+        if metric_str and "subdomain" not in llm_filters:
+            merged["subdomain"] = _resolve_health_subdomain(query, metric_str)
+        if metric_str and "aggregation" not in llm_filters:
+            merged["aggregation"] = _infer_health_aggregation(metric_str)
+        if metric_str != "workout":
+            merged["workout_type"] = None
+
+    return merged
+
+
 class DataIntentRouter:
     def __init__(
         self,
@@ -572,6 +748,7 @@ class DataIntentRouter:
         _now = now_provider or utcnow_aware
 
         self.domain_classifier = get_qwen_classifier()
+        self.filter_structurer = get_qwen_filter_structurer()
         self.time_resolver = QueryTimeframeResolver(
             timezone_name=timezone_name, now_provider=_now
         )
@@ -581,7 +758,6 @@ class DataIntentRouter:
 
     def route(self, query: str, language: str = "sv") -> Dict[str, object]:
         q = (query or "").strip()
-        filters: Dict[str, object] = _default_filters()
         ambiguous_fallback = _is_ambiguous_fallback_query(q)
 
         # Fast path for explicit source keywords: avoids an LLM roundtrip for common queries.
@@ -609,49 +785,40 @@ class DataIntentRouter:
                         break
 
         if resolved_domain == "health":
-            filters = _resolve_health_filters(q)
+            deterministic_filters = _resolve_health_filters(q)
         else:
-            status = _extract_status(q, resolved_domain)
-            if status is not None:
-                filters["status"] = status
+            deterministic_filters = _resolve_non_health_filters(q, resolved_domain)
 
-            participants = _extract_participants(q)
-            if participants:
-                filters["participants"] = participants
+        raw_llm_filters: Dict[str, object] = {}
+        try:
+            candidate_llm_filters = self.filter_structurer.structure_filters(
+                query=q,
+                domain=resolved_domain,
+                language=language,
+            )
+            if isinstance(candidate_llm_filters, dict):
+                raw_llm_filters = cast(Dict[str, object], candidate_llm_filters)
+        except Exception:
+            raw_llm_filters = {}
 
-            location = _extract_location(q)
-            if location and resolved_domain in {"calendar", "reminders", "location"}:
-                filters["location"] = location
-
-            text_contains = _extract_text_contains(q)
-            if text_contains:
-                filters["text_contains"] = text_contains
-
-            tags = _extract_tags(q)
-            if tags:
-                filters["tags"] = tags
-
-            priority = _extract_priority(q)
-            if priority and resolved_domain in {"reminders", "mail"}:
-                filters["priority"] = priority
-
-            has_attachment = _extract_has_attachment(q)
-            if has_attachment is not None and resolved_domain in {"mail", "files"}:
-                filters["has_attachment"] = has_attachment
-
-            source_account = _extract_source_account(q)
-            if source_account and resolved_domain == "mail":
-                filters["source_account"] = source_account
+        llm_filters = _sanitize_llm_filters(raw_llm_filters, domain=resolved_domain)
+        filters = _merge_filters(
+            query=q,
+            domain=resolved_domain,
+            deterministic_filters=deterministic_filters,
+            llm_filters=llm_filters,
+        )
 
         timeframe = self.time_policy.apply(resolved_domain, parsed)
         time_scope = _time_scope_from_time_intent(parsed.time_intent, timeframe)
         operation = _operation_for_query(resolved_domain, q, filters)
 
-        plan = IntentPlanDTO(
-            domain=resolved_domain,
-            mode="info",
-            operation=operation,
-            time_scope=time_scope,
-            filters=filters,
-        )
+        plan_payload: Dict[str, Any] = {
+            "domain": resolved_domain,
+            "mode": "info",
+            "operation": operation,
+            "time_scope": time_scope,
+            "filters": filters,
+        }
+        plan = IntentPlanDTO.model_validate(plan_payload)
         return plan.model_dump(mode="python")
