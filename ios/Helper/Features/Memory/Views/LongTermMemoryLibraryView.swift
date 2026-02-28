@@ -119,7 +119,10 @@ struct LongTermMemoryTimelineView: View {
                 } else {
                     ForEach(items, id: \.id) { item in
                         NavigationLink {
-                            LongTermMemoryItemDetailView(item: item)
+                            LongTermMemoryItemDetailView(
+                                item: item,
+                                longTermMemorySaveCoordinator: longTermMemorySaveCoordinator
+                            )
                         } label: {
                             LongTermMemoryTimelineItemCard(item: item)
                                 .ios26Card()
@@ -158,6 +161,9 @@ struct LongTermMemoryTimelineView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
+            Task { await refresh() }
+        }
+        .onAppear {
             Task { await refresh() }
         }
     }
@@ -236,7 +242,10 @@ struct LongTermMemoryTypesView: View {
                 } else {
                     ForEach(sections) { section in
                         NavigationLink {
-                            LongTermMemoryTypeDetailView(section: section)
+                            LongTermMemoryTypeDetailView(
+                                type: section.type,
+                                longTermMemorySaveCoordinator: longTermMemorySaveCoordinator
+                            )
                         } label: {
                             LongTermMemoryTypeSectionCard(section: section)
                                 .ios26Card()
@@ -274,6 +283,9 @@ struct LongTermMemoryTypesView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
+            Task { await refresh() }
+        }
+        .onAppear {
             Task { await refresh() }
         }
     }
@@ -330,13 +342,19 @@ private struct LongTermMemoryTypeSectionCard: View {
 }
 
 private struct LongTermMemoryTypeDetailView: View {
-    let section: LongTermMemoryTypeSection
+    let type: LongTermMemoryType
+    let longTermMemorySaveCoordinator: LongTermMemorySaveCoordinator
+
+    @State private var items: [LongTermMemoryItem] = []
 
     var body: some View {
         List {
-            ForEach(section.items, id: \.id) { item in
+            ForEach(items, id: \.id) { item in
                 NavigationLink {
-                    LongTermMemoryItemDetailView(item: item)
+                    LongTermMemoryItemDetailView(
+                        item: item,
+                        longTermMemorySaveCoordinator: longTermMemorySaveCoordinator
+                    )
                 } label: {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(item.cleanText)
@@ -351,13 +369,32 @@ private struct LongTermMemoryTypeDetailView: View {
                 }
             }
         }
-        .navigationTitle(section.type.displayName)
+        .navigationTitle(type.displayName)
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            refresh()
+        }
+        .onAppear {
+            refresh()
+        }
+    }
+
+    private func refresh() {
+        items = longTermMemorySaveCoordinator
+            .loadAllItems()
+            .filter { $0.normalizedType == type }
     }
 }
 
 struct LongTermMemoryItemDetailView: View {
     let item: LongTermMemoryItem
+    let longTermMemorySaveCoordinator: LongTermMemorySaveCoordinator
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var showEditSheet = false
+    @State private var showDeleteConfirmation = false
+    @State private var isDeleting = false
+    @State private var errorMessage: String?
 
     var body: some View {
         let embedding = item.embedding
@@ -451,12 +488,207 @@ struct LongTermMemoryItemDetailView: View {
         }
         .navigationTitle("Minne")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button("Redigera") {
+                    showEditSheet = true
+                }
+
+                Button(role: .destructive) {
+                    showDeleteConfirmation = true
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .disabled(isDeleting)
+            }
+        }
+        .sheet(isPresented: $showEditSheet) {
+            NavigationStack {
+                LongTermMemoryItemEditView(
+                    item: item,
+                    longTermMemorySaveCoordinator: longTermMemorySaveCoordinator
+                )
+            }
+        }
+        .confirmationDialog(
+            "Radera minne?",
+            isPresented: $showDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Radera", role: .destructive) {
+                Task { await deleteItem() }
+            }
+            Button("Avbryt", role: .cancel) {}
+        } message: {
+            Text("Det här går inte att ångra.")
+        }
+        .alert("Kunde inte slutföra ändringen", isPresented: hasErrorMessageBinding) {
+            Button("OK", role: .cancel) {
+                errorMessage = nil
+            }
+        } message: {
+            Text(errorMessage ?? "")
+        }
     }
 
     private func embeddingPreview(_ embedding: [Float]) -> String {
         let previewValues = embedding.prefix(8).map { String(format: "%.4f", $0) }
         let suffix = embedding.count > 8 ? ", …" : ""
         return "[\(previewValues.joined(separator: ", "))\(suffix)]"
+    }
+
+    private var hasErrorMessageBinding: Binding<Bool> {
+        Binding<Bool>(
+            get: { errorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    errorMessage = nil
+                }
+            }
+        )
+    }
+
+    private func deleteItem() async {
+        isDeleting = true
+        defer { isDeleting = false }
+
+        let deleted = longTermMemorySaveCoordinator.deleteItem(id: item.id)
+        if deleted {
+            dismiss()
+            return
+        }
+        errorMessage = "Kunde inte radera minnet."
+    }
+}
+
+private struct LongTermMemoryItemEditView: View {
+    let item: LongTermMemoryItem
+    let longTermMemorySaveCoordinator: LongTermMemorySaveCoordinator
+
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var text: String
+    @State private var cognitiveType: LongTermMemoryType
+    @State private var domain: LongTermMemoryDomain
+    @State private var actionState: LongTermMemoryActionState
+    @State private var timeRelation: LongTermMemoryTimeRelation
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    init(
+        item: LongTermMemoryItem,
+        longTermMemorySaveCoordinator: LongTermMemorySaveCoordinator
+    ) {
+        self.item = item
+        self.longTermMemorySaveCoordinator = longTermMemorySaveCoordinator
+        _text = State(initialValue: item.cleanText)
+        _cognitiveType = State(initialValue: item.normalizedType)
+        _domain = State(initialValue: item.normalizedDomain)
+        _actionState = State(initialValue: item.normalizedActionState)
+        _timeRelation = State(initialValue: item.normalizedTimeRelation)
+    }
+
+    var body: some View {
+        Form {
+            Section("Text") {
+                TextEditor(text: $text)
+                    .frame(minHeight: 140)
+            }
+
+            Section("Axlar") {
+                Picker("Kognitiv typ", selection: $cognitiveType) {
+                    ForEach(LongTermMemoryType.allCases, id: \.self) { type in
+                        Text(type.displayName).tag(type)
+                    }
+                }
+                Picker("Domän", selection: $domain) {
+                    ForEach(LongTermMemoryDomain.allCases, id: \.self) { domain in
+                        Text(domain.displayName).tag(domain)
+                    }
+                }
+                Picker("Action state", selection: $actionState) {
+                    ForEach(LongTermMemoryActionState.allCases, id: \.self) { state in
+                        Text(state.displayName).tag(state)
+                    }
+                }
+                Picker("Tidsrelation", selection: $timeRelation) {
+                    ForEach(LongTermMemoryTimeRelation.allCases, id: \.self) { relation in
+                        Text(relation.displayName).tag(relation)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Redigera minne")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Avbryt") {
+                    dismiss()
+                }
+                .disabled(isSaving)
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                if isSaving {
+                    ProgressView()
+                } else {
+                    Button("Spara") {
+                        Task { await save() }
+                    }
+                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .alert("Kunde inte spara ändringar", isPresented: hasErrorMessageBinding) {
+            Button("OK", role: .cancel) {
+                errorMessage = nil
+            }
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private var hasErrorMessageBinding: Binding<Bool> {
+        Binding<Bool>(
+            get: { errorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    errorMessage = nil
+                }
+            }
+        )
+    }
+
+    private func save() async {
+        isSaving = true
+        defer { isSaving = false }
+
+        let result = await longTermMemorySaveCoordinator.updateItem(
+            id: item.id,
+            text: text,
+            cognitiveType: cognitiveType.rawValue,
+            domain: domain.rawValue,
+            actionState: actionState.rawValue,
+            timeRelation: timeRelation.rawValue
+        )
+
+        switch result {
+        case .saved(let snapshot):
+            item.originalText = snapshot.originalText
+            item.cleanText = snapshot.cleanText
+            item.cognitiveType = snapshot.cognitiveType
+            item.domain = snapshot.domain
+            item.actionState = snapshot.actionState
+            item.timeRelation = snapshot.timeRelation
+            item.tags = snapshot.tags
+            item.embedding = snapshot.embedding
+            item.updatedAt = snapshot.updatedAt
+            item.isUserEdited = snapshot.isUserEdited
+            dismiss()
+        case .notFound:
+            errorMessage = "Minnet hittades inte."
+        case .failed(let message):
+            errorMessage = message
+        }
     }
 }
 

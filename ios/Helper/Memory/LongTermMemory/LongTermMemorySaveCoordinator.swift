@@ -102,6 +102,25 @@ struct LongTermMemorySaveCoordinator {
         case failed(String)
     }
 
+    struct UpdateSnapshot: Sendable {
+        let originalText: String
+        let cleanText: String
+        let cognitiveType: String
+        let domain: String
+        let actionState: String
+        let timeRelation: String
+        let tags: [String]
+        let embedding: [Float]
+        let updatedAt: Date
+        let isUserEdited: Bool
+    }
+
+    enum UpdateOutcome: Sendable {
+        case saved(UpdateSnapshot)
+        case notFound
+        case failed(String)
+    }
+
     private let container: ModelContainer
     private let memoryProcessingAPI: MemoryProcessingAPI
     private let nowProvider: () -> Date
@@ -204,6 +223,89 @@ struct LongTermMemorySaveCoordinator {
         let allItems = loadAllItems()
         let memberIDs = Set(cluster.memberIDs)
         return allItems.filter { memberIDs.contains($0.id) }
+    }
+
+    func updateItem(
+        id: UUID,
+        text: String,
+        cognitiveType: String,
+        domain: String,
+        actionState: String,
+        timeRelation: String,
+        language: String = "sv"
+    ) async -> UpdateOutcome {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else {
+            return .failed("Texten får inte vara tom.")
+        }
+
+        let context = makeContext()
+        guard let item = try? fetchItem(id: id, in: context) else {
+            return .notFound
+        }
+
+        let textChanged = item.cleanText.trimmingCharacters(in: .whitespacesAndNewlines) != trimmedText
+
+        if textChanged {
+            do {
+                let processed = try await memoryProcessingAPI.processMemory(
+                    text: trimmedText,
+                    language: normalizedLanguage(language)
+                )
+                item.originalText = trimmedText
+                item.cleanText = processed.cleanText
+                item.tags = processed.tags
+                item.embedding = processed.embedding
+            } catch {
+                return .failed(error.localizedDescription)
+            }
+        } else {
+            item.cleanText = trimmedText
+        }
+
+        item.cognitiveType = LongTermMemoryType.map(from: cognitiveType).rawValue
+        item.domain = LongTermMemoryDomain.map(from: domain).rawValue
+        item.actionState = LongTermMemoryActionState.map(from: actionState).rawValue
+        item.timeRelation = LongTermMemoryTimeRelation.map(from: timeRelation).rawValue
+        item.updatedAt = nowProvider()
+        item.isUserEdited = true
+
+        do {
+            try context.save()
+        } catch {
+            return .failed("Kunde inte spara ändringar: \(error.localizedDescription)")
+        }
+
+        return .saved(
+            UpdateSnapshot(
+                originalText: item.originalText,
+                cleanText: item.cleanText,
+                cognitiveType: item.cognitiveType,
+                domain: item.domain,
+                actionState: item.actionState,
+                timeRelation: item.timeRelation,
+                tags: item.tags,
+                embedding: item.embedding,
+                updatedAt: item.updatedAt,
+                isUserEdited: item.isUserEdited
+            )
+        )
+    }
+
+    @discardableResult
+    func deleteItem(id: UUID) -> Bool {
+        let context = makeContext()
+        guard let item = try? fetchItem(id: id, in: context) else {
+            return false
+        }
+
+        context.delete(item)
+        do {
+            try context.save()
+            return true
+        } catch {
+            return false
+        }
     }
 
     func exportSyncRecords() -> [LongTermMemorySyncRecord] {
@@ -383,6 +485,11 @@ struct LongTermMemorySaveCoordinator {
     private func fetchJob(id: UUID, in context: ModelContext) throws -> LongTermMemoryPendingJob? {
         let jobs = try context.fetch(FetchDescriptor<LongTermMemoryPendingJob>())
         return jobs.first(where: { $0.id == id })
+    }
+
+    private func fetchItem(id: UUID, in context: ModelContext) throws -> LongTermMemoryItem? {
+        let items = try context.fetch(FetchDescriptor<LongTermMemoryItem>())
+        return items.first(where: { $0.id == id })
     }
 
     private func makeContext() -> ModelContext {

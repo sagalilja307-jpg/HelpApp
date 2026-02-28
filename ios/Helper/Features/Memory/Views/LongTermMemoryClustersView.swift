@@ -199,7 +199,10 @@ private struct LongTermMemoryClusterDetailView: View {
             } else {
                 ForEach(filteredItems, id: \.id) { item in
                     NavigationLink {
-                        LongTermMemoryItemDetailView(item: item)
+                        LongTermMemoryItemDetailView(
+                            item: item,
+                            longTermMemorySaveCoordinator: longTermMemorySaveCoordinator
+                        )
                     } label: {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(item.cleanText)
@@ -225,6 +228,9 @@ private struct LongTermMemoryClusterDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Sök i klustret")
         .task {
+            items = longTermMemorySaveCoordinator.loadItems(for: cluster)
+        }
+        .onAppear {
             items = longTermMemorySaveCoordinator.loadItems(for: cluster)
         }
     }

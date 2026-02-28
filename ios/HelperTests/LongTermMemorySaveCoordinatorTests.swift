@@ -244,6 +244,136 @@ final class LongTermMemorySaveCoordinatorTests: XCTestCase {
         XCTAssertEqual(jobs[0].lastError, "Tjänsten för minnessparning är tillfälligt otillgänglig (503).")
     }
 
+    func testUpdateItemWithoutTextChangeSkipsReembeddingAndUpdatesAxes() async throws {
+        let context = ModelContext(container)
+        let item = LongTermMemoryItem(
+            originalText: "raw",
+            cleanText: "old text",
+            suggestedType: "Insight",
+            tags: ["old"],
+            embedding: [0.11, 0.22]
+        )
+        item.createdAt = Date(timeIntervalSince1970: 20)
+        item.updatedAt = item.createdAt
+        context.insert(item)
+        try context.save()
+
+        let outcome = await coordinator.updateItem(
+            id: item.id,
+            text: "old text",
+            cognitiveType: "decision",
+            domain: "work",
+            actionState: "todo",
+            timeRelation: "future"
+        )
+
+        switch outcome {
+        case .saved(let snapshot):
+            XCTAssertEqual(snapshot.cleanText, "old text")
+            XCTAssertEqual(snapshot.cognitiveType, "decision")
+            XCTAssertEqual(snapshot.domain, "work")
+            XCTAssertEqual(snapshot.actionState, "todo")
+            XCTAssertEqual(snapshot.timeRelation, "future")
+        default:
+            XCTFail("Expected saved update, got \(outcome)")
+        }
+
+        let updatedItems = try context.fetch(FetchDescriptor<LongTermMemoryItem>())
+        XCTAssertEqual(updatedItems.count, 1)
+        XCTAssertEqual(updatedItems[0].embedding, [0.11, 0.22])
+        XCTAssertEqual(updatedItems[0].tags, ["old"])
+        XCTAssertEqual(updatedItems[0].cognitiveType, "decision")
+        XCTAssertEqual(updatedItems[0].domain, "work")
+        XCTAssertEqual(updatedItems[0].actionState, "todo")
+        XCTAssertEqual(updatedItems[0].timeRelation, "future")
+        XCTAssertTrue(updatedItems[0].isUserEdited)
+        XCTAssertEqual(api.calls.count, 0)
+    }
+
+    func testUpdateItemWithTextChangeReembedsAndStoresProcessedText() async throws {
+        let context = ModelContext(container)
+        let item = LongTermMemoryItem(
+            originalText: "raw",
+            cleanText: "old text",
+            suggestedType: "Insight",
+            tags: ["old"],
+            embedding: [0.11, 0.22]
+        )
+        context.insert(item)
+        try context.save()
+
+        api.results = [
+            .success(
+                ProcessMemoryResponseDTO(
+                    cleanText: "new cleaned text",
+                    cognitiveType: "idea",
+                    domain: "project",
+                    actionState: "plan",
+                    timeRelation: "relativeTime",
+                    tags: ["new"],
+                    embedding: [0.9, 0.8]
+                )
+            )
+        ]
+
+        let outcome = await coordinator.updateItem(
+            id: item.id,
+            text: "new raw text",
+            cognitiveType: "risk",
+            domain: "finance",
+            actionState: "decide",
+            timeRelation: "explicitDate"
+        )
+
+        switch outcome {
+        case .saved(let snapshot):
+            XCTAssertEqual(snapshot.originalText, "new raw text")
+            XCTAssertEqual(snapshot.cleanText, "new cleaned text")
+            XCTAssertEqual(snapshot.tags, ["new"])
+            XCTAssertEqual(snapshot.embedding, [0.9, 0.8])
+            XCTAssertEqual(snapshot.cognitiveType, "risk")
+            XCTAssertEqual(snapshot.domain, "finance")
+            XCTAssertEqual(snapshot.actionState, "decide")
+            XCTAssertEqual(snapshot.timeRelation, "explicitDate")
+            XCTAssertTrue(snapshot.isUserEdited)
+        default:
+            XCTFail("Expected saved update, got \(outcome)")
+        }
+
+        let updatedItems = try context.fetch(FetchDescriptor<LongTermMemoryItem>())
+        XCTAssertEqual(updatedItems.count, 1)
+        XCTAssertEqual(updatedItems[0].originalText, "new raw text")
+        XCTAssertEqual(updatedItems[0].cleanText, "new cleaned text")
+        XCTAssertEqual(updatedItems[0].tags, ["new"])
+        XCTAssertEqual(updatedItems[0].embedding, [0.9, 0.8])
+        XCTAssertEqual(updatedItems[0].cognitiveType, "risk")
+        XCTAssertEqual(updatedItems[0].domain, "finance")
+        XCTAssertEqual(updatedItems[0].actionState, "decide")
+        XCTAssertEqual(updatedItems[0].timeRelation, "explicitDate")
+        XCTAssertEqual(api.calls.count, 1)
+        XCTAssertEqual(api.calls.first?.text, "new raw text")
+        XCTAssertEqual(api.calls.first?.language, "sv")
+    }
+
+    func testDeleteItemRemovesMemoryFromStore() throws {
+        let context = ModelContext(container)
+        let item = LongTermMemoryItem(
+            originalText: "raw",
+            cleanText: "clean",
+            suggestedType: "Insight",
+            tags: [],
+            embedding: [0.1]
+        )
+        context.insert(item)
+        try context.save()
+
+        let deleted = coordinator.deleteItem(id: item.id)
+        XCTAssertTrue(deleted)
+
+        let items = try context.fetch(FetchDescriptor<LongTermMemoryItem>())
+        XCTAssertTrue(items.isEmpty)
+    }
+
     func testProcessMemoryResponseDTODecodesLegacySuggestedTypePayload() throws {
         let json = """
         {
@@ -294,8 +424,10 @@ final class LongTermMemorySaveCoordinatorTests: XCTestCase {
 
 private final class MockMemoryProcessingAPI: MemoryProcessingAPI {
     var results: [Result<ProcessMemoryResponseDTO, Error>] = []
+    var calls: [(text: String, language: String)] = []
 
     func processMemory(text: String, language: String) async throws -> ProcessMemoryResponseDTO {
+        calls.append((text: text, language: language))
         if results.isEmpty {
             return ProcessMemoryResponseDTO(
                 cleanText: text,
