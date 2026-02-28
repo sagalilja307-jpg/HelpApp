@@ -58,7 +58,6 @@ HEALTH_DOMAIN_KEYWORDS: tuple[str, ...] = (
 HEALTH_ACTIVITY_METRICS: set[str] = {
     "step_count",
     "distance",
-    "active_energy",
     "exercise_time",
     "workout",
 }
@@ -94,7 +93,6 @@ def _resolve_health_metric(query: str) -> str:
         ("state_of_mind", ["sinnestillstånd", "sinnestillstand", "state of mind", "mående", "maende"]),
         ("exercise_time", ["träningstid", "traningstid", "exercise time", "hur länge tränade", "hur lange tranade"]),
         ("distance", ["distans", "distance", "gått", "gatt", "walked", "walk"]),
-        ("active_energy", ["aktiv energi", "active energy", "förbränd energi", "forbrand energi"]),
         (
             "workout",
             [
@@ -158,7 +156,7 @@ def _resolve_health_workout_type(query: str, metric: str) -> Optional[str]:
 
 
 def _infer_health_aggregation(metric: str) -> str:
-    if metric in {"step_count", "distance", "active_energy", "exercise_time"}:
+    if metric in {"step_count", "distance", "exercise_time"}:
         return "sum"
     if metric in {"heart_rate", "resting_heart_rate", "hrv", "respiratory_rate", "blood_oxygen"}:
         return "average"

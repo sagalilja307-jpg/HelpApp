@@ -103,7 +103,6 @@ extension PermissionManager {
         let quantities: [HKQuantityTypeIdentifier] = [
             .stepCount,
             .distanceWalkingRunning,
-            .activeEnergyBurned,
             .appleExerciseTime,
         ]
 

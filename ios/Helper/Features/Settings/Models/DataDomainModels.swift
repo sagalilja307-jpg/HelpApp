@@ -113,7 +113,7 @@ enum DomainCatalog {
         footerText: "Data används bara när du frågar.",
         sources: [
             .init(id: .location, title: "Plats", subtitle: "Används för kontext vid behov.", systemPermissionHint: "Platsåtkomst"),
-            .init(id: .healthActivity, title: "Hälsa – Aktivitet", subtitle: "Steg, distans, aktiv energi, träningstid och workouts.", systemPermissionHint: "HealthKit-åtkomst")
+            .init(id: .healthActivity, title: "Hälsa – Aktivitet", subtitle: "Steg, distans, träningstid och workouts.", systemPermissionHint: "HealthKit-åtkomst")
         ],
         sensitiveAccent: false
     )

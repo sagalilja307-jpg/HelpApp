@@ -9,7 +9,6 @@ struct HealthQueryFetcher {
     enum Metric: String {
         case stepCount = "step_count"
         case distance
-        case activeEnergy = "active_energy"
         case exerciseTime = "exercise_time"
         case workout
         case sleep
@@ -161,12 +160,6 @@ private extension HealthQueryFetcher {
                 identifier: .distanceWalkingRunning,
                 unit: .meterUnit(with: .kilo),
                 title: "Distans"
-            )
-        case .activeEnergy:
-            return .init(
-                identifier: .activeEnergyBurned,
-                unit: .kilocalorie(),
-                title: "Aktiv energi"
             )
         case .exerciseTime:
             return .init(
@@ -596,8 +589,6 @@ private extension HealthQueryFetcher {
             return "\(formattedNumber(value, maxFractionDigits: 0)) steg"
         case .distance:
             return "\(formattedNumber(value, maxFractionDigits: 2)) km"
-        case .activeEnergy:
-            return "\(formattedNumber(value, maxFractionDigits: 0)) kcal"
         case .exerciseTime:
             return "\(formattedNumber(value, maxFractionDigits: 0)) min"
         case .heartRate, .restingHeartRate:

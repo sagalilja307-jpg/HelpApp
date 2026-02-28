@@ -7,7 +7,6 @@ import Foundation
 struct HealthMemoryDaySnapshot: Sendable, Equatable {
     let date: Date
     let steps: Int?
-    let activeEnergyKcal: Double?
     let exerciseMinutes: Double?
     let sleepDuration: TimeInterval?
     let mindfulDuration: TimeInterval?
@@ -21,7 +20,6 @@ struct HealthMemoryDaySnapshot: Sendable, Equatable {
 
     var hasAnyData: Bool {
         steps != nil
-            || activeEnergyKcal != nil
             || exerciseMinutes != nil
             || sleepDuration != nil
             || mindfulDuration != nil
@@ -58,9 +56,6 @@ struct HealthMemoryDaySnapshot: Sendable, Equatable {
 
         if let steps {
             lines.append("Steg: \(formattedInt(steps))")
-        }
-        if let activeEnergyKcal {
-            lines.append("Aktiv energi: \(formattedDouble(activeEnergyKcal, fractionDigits: 0)) kcal")
         }
         if let exerciseMinutes {
             lines.append("Träningstid: \(formattedDouble(exerciseMinutes, fractionDigits: 0)) min")
@@ -154,13 +149,6 @@ final class HealthMemorySnapshotService {
             end: dayEnd
         ).map { Int($0.rounded()) }
 
-        async let activeEnergy = cumulativeQuantity(
-            .activeEnergyBurned,
-            unit: .kilocalorie(),
-            start: dayStart,
-            end: dayEnd
-        )
-
         async let exerciseMinutes = cumulativeQuantity(
             .appleExerciseTime,
             unit: .minute(),
@@ -226,7 +214,6 @@ final class HealthMemorySnapshotService {
         return await HealthMemoryDaySnapshot(
             date: dayStart,
             steps: steps,
-            activeEnergyKcal: activeEnergy,
             exerciseMinutes: exerciseMinutes,
             sleepDuration: sleepDuration,
             mindfulDuration: mindfulDuration,
@@ -247,7 +234,6 @@ final class HealthMemorySnapshotService {
         HealthMemoryDaySnapshot(
             date: date,
             steps: nil,
-            activeEnergyKcal: nil,
             exerciseMinutes: nil,
             sleepDuration: nil,
             mindfulDuration: nil,
