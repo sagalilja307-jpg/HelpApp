@@ -186,6 +186,7 @@ private extension QueryPipeline {
         case .files: return .files
         case .location: return .location
         case .mail: return .mail
+        case .health: return .health
         case .notes, .memory:
             return .memory
         case .none:
@@ -252,6 +253,7 @@ private extension QueryPipeline {
         source: QuerySource
     ) -> [QueryResult.Entry] {
         guard !entries.isEmpty else { return entries }
+        if source == .health || source == .location { return entries }
 
         let senderTerms = source == .mail
             ? filterTerms(
@@ -299,6 +301,14 @@ private extension QueryPipeline {
         source: QuerySource,
         timeRange: DateInterval?
     ) -> String {
+        if source == .health {
+            return buildHealthAnswer(
+                plan: plan,
+                collected: collected,
+                timeRange: timeRange
+            )
+        }
+
         let sourceLabel = localizedSource(source)
         let period = formattedPeriod(timeRange)
         let sortedEntries = sortedEntries(
@@ -346,6 +356,7 @@ private extension QueryPipeline {
         case .files: return "filer"
         case .location: return "plats"
         case .mail: return "mejl"
+        case .health: return "hälsa"
         default: return "data"
         }
     }
@@ -361,6 +372,7 @@ private extension QueryPipeline {
         case .photos: return "bilder"
         case .contacts: return "kontakter"
         case .memory: return "minne"
+        case .health: return "hälsa"
         }
     }
 
@@ -480,11 +492,52 @@ private extension QueryPipeline {
             let start = calendar.date(byAdding: .year, value: -20, to: now) ?? now
             let end = calendar.date(byAdding: .year, value: 1, to: now) ?? now
             return normalizedInterval(start: start, end: end)
+        case .health:
+            let start = calendar.date(byAdding: .day, value: -90, to: now) ?? now
+            return normalizedInterval(start: start, end: now)
         default:
             let start = calendar.date(byAdding: .year, value: -2, to: now) ?? now
             let end = calendar.date(byAdding: .year, value: 1, to: now) ?? now
             return normalizedInterval(start: start, end: end)
         }
+    }
+
+    static func buildHealthAnswer(
+        plan: BackendIntentPlanDTO,
+        collected: LocalCollectedResult,
+        timeRange: DateInterval?
+    ) -> String {
+        let entries = collected.entries
+        let period = formattedPeriod(timeRange)
+        let metric = (plan.filters["metric"]?.value as? String) ?? "health"
+        let aggregation = (plan.filters["aggregation"]?.value as? String) ?? ""
+
+        guard !entries.isEmpty else {
+            if let period {
+                return "Jag hittade ingen hälsodata för perioden \(period)."
+            }
+            return "Jag hittade ingen hälsodata."
+        }
+
+        if aggregation == "count" || plan.operation == .count || plan.operation == .exists {
+            let count = entries.count
+            if metric == "workout" {
+                if let period {
+                    return "Du hade \(count) träningspass under perioden \(period)."
+                }
+                return "Du hade \(count) träningspass."
+            }
+            return "Jag hittade \(count) hälsoposter."
+        }
+
+        if let headline = entries.first?.title, !headline.isEmpty {
+            if let period {
+                return "\(headline) (period: \(period))."
+            }
+            return headline
+        }
+
+        return "Jag hittade \(entries.count) hälsoposter."
     }
 
     static func parseAbsoluteRange(_ rawValue: String) -> DateInterval? {

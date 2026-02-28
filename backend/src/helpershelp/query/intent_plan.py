@@ -15,6 +15,7 @@ Domain = Literal[
     "contacts",
     "location",
     "memory",
+    "health",
 ]
 
 Operation = Literal[

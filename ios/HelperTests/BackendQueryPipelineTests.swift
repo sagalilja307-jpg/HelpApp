@@ -121,6 +121,41 @@ final class BackendQueryPipelineTests: XCTestCase {
         XCTAssertEqual(collector.lastSource, .memory)
     }
 
+    func testHealthDomainCollectsViaHealthSource() async throws {
+        let collector = RecordingCollector(
+            stubEntries: [
+                QueryResult.Entry(
+                    id: UUID(),
+                    source: .health,
+                    title: "Steg: 6 432",
+                    body: nil,
+                    date: DateService.shared.now()
+                )
+            ]
+        )
+        let plan = makePlan(
+            domain: .health,
+            operation: .sum,
+            type: .all,
+            value: nil,
+            filters: [
+                "metric": AnyCodable("step_count"),
+                "aggregation": AnyCodable("sum")
+            ]
+        )
+        let pipeline = QueryPipeline(
+            backendQueryService: MockBackendQueryService(response: BackendQueryResponseDTO(intentPlan: plan)),
+            localCollector: collector,
+            accessGate: AllowingAccess()
+        )
+
+        let result = try await pipeline.run(UserQuery(text: "Hur många steg har jag tagit?"))
+
+        XCTAssertEqual(collector.lastSource, .health)
+        XCTAssertEqual(result.entries.count, 1)
+        XCTAssertNotNil(result.timeRange)
+    }
+
     func testMailWithDataIntentCollectsViaMailSource() async throws {
         let collector = RecordingCollector()
         let plan = makePlan(domain: .mail, operation: .count, type: .all, value: nil)

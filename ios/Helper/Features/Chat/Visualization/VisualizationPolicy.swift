@@ -22,6 +22,7 @@ public enum Domain: String {
     case location
     case notes
     case memory
+    case health
 }
 
 public enum Operation: String {
@@ -135,6 +136,9 @@ public struct VisualizationPolicy {
 
         case .contacts:
             return .groupedList
+
+        case .health:
+            return long ? .groupedList : .timeline
         }
     }
 }

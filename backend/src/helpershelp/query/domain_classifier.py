@@ -132,6 +132,16 @@ class DomainClassifier:
                 "Har jag gjort något relaterat till [ämne] nyligen?\n"
                 "Nyckelord: minne, minnen, memory, historik, mönster, sammanfattning, kom ihåg."
             ),
+            "health": (
+                "Domän: hälsa/health. Aktivitet, steg, träning, sömn, puls, HRV, andning, blodsyre, mående.\n"
+                "Typiska frågor:\n"
+                "Hur många steg tog jag igår?\n"
+                "Hur långt gick jag förra veckan?\n"
+                "Hur sov jag inatt?\n"
+                "Hur var min puls idag?\n"
+                "Har jag tränat den här veckan?\n"
+                "Nyckelord: hälsa, steg, träning, workout, sömn, puls, HRV, blodsyre, andning."
+            ),
             "files": (
                 "Domän: filer/dokument. Dokument, mappar, metadata (skapad/ändrad/storlek), sök på namn.\n"
                 "Typiska frågor:\n"
@@ -216,6 +226,24 @@ class DomainClassifier:
             "reminders": ["påminn", "påminnelse", "uppgift", "uppgifter", "todo", "att göra"],
             "notes": ["anteckning", "anteckningar", "notes", "notering"],
             "memory": ["minne", "minnen", "memory", "historik", "mönster", "kom ihåg", "remember"],
+            "health": [
+                "hälsa",
+                "health",
+                "steg",
+                "sömn",
+                "sovit",
+                "puls",
+                "vilopuls",
+                "hrv",
+                "blodsyre",
+                "andning",
+                "träning",
+                "tränat",
+                "workout",
+                "exercise",
+                "mindful",
+                "sinnestillstånd",
+            ],
             "files": ["fil", "filer", "dokument", "pdf", "mapp"],
             "photos": ["bild", "bilder", "foto", "foton", "album", "video", "videor"],
             "contacts": ["kontakt", "kontakter", "telefonnummer", "adressbok"],

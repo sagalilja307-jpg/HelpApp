@@ -144,6 +144,8 @@ final class ChatViewModel {
             return .notes
         case .memory:
             return .memory
+        case .health:
+            return .health
         }
     }
 

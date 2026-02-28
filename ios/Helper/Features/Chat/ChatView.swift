@@ -671,6 +671,8 @@ public struct ChatView: View {
             return "Plats"
         case .mail:
             return "Mejl"
+        case .health:
+            return "Hälsa"
         case .memory:
             return "Minne"
         case .rawEvents:

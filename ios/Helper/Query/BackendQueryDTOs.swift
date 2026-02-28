@@ -51,6 +51,7 @@ enum BackendIntentDomain: String, Codable, Sendable, Equatable {
     case contacts
     case location
     case memory
+    case health
 }
 
 enum BackendIntentMode: String, Codable, Sendable, Equatable {

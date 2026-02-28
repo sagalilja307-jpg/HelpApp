@@ -95,6 +95,7 @@ struct HelperApp: App {
                 sourceConnectionStore: sourceConnectionStore
             )
             let mailQueryFetcher = MailQueryFetcher(memoryService: service)
+            let healthQueryFetcher = HealthQueryFetcher()
             let backendQueryService = BackendQueryAPIService.shared
             let memoryProcessingAPIService = MemoryProcessingAPIService.shared
             let longTermSchema = Schema([
@@ -136,7 +137,7 @@ struct HelperApp: App {
 
                 func isEnabled(_ source: QuerySource) -> Bool {
                     switch source {
-                    case .calendar, .reminders, .contacts, .photos, .files, .location, .mail:
+                    case .calendar, .reminders, .contacts, .photos, .files, .location, .mail, .health:
                         return sourceConnectionStore.isEnabled(source)
                     default:
                         return true
@@ -157,6 +158,7 @@ struct HelperApp: App {
                 let fetcher: QueryDataFetcher
                 let access: QuerySourceAccessing
                 let mailFetcher: MailQueryFetcher
+                let healthFetcher: HealthQueryFetcher
 
                 func collect(
                     source: QuerySource,
@@ -166,6 +168,13 @@ struct HelperApp: App {
                 ) async throws -> LocalCollectedResult {
                     if source == .mail {
                         return try await mailFetcher.collect(
+                            for: intentPlan,
+                            timeRange: timeRange,
+                            userQuery: userQuery
+                        )
+                    }
+                    if source == .health {
+                        return try await healthFetcher.collect(
                             for: intentPlan,
                             timeRange: timeRange,
                             userQuery: userQuery
@@ -252,6 +261,8 @@ struct HelperApp: App {
                             includePhotos: false,
                             includeFiles: false
                         )
+                    case .health:
+                        options = .default
                     case .mail:
                         options = .default
                     }
@@ -273,7 +284,8 @@ struct HelperApp: App {
             let localCollectorAdapter = LocalCollectorAdapter(
                 fetcher: fetcher,
                 access: access,
-                mailFetcher: mailQueryFetcher
+                mailFetcher: mailQueryFetcher,
+                healthFetcher: healthQueryFetcher
             )
 
             self.queryPipeline = QueryPipeline(

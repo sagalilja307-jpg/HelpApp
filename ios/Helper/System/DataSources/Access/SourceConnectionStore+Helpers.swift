@@ -8,6 +8,11 @@ extension SourceConnectionStore {
     static let filesEnabledKey = "helper.stage2.files.enabled"
     static let locationEnabledKey = "helper.stage3.location.enabled"
     static let mailEnabledKey = "helper.stage3.mail.enabled"
+    static let healthEnabledKey = "helper.stage4.health.enabled"
+    static let healthActivityEnabledKey = "helper.stage4.health.activity.enabled"
+    static let healthSleepEnabledKey = "helper.stage4.health.sleep.enabled"
+    static let healthMentalEnabledKey = "helper.stage4.health.mental.enabled"
+    static let healthVitalsEnabledKey = "helper.stage4.health.vitals.enabled"
     static let photosOCREnabledKey = "helper.stage2.photos.ocr.enabled"
     static let filesOCREnabledKey = "helper.stage2.files.ocr.enabled"
     static let filesImportedKey = "helper.stage2.files.has_imported"
@@ -28,6 +33,8 @@ extension SourceConnectionStore {
             return Self.locationEnabledKey
         case .mail:
             return Self.mailEnabledKey
+        case .health:
+            return Self.healthEnabledKey
         default:
             return nil
         }

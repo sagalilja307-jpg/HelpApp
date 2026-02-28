@@ -21,6 +21,164 @@ from helpershelp.query.timeframe_resolver import QueryTimeframeResolver, TimeInt
 from helpershelp.core.time_utils import utcnow_aware
 
 
+HEALTH_DOMAIN_KEYWORDS: tuple[str, ...] = (
+    "hälsa",
+    "halsa",
+    "health",
+    "steg",
+    "step",
+    "steps",
+    "träning",
+    "traning",
+    "tränat",
+    "tranat",
+    "workout",
+    "exercise",
+    "sömn",
+    "somn",
+    "sovit",
+    "sleep",
+    "puls",
+    "hjärtfrekvens",
+    "hjartfrekvens",
+    "hrv",
+    "vilopuls",
+    "andning",
+    "respiratory",
+    "blodsyre",
+    "blood oxygen",
+    "mindful",
+    "sinnestillstånd",
+    "sinnestillstand",
+    "state of mind",
+    "mående",
+    "maende",
+)
+
+HEALTH_ACTIVITY_METRICS: set[str] = {
+    "step_count",
+    "distance",
+    "active_energy",
+    "exercise_time",
+    "workout",
+}
+
+HEALTH_WELLBEING_METRICS: set[str] = {
+    "sleep",
+    "mindful_session",
+    "state_of_mind",
+    "heart_rate",
+    "resting_heart_rate",
+    "hrv",
+    "respiratory_rate",
+    "blood_oxygen",
+}
+
+
+def _looks_like_health_query(query: str) -> bool:
+    q = (query or "").lower()
+    return any(keyword in q for keyword in HEALTH_DOMAIN_KEYWORDS)
+
+
+def _resolve_health_metric(query: str) -> str:
+    q = (query or "").lower()
+
+    metric_map: list[tuple[str, list[str]]] = [
+        ("resting_heart_rate", ["vilopuls", "resting heart rate"]),
+        ("hrv", ["hrv", "hjärtfrekvensvariabilitet", "heart rate variability"]),
+        ("heart_rate", ["hjärtfrekvens", "hjartfrekvens", "heart rate", "puls"]),
+        ("respiratory_rate", ["andningsfrekvens", "andning", "respiratory rate"]),
+        ("blood_oxygen", ["blodsyre", "syrenivå", "syreniva", "blood oxygen", "oxygen saturation"]),
+        ("sleep", ["sömn", "somn", "sovit", "sleep"]),
+        ("mindful_session", ["mindful session", "mindfulness", "mindful"]),
+        ("state_of_mind", ["sinnestillstånd", "sinnestillstand", "state of mind", "mående", "maende"]),
+        ("exercise_time", ["träningstid", "traningstid", "exercise time", "hur länge tränade", "hur lange tranade"]),
+        ("distance", ["distans", "distance", "gått", "gatt", "walked", "walk"]),
+        ("active_energy", ["aktiv energi", "active energy", "förbränd energi", "forbrand energi"]),
+        (
+            "workout",
+            [
+                "träning",
+                "traning",
+                "tränat",
+                "tranat",
+                "tränade",
+                "tranade",
+                "workout",
+                "exercise",
+                "löpning",
+                "lopning",
+                "running",
+                "cykling",
+                "cycling",
+                "styrka",
+                "strength",
+            ],
+        ),
+        ("step_count", ["steg", "step count", "steps"]),
+    ]
+
+    for metric, keywords in metric_map:
+        if any(keyword in q for keyword in keywords):
+            return metric
+
+    return "step_count"
+
+
+def _resolve_health_subdomain(query: str, metric: str) -> str:
+    if metric in HEALTH_ACTIVITY_METRICS:
+        return "activity"
+    if metric in HEALTH_WELLBEING_METRICS:
+        return "wellbeing"
+
+    q = (query or "").lower()
+    activity_words = ["steg", "step", "distans", "distance", "träning", "traning", "workout", "exercise"]
+    wellbeing_words = ["sömn", "somn", "sleep", "puls", "hrv", "blodsyre", "andning", "mindful", "mående", "maende"]
+
+    if any(word in q for word in activity_words):
+        return "activity"
+    if any(word in q for word in wellbeing_words):
+        return "wellbeing"
+
+    return "activity"
+
+
+def _resolve_health_workout_type(query: str, metric: str) -> Optional[str]:
+    if metric != "workout":
+        return None
+
+    q = (query or "").lower()
+    if any(word in q for word in ("running", "run", "löpning", "lopning", "jogg", "jogging")):
+        return "running"
+    if any(word in q for word in ("cycling", "cycle", "cykling", "cykel")):
+        return "cycling"
+    if any(word in q for word in ("strength", "styrka", "gym", "weight", "weights")):
+        return "strength"
+    return None
+
+
+def _infer_health_aggregation(metric: str) -> str:
+    if metric in {"step_count", "distance", "active_energy", "exercise_time"}:
+        return "sum"
+    if metric in {"heart_rate", "resting_heart_rate", "hrv", "respiratory_rate", "blood_oxygen"}:
+        return "average"
+    if metric == "workout":
+        return "count"
+    if metric == "sleep":
+        return "duration"
+    return "count"
+
+
+def _resolve_health_filters(query: str) -> Dict[str, object]:
+    metric = _resolve_health_metric(query)
+    return {
+        "subdomain": _resolve_health_subdomain(query, metric),
+        "metric": metric,
+        "workout_type": _resolve_health_workout_type(query, metric),
+        "aggregation": _infer_health_aggregation(metric),
+    }
+
+
 def _map_relative_n_value(n: int) -> str:
     if n == 7:
         return "7d"
@@ -101,8 +259,30 @@ def _time_scope_from_time_intent(
     )
 
 
-def _operation_for_query(_domain: Domain, query: str) -> Operation:
+def _operation_for_query(
+    domain: Domain, query: str, filters: Optional[Dict[str, object]] = None
+) -> Operation:
     q = (query or "").lower().strip()
+
+    if domain == "health":
+        if (
+            q.startswith("finns det")
+            or q.startswith("finns det någon")
+            or q.startswith("har jag några")
+            or q.startswith("har jag någon")
+        ):
+            return "exists"
+        if q.startswith("när") and any(
+            k in q for k in ("senaste", "senast", "latest", "last")
+        ):
+            return "latest"
+
+        aggregation = str((filters or {}).get("aggregation") or "").lower()
+        if aggregation == "count":
+            return "count"
+        if aggregation in {"sum", "average", "duration"}:
+            return "sum"
+        return "count"
 
     # ---- Exists ----
     if (
@@ -150,6 +330,8 @@ def _operation_for_query(_domain: Domain, query: str) -> Operation:
 def _fallback_domain_for_query(query: str) -> Domain:
     lower_q = (query or "").lower()
 
+    if _looks_like_health_query(lower_q):
+        return "health"
     if any(word in lower_q for word in ("mejl", "mail", "inkorg", "epost", "e-post")):
         return "mail"
     if any(word in lower_q for word in ("anteckning", "anteckningar", "notes", "notering")):
@@ -174,6 +356,7 @@ def _fallback_domain_for_query(query: str) -> Domain:
 def _keyword_domain_for_query(query: str) -> Optional[Domain]:
     lower_q = (query or "").lower()
     explicit_map = {
+        "health": list(HEALTH_DOMAIN_KEYWORDS),
         "calendar": ["kalender", "möte", "möten", "händelse", "bokning", "agenda"],
         "mail": ["mejl", "mail", "inkorg", "epost", "e-post"],
         "reminders": ["påminn", "påminnelse", "uppgift", "uppgifter", "todo", "att göra"],
@@ -402,41 +585,44 @@ class DataIntentRouter:
             elif dom is not None and dom.suggestions:
                 resolved_domain = dom.suggestions[0]
 
-        status = _extract_status(q, resolved_domain)
-        if status is not None:
-            filters["status"] = status
+        if resolved_domain == "health":
+            filters = _resolve_health_filters(q)
+        else:
+            status = _extract_status(q, resolved_domain)
+            if status is not None:
+                filters["status"] = status
 
-        participants = _extract_participants(q)
-        if participants:
-            filters["participants"] = participants
+            participants = _extract_participants(q)
+            if participants:
+                filters["participants"] = participants
 
-        location = _extract_location(q)
-        if location and resolved_domain in {"calendar", "reminders", "location"}:
-            filters["location"] = location
+            location = _extract_location(q)
+            if location and resolved_domain in {"calendar", "reminders", "location"}:
+                filters["location"] = location
 
-        text_contains = _extract_text_contains(q)
-        if text_contains:
-            filters["text_contains"] = text_contains
+            text_contains = _extract_text_contains(q)
+            if text_contains:
+                filters["text_contains"] = text_contains
 
-        tags = _extract_tags(q)
-        if tags:
-            filters["tags"] = tags
+            tags = _extract_tags(q)
+            if tags:
+                filters["tags"] = tags
 
-        priority = _extract_priority(q)
-        if priority and resolved_domain in {"reminders", "mail"}:
-            filters["priority"] = priority
+            priority = _extract_priority(q)
+            if priority and resolved_domain in {"reminders", "mail"}:
+                filters["priority"] = priority
 
-        has_attachment = _extract_has_attachment(q)
-        if has_attachment is not None and resolved_domain in {"mail", "files"}:
-            filters["has_attachment"] = has_attachment
+            has_attachment = _extract_has_attachment(q)
+            if has_attachment is not None and resolved_domain in {"mail", "files"}:
+                filters["has_attachment"] = has_attachment
 
-        source_account = _extract_source_account(q)
-        if source_account and resolved_domain == "mail":
-            filters["source_account"] = source_account
+            source_account = _extract_source_account(q)
+            if source_account and resolved_domain == "mail":
+                filters["source_account"] = source_account
 
         timeframe = self.time_policy.apply(resolved_domain, parsed)
         time_scope = _time_scope_from_time_intent(parsed.time_intent, timeframe)
-        operation = _operation_for_query(resolved_domain, q)
+        operation = _operation_for_query(resolved_domain, q, filters)
 
         plan = IntentPlanDTO(
             domain=resolved_domain,

@@ -19,11 +19,39 @@ final class SourceConnectionStore: SourceConnectionStoring, @unchecked Sendable 
     }
 
     func isEnabled(_ source: QuerySource) -> Bool {
+        if source == .photos {
+            return true
+        }
+
+        if source == .health {
+            let aggregateEnabled = defaults.bool(forKey: Self.healthEnabledKey)
+            let anyHealthSourceEnabled = defaults.bool(forKey: Self.healthActivityEnabledKey)
+                || defaults.bool(forKey: Self.healthSleepEnabledKey)
+                || defaults.bool(forKey: Self.healthMentalEnabledKey)
+                || defaults.bool(forKey: Self.healthVitalsEnabledKey)
+            return aggregateEnabled || anyHealthSourceEnabled
+        }
+
         guard let key = enabledKey(for: source) else { return false }
         return defaults.bool(forKey: key)
     }
 
     func setEnabled(_ enabled: Bool, for source: QuerySource) {
+        if source == .photos {
+            // Photos source is always on in current product rules.
+            defaults.set(true, forKey: Self.photosEnabledKey)
+            return
+        }
+
+        if source == .health {
+            defaults.set(enabled, forKey: Self.healthEnabledKey)
+            defaults.set(enabled, forKey: Self.healthActivityEnabledKey)
+            defaults.set(enabled, forKey: Self.healthSleepEnabledKey)
+            defaults.set(enabled, forKey: Self.healthMentalEnabledKey)
+            defaults.set(enabled, forKey: Self.healthVitalsEnabledKey)
+            return
+        }
+
         guard let key = enabledKey(for: source) else { return }
         defaults.set(enabled, forKey: key)
     }

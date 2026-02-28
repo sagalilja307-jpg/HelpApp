@@ -11,6 +11,9 @@ import Photos
 #if canImport(CoreLocation)
 import CoreLocation
 #endif
+#if canImport(HealthKit)
+@preconcurrency import HealthKit
+#endif
 
 // ===============================================================
 // File: Helper/Core/Query/QuerySourceAccess.swift
@@ -27,6 +30,7 @@ enum QuerySource: String, Sendable, Codable {
     case photos
     case files
     case location
+    case health
 }
 
 protocol QuerySourceAccessing: Sendable {
@@ -78,6 +82,8 @@ struct QuerySourceAccess: QuerySourceAccessing, Sendable {
             return sourceConnectionStore.isEnabled(.files) && sourceConnectionStore.hasImportedFiles()
         case .location:
             return sourceConnectionStore.isEnabled(.location) && locationAuthorized()
+        case .health:
+            return sourceConnectionStore.isEnabled(.health) && healthAuthorized()
         }
     }
 
@@ -144,6 +150,11 @@ struct QuerySourceAccess: QuerySourceAccessing, Sendable {
                 return "Plats är inte aktiverad som datakälla."
             }
             return "Jag kan inte läsa plats – du har inte godkänt åtkomst."
+        case .health:
+            if !sourceConnectionStore.isEnabled(.health) {
+                return "Hälsa är inte aktiverad som datakälla."
+            }
+            return "Jag kan inte läsa hälsodata – kontrollera Health-behörighet i Inställningar."
         }
     }
 }
@@ -224,6 +235,14 @@ private extension QuerySourceAccess {
         }
 #else
         return false
+#endif
+    }
+
+    func healthAuthorized() -> Bool {
+#if canImport(HealthKit)
+        HKHealthStore.isHealthDataAvailable()
+#else
+        false
 #endif
     }
 }
