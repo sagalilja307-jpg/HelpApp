@@ -33,7 +33,7 @@ struct MemorySourcesSettingsView: View {
             }
 
             Section {
-                Text("Korttidsminnet visar bara de källor du själv valt. Hälsa är inte aktiverat ännu och visas därför som oaktiverad.")
+                Text("Korttidsminnet följer dina aktiva datakällor. Om Mail eller Hälsa är på i Datakällor kan de även aktiveras här.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -100,7 +100,7 @@ private struct MemorySourceToggleRow: View {
                 .foregroundStyle(.secondary)
 
             if !isSupported {
-                Text("Den här källan stöds inte på din enhet just nu.")
+                Text("Den här källan stöds inte på den här enheten just nu.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }

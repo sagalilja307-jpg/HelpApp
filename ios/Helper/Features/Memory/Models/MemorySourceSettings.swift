@@ -31,7 +31,7 @@ enum MemorySourceID: String, CaseIterable, Identifiable {
         case .mail:
             return "Visar olästa mejl och senaste flöde."
         case .health:
-            return "Kommer i en senare version."
+            return "Använder hälsokällor du aktiverat i Datakällor."
         }
     }
 
@@ -71,14 +71,13 @@ enum MemoryPermissionState: String {
 
 @MainActor
 final class MemorySourceSettings: ObservableObject {
-    private enum Keys {
-        static let calendarEnabled = "helper.memory.calendar.enabled"
-        static let remindersEnabled = "helper.memory.reminders.enabled"
-        static let mailEnabled = "helper.memory.mail.enabled"
-        static let healthEnabled = "helper.memory.health.enabled"
-    }
-
-    private let defaults: UserDefaults
+    private let dataSettingsStore: DataSettingsStore
+    private let healthSources: [DataSourceID] = [
+        .healthActivity,
+        .sleep,
+        .mentalHealth,
+        .vitals
+    ]
 
     @Published private(set) var calendarEnabled: Bool
     @Published private(set) var remindersEnabled: Bool
@@ -87,21 +86,26 @@ final class MemorySourceSettings: ObservableObject {
 
     @Published private(set) var permissionStates: [MemorySourceID: MemoryPermissionState]
 
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        self.calendarEnabled = defaults.bool(forKey: Keys.calendarEnabled)
-        self.remindersEnabled = defaults.bool(forKey: Keys.remindersEnabled)
-        self.mailEnabled = defaults.bool(forKey: Keys.mailEnabled)
+    init(
+        defaults: UserDefaults = .standard,
+        sourceConnectionStore: SourceConnectionStore = .shared
+    ) {
+        self.dataSettingsStore = DataSettingsStore(
+            sourceConnectionStore: sourceConnectionStore,
+            defaults: defaults
+        )
+        self.calendarEnabled = false
+        self.remindersEnabled = false
+        self.mailEnabled = false
         self.healthEnabled = false
-
-        self.permissionStates = [.health: .unsupported]
-        for source in MemorySourceID.allCases where source != .health {
-            self.permissionStates[source] = .unknown
-        }
+        self.permissionStates = Dictionary(
+            uniqueKeysWithValues: MemorySourceID.allCases.map { ($0, .unknown) }
+        )
+        syncFromDataSettingsStore()
     }
 
     var anyEnabled: Bool {
-        calendarEnabled || remindersEnabled || mailEnabled
+        calendarEnabled || remindersEnabled || mailEnabled || healthEnabled
     }
 
     var hasDeniedEnabledSources: Bool {
@@ -111,7 +115,16 @@ final class MemorySourceSettings: ObservableObject {
     }
 
     func isSupported(_ source: MemorySourceID) -> Bool {
-        source != .health
+        switch source {
+        case .calendar:
+            return dataSettingsStore.isSourceSupported(.calendar)
+        case .reminders:
+            return dataSettingsStore.isSourceSupported(.reminders)
+        case .mail:
+            return dataSettingsStore.isSourceSupported(.mail)
+        case .health:
+            return healthSources.contains { dataSettingsStore.isSourceSupported($0) }
+        }
     }
 
     func isEnabled(_ source: MemorySourceID) -> Bool {
@@ -134,95 +147,81 @@ final class MemorySourceSettings: ObservableObject {
     @discardableResult
     func setSource(_ source: MemorySourceID, enabled: Bool) async -> Bool {
         guard isSupported(source) else {
-            setEnabled(source, enabled: false)
             permissionStates[source] = .unsupported
+            syncFromDataSettingsStore()
             return false
-        }
-
-        guard enabled else {
-            setEnabled(source, enabled: false)
-            await refreshPermissionStatus(for: source)
-            return true
         }
 
         switch source {
+        case .calendar:
+            let didEnable = await dataSettingsStore.setSource(.calendar, enabled: enabled)
+            syncFromDataSettingsStore()
+            return enabled ? didEnable : true
+        case .reminders:
+            let didEnable = await dataSettingsStore.setSource(.reminders, enabled: enabled)
+            syncFromDataSettingsStore()
+            return enabled ? didEnable : true
         case .mail:
-            let isGranted = OAuthTokenManager.shared.hasValidToken()
-            permissionStates[source] = isGranted ? .granted : .unknown
-            setEnabled(source, enabled: isGranted)
-            return isGranted
-        case .calendar, .reminders:
-            let permissionType: AppPermissionType = source == .calendar ? .calendar : .reminder
-            var status = await PermissionManager.shared.status(for: permissionType)
-            if status == .notDetermined {
-                do {
-                    status = try await PermissionManager.shared.requestAccess(for: permissionType)
-                } catch {
-                    status = .denied
-                }
-            }
-
-            let mapped = map(status)
-            permissionStates[source] = mapped
-            let granted = mapped == .granted
-            setEnabled(source, enabled: granted)
-            return granted
+            let didEnable = await dataSettingsStore.setSource(.mail, enabled: enabled)
+            syncFromDataSettingsStore()
+            return enabled ? didEnable : true
         case .health:
-            return false
+            if enabled {
+                var enabledAny = false
+                for healthSource in healthSources where dataSettingsStore.isSourceSupported(healthSource) {
+                    let didEnable = await dataSettingsStore.setSource(healthSource, enabled: true)
+                    enabledAny = enabledAny || didEnable
+                }
+                syncFromDataSettingsStore()
+                return enabledAny
+            } else {
+                for healthSource in healthSources where dataSettingsStore.isSourceSupported(healthSource) {
+                    _ = await dataSettingsStore.setSource(healthSource, enabled: false)
+                }
+                syncFromDataSettingsStore()
+                return true
+            }
         }
     }
 
     func refreshPermissionStatuses() async {
-        for source in MemorySourceID.allCases {
-            await refreshPermissionStatus(for: source)
-            if !isSupported(source) {
-                setEnabled(source, enabled: false)
-                continue
-            }
-            if permissionState(for: source) != .granted {
-                setEnabled(source, enabled: false)
-            }
-        }
+        await dataSettingsStore.refreshPermissionStatuses()
+        syncFromDataSettingsStore()
     }
 
-    private func refreshPermissionStatus(for source: MemorySourceID) async {
-        guard isSupported(source) else {
-            permissionStates[source] = .unsupported
-            return
-        }
+    private func syncFromDataSettingsStore() {
+        calendarEnabled = dataSettingsStore.isSourceEnabled(.calendar)
+        remindersEnabled = dataSettingsStore.isSourceEnabled(.reminders)
+        mailEnabled = dataSettingsStore.isSourceEnabled(.mail)
+        healthEnabled = healthSources.contains { dataSettingsStore.isSourceEnabled($0) }
 
-        switch source {
-        case .calendar:
-            permissionStates[source] = map(await PermissionManager.shared.status(for: .calendar))
-        case .reminders:
-            permissionStates[source] = map(await PermissionManager.shared.status(for: .reminder))
-        case .mail:
-            permissionStates[source] = OAuthTokenManager.shared.hasValidToken() ? .granted : .unknown
-        case .health:
-            permissionStates[source] = .unsupported
-        }
+        permissionStates[.calendar] = map(dataSettingsStore.permissionState(for: .calendar))
+        permissionStates[.reminders] = map(dataSettingsStore.permissionState(for: .reminders))
+        permissionStates[.mail] = map(dataSettingsStore.permissionState(for: .mail))
+        permissionStates[.health] = aggregateHealthPermissionState()
     }
 
-    private func setEnabled(_ source: MemorySourceID, enabled: Bool) {
-        switch source {
-        case .calendar:
-            calendarEnabled = enabled
-            defaults.set(enabled, forKey: Keys.calendarEnabled)
-        case .reminders:
-            remindersEnabled = enabled
-            defaults.set(enabled, forKey: Keys.remindersEnabled)
-        case .mail:
-            mailEnabled = enabled
-            defaults.set(enabled, forKey: Keys.mailEnabled)
-        case .health:
-            healthEnabled = false
-            defaults.set(false, forKey: Keys.healthEnabled)
+    private func aggregateHealthPermissionState() -> MemoryPermissionState {
+        let supportedHealthSources = healthSources.filter { dataSettingsStore.isSourceSupported($0) }
+        guard !supportedHealthSources.isEmpty else { return .unsupported }
+
+        let enabledHealthSources = supportedHealthSources.filter { dataSettingsStore.isSourceEnabled($0) }
+        guard !enabledHealthSources.isEmpty else { return .unknown }
+
+        let states = enabledHealthSources.map { dataSettingsStore.permissionState(for: $0) }
+
+        if states.contains(.denied) {
+            return .denied
         }
+        if states.contains(.granted) {
+            return .granted
+        }
+        return .unknown
     }
 
-    private func map(_ status: AppPermissionStatus) -> MemoryPermissionState {
+    private func map(_ status: DataPermissionState) -> MemoryPermissionState {
         switch status {
-        case .notDetermined:
+        case .unknown:
             return .unknown
         case .granted:
             return .granted

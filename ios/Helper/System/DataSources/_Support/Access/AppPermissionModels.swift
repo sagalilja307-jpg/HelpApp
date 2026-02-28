@@ -8,6 +8,10 @@ enum AppPermissionType {
     case contacts
     case photos
     case location
+    case healthActivity
+    case healthSleep
+    case healthMental
+    case healthVitals
 }
 
 enum AppPermissionStatus {

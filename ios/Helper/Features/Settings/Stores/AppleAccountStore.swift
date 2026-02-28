@@ -131,7 +131,11 @@ final class AppleAccountStore: ObservableObject {
             self.lastErrorMessage = nil
 
         case .failure(let error):
-            lastErrorMessage = error.localizedDescription
+            guard let message = Self.authorizationErrorMessage(from: error) else {
+                lastErrorMessage = nil
+                return
+            }
+            lastErrorMessage = message
         }
     }
 
@@ -175,5 +179,26 @@ final class AppleAccountStore: ObservableObject {
         @unknown default:
             return .unknown
         }
+    }
+
+    private static func authorizationErrorMessage(from error: Error) -> String? {
+        if let authError = error as? ASAuthorizationError {
+            switch authError.code {
+            case .canceled:
+                return nil
+            case .failed, .invalidResponse, .notHandled, .unknown:
+                break
+            @unknown default:
+                break
+            }
+        }
+
+        let nsError = error as NSError
+        if nsError.domain == ASAuthorizationError.errorDomain && nsError.code == ASAuthorizationError.Code.unknown.rawValue {
+            return "Inloggningen kunde inte slutföras. Kontrollera att Sign in with Apple är aktiverat i Signing & Capabilities för appen."
+        }
+
+        let message = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        return message.isEmpty ? "Inloggningen kunde inte slutföras." : message
     }
 }

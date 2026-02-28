@@ -5,6 +5,10 @@ import Combine
 @MainActor
 final class DataSettingsStore: ObservableObject {
     private static let cameraEnabledKey = "helper.stage3.camera.enabled"
+    private static let healthActivityEnabledKey = "helper.stage4.health.activity.enabled"
+    private static let sleepEnabledKey = "helper.stage4.health.sleep.enabled"
+    private static let mentalHealthEnabledKey = "helper.stage4.health.mental.enabled"
+    private static let vitalsEnabledKey = "helper.stage4.health.vitals.enabled"
 
     private let sourceConnectionStore: SourceConnectionStore
     private let defaults: UserDefaults
@@ -38,7 +42,9 @@ final class DataSettingsStore: ObservableObject {
         switch source {
         case .calendar, .reminders, .contacts, .mail, .files, .photos, .camera, .location:
             return true
-        case .notifications, .healthActivity, .sleep, .mentalHealth, .vitals:
+        case .healthActivity, .sleep, .mentalHealth, .vitals:
+            return PermissionManager.shared.isHealthDataAvailable
+        case .notifications:
             return false
         }
     }
@@ -142,6 +148,14 @@ final class DataSettingsStore: ObservableObject {
                 nextSourceEnabled[source] = sourceConnectionStore.isEnabled(querySource)
             } else if source == .camera {
                 nextSourceEnabled[source] = defaults.bool(forKey: Self.cameraEnabledKey)
+            } else if source == .healthActivity {
+                nextSourceEnabled[source] = defaults.bool(forKey: Self.healthActivityEnabledKey)
+            } else if source == .sleep {
+                nextSourceEnabled[source] = defaults.bool(forKey: Self.sleepEnabledKey)
+            } else if source == .mentalHealth {
+                nextSourceEnabled[source] = defaults.bool(forKey: Self.mentalHealthEnabledKey)
+            } else if source == .vitals {
+                nextSourceEnabled[source] = defaults.bool(forKey: Self.vitalsEnabledKey)
             } else {
                 nextSourceEnabled[source] = false
             }
@@ -182,6 +196,20 @@ final class DataSettingsStore: ObservableObject {
 
         if source == .camera {
             defaults.set(enabled, forKey: Self.cameraEnabledKey)
+            return
+        }
+
+        switch source {
+        case .healthActivity:
+            defaults.set(enabled, forKey: Self.healthActivityEnabledKey)
+        case .sleep:
+            defaults.set(enabled, forKey: Self.sleepEnabledKey)
+        case .mentalHealth:
+            defaults.set(enabled, forKey: Self.mentalHealthEnabledKey)
+        case .vitals:
+            defaults.set(enabled, forKey: Self.vitalsEnabledKey)
+        default:
+            break
         }
     }
 
@@ -244,7 +272,15 @@ final class DataSettingsStore: ObservableObject {
             return .camera
         case .location:
             return .location
-        case .mail, .files, .notifications, .healthActivity, .sleep, .mentalHealth, .vitals:
+        case .healthActivity:
+            return .healthActivity
+        case .sleep:
+            return .healthSleep
+        case .mentalHealth:
+            return .healthMental
+        case .vitals:
+            return .healthVitals
+        case .mail, .files, .notifications:
             return nil
         }
     }

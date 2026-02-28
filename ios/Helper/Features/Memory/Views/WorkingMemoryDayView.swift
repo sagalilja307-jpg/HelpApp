@@ -126,6 +126,9 @@ struct WorkingMemoryDayView: View {
         .onChange(of: settings.mailEnabled) { _, _ in
             Task { await reload() }
         }
+        .onChange(of: settings.healthEnabled) { _, _ in
+            Task { await reload() }
+        }
         .animation(.snappy, value: dayData?.events.count ?? 0)
     }
 

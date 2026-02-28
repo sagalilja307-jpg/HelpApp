@@ -64,6 +64,9 @@ struct ShortTermMemoryView: View {
         .onChange(of: settings.mailEnabled) { _, _ in
             Task { await coordinator.refresh(using: settings) }
         }
+        .onChange(of: settings.healthEnabled) { _, _ in
+            Task { await coordinator.refresh(using: settings) }
+        }
         .onChange(of: scenePhase) { _, newValue in
             guard newValue == .active else { return }
             Task {

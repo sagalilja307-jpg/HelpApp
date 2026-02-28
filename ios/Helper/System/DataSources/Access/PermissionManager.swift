@@ -2,6 +2,9 @@ import Foundation
 import EventKit
 import AVFoundation
 import UserNotifications
+#if canImport(HealthKit)
+@preconcurrency import HealthKit
+#endif
 
 #if canImport(CoreLocation)
 @preconcurrency import CoreLocation
@@ -15,6 +18,9 @@ final class PermissionManager: NSObject {
     let eventStore = EKEventStore()
     let locationManager = CLLocationManager()
     var locationContinuation: CheckedContinuation<AppPermissionStatus, Never>?
+#if canImport(HealthKit)
+    let healthStore = HKHealthStore()
+#endif
 
     private override init() {
         super.init()
@@ -54,6 +60,8 @@ final class PermissionManager: NSObject {
 
         case .location:
             return mapLocationStatus(locationManager.authorizationStatus)
+        case .healthActivity, .healthSleep, .healthMental, .healthVitals:
+            return await healthPermissionStatus(for: type)
         }
     }
 
@@ -89,6 +97,8 @@ final class PermissionManager: NSObject {
 
             case .location:
                 status = await requestLocationAccess()
+            case .healthActivity, .healthSleep, .healthMental, .healthVitals:
+                status = try await requestHealthAccess(for: type)
             }
             DataSourceDebug.success(op)
             return status

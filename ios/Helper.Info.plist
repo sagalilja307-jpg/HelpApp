@@ -51,6 +51,8 @@
 	<string>Helper använder kameran för att skanna dokument och text du väljer.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>Helper behöver tillgång till kontakter för att kunna svara med kontaktbaserad kontext.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Appen kan läsa aktivitet, sömn, mental hälsa och vissa vitalparametrar om du aktiverar det. Informationen används endast när du själv begär den.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Helper behöver lokal nätverksåtkomst för att ansluta till backend på samma Wi-Fi.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

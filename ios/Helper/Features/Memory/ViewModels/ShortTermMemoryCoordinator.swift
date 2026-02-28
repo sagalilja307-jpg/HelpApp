@@ -52,6 +52,7 @@ final class ShortTermMemoryCoordinator: ObservableObject {
     @Published private(set) var isLoading = false
 
     private let calendar = Calendar.current
+    private let gmailOAuthService = GmailOAuthService()
     private var cachedEvents: [CalendarEventLite] = []
     private var cachedReminders: [ReminderItem] = []
     private var cachedMessages: [GmailMessageSummary] = []
@@ -144,7 +145,7 @@ final class ShortTermMemoryCoordinator: ObservableObject {
         }
 
         let bodyLines: [String] = settings.healthEnabled
-            ? ["Hälsodata kommer i en senare version."]
+            ? ["Hälsakällor är aktiverade. Dagssammanställning för hälsa kommer i nästa steg."]
             : []
 
         return WorkingMemoryDayData(
@@ -177,13 +178,28 @@ final class ShortTermMemoryCoordinator: ObservableObject {
     private func fetchMessagesIfEnabled(_ enabled: Bool) async -> [GmailMessageSummary] {
         guard enabled else { return [] }
 
-        guard let token = try? OAuthTokenManager.shared.loadStoredToken(), !token.isExpired else {
+        guard let token = try? OAuthTokenManager.shared.loadStoredToken() else {
             return []
+        }
+
+        let accessToken: String
+        if token.isExpired {
+            guard let refreshToken = token.refreshToken, !refreshToken.isEmpty else {
+                return []
+            }
+            do {
+                let refreshed = try await gmailOAuthService.refreshAuthorization(refreshToken: refreshToken)
+                accessToken = refreshed.accessToken
+            } catch {
+                return []
+            }
+        } else {
+            accessToken = token.accessToken
         }
 
         do {
             return try await MailSyncService.shared.fetchMessages(
-                accessToken: token.accessToken,
+                accessToken: accessToken,
                 gmailQuery: nil,
                 maxResults: 50
             )
@@ -213,7 +229,7 @@ final class ShortTermMemoryCoordinator: ObservableObject {
         ].compactMap { $0 }
 
         let line2 = settings.healthEnabled
-            ? "Kropp: Kommer i senare version"
+            ? "Kropp: Källa aktiv"
             : "Kropp: —"
 
         return MemoryOverview(
@@ -325,7 +341,7 @@ final class ShortTermMemoryCoordinator: ObservableObject {
             date: date,
             nextText: nextText,
             chips: chips.isEmpty ? ["—"] : chips,
-            bodyLine: settings.healthEnabled ? "Kropp: Kommer snart" : "Kropp: —",
+            bodyLine: settings.healthEnabled ? "Kropp: Källa aktiv" : "Kropp: —",
             updatedText: "Uppdaterad \(Date().formatted(date: .omitted, time: .shortened))"
         )
     }

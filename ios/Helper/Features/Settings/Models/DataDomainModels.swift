@@ -113,7 +113,7 @@ enum DomainCatalog {
         footerText: "Data används bara när du frågar.",
         sources: [
             .init(id: .location, title: "Plats", subtitle: "Används för kontext vid behov.", systemPermissionHint: "Platsåtkomst"),
-            .init(id: .healthActivity, title: "Hälsa – Aktivitet", subtitle: "Kommer i en senare version.", systemPermissionHint: "HealthKit-åtkomst")
+            .init(id: .healthActivity, title: "Hälsa – Aktivitet", subtitle: "Steg, distans, aktiv energi, träningstid och workouts.", systemPermissionHint: "HealthKit-åtkomst")
         ],
         sensitiveAccent: false
     )
@@ -126,9 +126,9 @@ enum DomainCatalog {
         domainToggleSubtitle: "Innehåller känslig information.",
         footerText: "Du styr alltid åtkomsten.",
         sources: [
-            .init(id: .sleep, title: "Sömn", subtitle: "Kommer i en senare version.", systemPermissionHint: "HealthKit-åtkomst"),
-            .init(id: .mentalHealth, title: "Mental hälsa", subtitle: "Kommer i en senare version.", systemPermissionHint: "HealthKit-åtkomst"),
-            .init(id: .vitals, title: "Vitalparametrar", subtitle: "Kommer i en senare version.", systemPermissionHint: "HealthKit-åtkomst")
+            .init(id: .sleep, title: "Sömn", subtitle: "Läser sömnanalys från Health.", systemPermissionHint: "HealthKit-åtkomst"),
+            .init(id: .mentalHealth, title: "Mental hälsa", subtitle: "Mindful sessions och state of mind.", systemPermissionHint: "HealthKit-åtkomst"),
+            .init(id: .vitals, title: "Vitalparametrar", subtitle: "Puls, vilopuls, HRV, andning och syremättnad.", systemPermissionHint: "HealthKit-åtkomst")
         ],
         sensitiveAccent: true
     )
