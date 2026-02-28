@@ -75,7 +75,7 @@ struct WorkingMemoryDayView: View {
                     }
 
                     if settings.healthEnabled {
-                        section(title: "Kropp", systemImage: "heart") {
+                        section(title: "Hälsa", systemImage: "heart") {
                             if dayData.bodyLines.isEmpty {
                                 ContentUnavailableView("Ingen data", systemImage: "heart.slash")
                             } else {
@@ -151,7 +151,7 @@ struct WorkingMemoryDayView: View {
                 if settings.calendarEnabled { IOS26Style.badge("Kalender", systemImage: "calendar", prominence: .secondary) }
                 if settings.remindersEnabled { IOS26Style.badge("Påminnelser", systemImage: "checklist", prominence: .secondary) }
                 if settings.mailEnabled { IOS26Style.badge("Mail", systemImage: "envelope", prominence: .secondary) }
-                if settings.healthEnabled { IOS26Style.badge("Kropp", systemImage: "heart", prominence: .sensitive) }
+                if settings.healthEnabled { IOS26Style.badge("Hälsa", systemImage: "heart", prominence: .sensitive) }
             }
             .padding(.top, 2)
         }

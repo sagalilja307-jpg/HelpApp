@@ -53,9 +53,11 @@ final class ShortTermMemoryCoordinator: ObservableObject {
 
     private let calendar = Calendar.current
     private let gmailOAuthService = GmailOAuthService()
+    private let healthSnapshotService = HealthMemorySnapshotService.shared
     private var cachedEvents: [CalendarEventLite] = []
     private var cachedReminders: [ReminderItem] = []
     private var cachedMessages: [GmailMessageSummary] = []
+    private var cachedHealthSnapshots: [Date: HealthMemoryDaySnapshot] = [:]
     private var cacheDate: Date?
 
     func refresh(using settings: MemorySourceSettings) async {
@@ -75,6 +77,7 @@ final class ShortTermMemoryCoordinator: ObservableObject {
             cachedEvents = []
             cachedReminders = []
             cachedMessages = []
+            cachedHealthSnapshots = [:]
             cacheDate = Date()
             return
         }
@@ -92,17 +95,31 @@ final class ShortTermMemoryCoordinator: ObservableObject {
         )
         async let remindersTask = fetchRemindersIfEnabled(settings.remindersEnabled)
         async let mailTask = fetchMessagesIfEnabled(settings.mailEnabled)
+        async let healthTask = fetchHealthSnapshotsIfEnabled(
+            settings.healthEnabled,
+            from: startOfToday,
+            days: 7
+        )
 
         let events = await eventsTask
         let reminders = await remindersTask
         let messages = await mailTask
+        let healthSnapshots = await healthTask
 
         cachedEvents = events
         cachedReminders = reminders
         cachedMessages = messages
+        cachedHealthSnapshots = healthSnapshots
         cacheDate = now
 
-        overview = buildOverview(now: now, settings: settings, events: events, reminders: reminders, messages: messages)
+        overview = buildOverview(
+            now: now,
+            settings: settings,
+            events: events,
+            reminders: reminders,
+            messages: messages,
+            todayHealthSnapshot: healthSnapshots[startOfToday]
+        )
         nextSixHours = buildNextSixHours(now: now, settings: settings, events: events, reminders: reminders)
         daySummaries = buildDaySummaries(
             from: startOfToday,
@@ -110,7 +127,8 @@ final class ShortTermMemoryCoordinator: ObservableObject {
             settings: settings,
             events: events,
             reminders: reminders,
-            messages: messages
+            messages: messages,
+            healthSnapshots: healthSnapshots
         )
     }
 
@@ -144,8 +162,17 @@ final class ShortTermMemoryCoordinator: ObservableObject {
             dayMessages = []
         }
 
+        let dayKey = calendar.startOfDay(for: date)
+        var healthSnapshot = cachedHealthSnapshots[dayKey]
+        if settings.healthEnabled, healthSnapshot == nil {
+            healthSnapshot = await healthSnapshotService.fetchSnapshot(for: date, calendar: calendar)
+            if let healthSnapshot {
+                cachedHealthSnapshots[dayKey] = healthSnapshot
+            }
+        }
+
         let bodyLines: [String] = settings.healthEnabled
-            ? ["Hälsakällor är aktiverade. Dagssammanställning för hälsa kommer i nästa steg."]
+            ? (healthSnapshot?.detailLines ?? ["Ingen hälsodata för dagen ännu."])
             : []
 
         return WorkingMemoryDayData(
@@ -208,12 +235,31 @@ final class ShortTermMemoryCoordinator: ObservableObject {
         }
     }
 
+    private func fetchHealthSnapshotsIfEnabled(
+        _ enabled: Bool,
+        from startOfDay: Date,
+        days: Int
+    ) async -> [Date: HealthMemoryDaySnapshot] {
+        guard enabled else { return [:] }
+
+        var snapshots: [Date: HealthMemoryDaySnapshot] = [:]
+        for offset in 0..<days {
+            guard let day = calendar.date(byAdding: .day, value: offset, to: startOfDay) else {
+                continue
+            }
+            let key = calendar.startOfDay(for: day)
+            snapshots[key] = await healthSnapshotService.fetchSnapshot(for: day, calendar: calendar)
+        }
+        return snapshots
+    }
+
     private func buildOverview(
         now: Date,
         settings: MemorySourceSettings,
         events: [CalendarEventLite],
         reminders: [ReminderItem],
-        messages: [GmailMessageSummary]
+        messages: [GmailMessageSummary],
+        todayHealthSnapshot: HealthMemoryDaySnapshot?
     ) -> MemoryOverview {
         let todayEvents = events.filter { calendar.isDate($0.start, inSameDayAs: now) }
         let todayDueReminders = reminders.filter { reminder in
@@ -228,9 +274,16 @@ final class ShortTermMemoryCoordinator: ObservableObject {
             settings.mailEnabled ? "\(unread) olästa mail" : nil
         ].compactMap { $0 }
 
-        let line2 = settings.healthEnabled
-            ? "Kropp: Källa aktiv"
-            : "Kropp: —"
+        let line2: String
+        if settings.healthEnabled {
+            if let todayHealthSnapshot {
+                line2 = "Hälsa: \(todayHealthSnapshot.overviewLine)"
+            } else {
+                line2 = "Hälsa: Ingen hälsodata ännu"
+            }
+        } else {
+            line2 = "Hälsa: —"
+        }
 
         return MemoryOverview(
             title: "Idag",
@@ -289,7 +342,8 @@ final class ShortTermMemoryCoordinator: ObservableObject {
         settings: MemorySourceSettings,
         events: [CalendarEventLite],
         reminders: [ReminderItem],
-        messages: [GmailMessageSummary]
+        messages: [GmailMessageSummary],
+        healthSnapshots: [Date: HealthMemoryDaySnapshot]
     ) -> [MemoryDaySummary] {
         (0..<7).compactMap { offset in
             guard let day = calendar.date(byAdding: .day, value: offset, to: startOfToday) else {
@@ -301,7 +355,8 @@ final class ShortTermMemoryCoordinator: ObservableObject {
                 settings: settings,
                 events: events,
                 reminders: reminders,
-                messages: messages
+                messages: messages,
+                healthSnapshot: healthSnapshots[calendar.startOfDay(for: day)]
             )
         }
     }
@@ -312,7 +367,8 @@ final class ShortTermMemoryCoordinator: ObservableObject {
         settings: MemorySourceSettings,
         events: [CalendarEventLite],
         reminders: [ReminderItem],
-        messages: [GmailMessageSummary]
+        messages: [GmailMessageSummary],
+        healthSnapshot: HealthMemoryDaySnapshot?
     ) -> MemoryDaySummary {
         let dayEvents = settings.calendarEnabled
             ? events.filter { calendar.isDate($0.start, inSameDayAs: date) }
@@ -331,17 +387,43 @@ final class ShortTermMemoryCoordinator: ObservableObject {
 
         let nextText = nextTextForDay(date: date, now: now, events: dayEvents, reminders: dayReminders)
 
+        let healthChip: String? = {
+            guard settings.healthEnabled else { return nil }
+            if let steps = healthSnapshot?.steps {
+                return "Steg \(steps)"
+            }
+            if let workouts = healthSnapshot?.workoutCount, workouts > 0 {
+                return "Pass \(workouts)"
+            }
+            return "Hälsa"
+        }()
+
         let chips = [
             settings.calendarEnabled ? "Kal \(dayEvents.count)" : nil,
             settings.remindersEnabled ? "Uppg \(dayReminders.count)" : nil,
-            settings.mailEnabled ? "Mail \(dayUnreadCount)" : nil
+            settings.mailEnabled ? "Mail \(dayUnreadCount)" : nil,
+            healthChip
         ].compactMap { $0 }
+
+        let healthLine: String
+        if settings.healthEnabled {
+            if let healthSnapshot {
+                healthLine = "Hälsa: \(healthSnapshot.overviewLine)"
+            } else {
+                let isFutureDay = calendar.startOfDay(for: date) > calendar.startOfDay(for: now)
+                healthLine = isFutureDay
+                    ? "Hälsa: Ingen hälsodata ännu"
+                    : "Hälsa: Hälsodata saknas"
+            }
+        } else {
+            healthLine = "Hälsa: —"
+        }
 
         return MemoryDaySummary(
             date: date,
             nextText: nextText,
             chips: chips.isEmpty ? ["—"] : chips,
-            bodyLine: settings.healthEnabled ? "Kropp: Källa aktiv" : "Kropp: —",
+            bodyLine: healthLine,
             updatedText: "Uppdaterad \(Date().formatted(date: .omitted, time: .shortened))"
         )
     }
