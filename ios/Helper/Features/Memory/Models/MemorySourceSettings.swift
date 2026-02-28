@@ -88,10 +88,11 @@ final class MemorySourceSettings: ObservableObject {
 
     init(
         defaults: UserDefaults = .standard,
-        sourceConnectionStore: SourceConnectionStore = .shared
+        sourceConnectionStore: SourceConnectionStore? = nil
     ) {
+        let resolvedSourceConnectionStore = sourceConnectionStore ?? SourceConnectionStore.shared
         self.dataSettingsStore = DataSettingsStore(
-            sourceConnectionStore: sourceConnectionStore,
+            sourceConnectionStore: resolvedSourceConnectionStore,
             defaults: defaults
         )
         self.calendarEnabled = false
