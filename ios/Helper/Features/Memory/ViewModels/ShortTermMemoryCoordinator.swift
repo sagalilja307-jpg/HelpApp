@@ -399,8 +399,8 @@ final class ShortTermMemoryCoordinator: ObservableObject {
         }()
 
         let chips = [
-            settings.calendarEnabled ? "Kal \(dayEvents.count)" : nil,
-            settings.remindersEnabled ? "Uppg \(dayReminders.count)" : nil,
+            settings.calendarEnabled ? "Aktiviteter \(dayEvents.count)" : nil,
+            settings.remindersEnabled ? "Uppgifter \(dayReminders.count)" : nil,
             settings.mailEnabled ? "Mail \(dayUnreadCount)" : nil,
             healthChip
         ].compactMap { $0 }

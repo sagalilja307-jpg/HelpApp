@@ -32,8 +32,16 @@ HEALTH_DOMAIN_KEYWORDS: tuple[str, ...] = (
     "traning",
     "tränat",
     "tranat",
+    "tränade",
+    "tranade",
     "workout",
     "exercise",
+    "löpning",
+    "lopning",
+    "cykling",
+    "cycling",
+    "styrka",
+    "strength",
     "sömn",
     "somn",
     "sovit",
@@ -53,6 +61,12 @@ HEALTH_DOMAIN_KEYWORDS: tuple[str, ...] = (
     "state of mind",
     "mående",
     "maende",
+    "mår",
+    "mar",
+    "kalori",
+    "kalorier",
+    "calorie",
+    "calories",
 )
 
 HEALTH_ACTIVITY_METRICS: set[str] = {
@@ -77,6 +91,14 @@ HEALTH_WELLBEING_METRICS: set[str] = {
 def _looks_like_health_query(query: str) -> bool:
     q = (query or "").lower()
     return any(keyword in q for keyword in HEALTH_DOMAIN_KEYWORDS)
+
+
+def _accept_classifier_domain(query: str, domain: Domain) -> bool:
+    # Guardrail: avoid accepting speculative health classifications unless
+    # the query explicitly contains health-related language.
+    if domain == "health":
+        return _looks_like_health_query(query)
+    return True
 
 
 def _resolve_health_metric(query: str) -> str:
@@ -577,11 +599,14 @@ class DataIntentRouter:
         resolved_domain: Domain = _fallback_domain_for_query(q)
         if explicit_domain is not None:
             resolved_domain = explicit_domain
-        elif not ambiguous_fallback:
-            if dom is not None and dom.domain is not None:
+        elif not ambiguous_fallback and dom is not None:
+            if dom.domain is not None and _accept_classifier_domain(q, dom.domain):
                 resolved_domain = dom.domain
-            elif dom is not None and dom.suggestions:
-                resolved_domain = dom.suggestions[0]
+            elif dom.suggestions:
+                for suggestion in dom.suggestions:
+                    if _accept_classifier_domain(q, suggestion):
+                        resolved_domain = suggestion
+                        break
 
         if resolved_domain == "health":
             filters = _resolve_health_filters(q)
