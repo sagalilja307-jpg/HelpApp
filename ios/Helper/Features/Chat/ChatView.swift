@@ -47,6 +47,7 @@ public struct ChatView: View {
     private let locationSnapshotService: LocationSnapshotService?
     private let longTermMemorySaveCoordinator: LongTermMemorySaveCoordinator
     private let iCloudSyncCoordinator: ICloudKeyValueSyncCoordinator
+    private let iCloudMemorySyncCoordinator: ICloudMemorySyncCoordinator
 
     init(
         pipeline: QueryPipeline,
@@ -55,7 +56,8 @@ public struct ChatView: View {
         filesImportService: FilesImportService,
         locationSnapshotService: LocationSnapshotService? = nil,
         longTermMemorySaveCoordinator: LongTermMemorySaveCoordinator,
-        iCloudSyncCoordinator: ICloudKeyValueSyncCoordinator
+        iCloudSyncCoordinator: ICloudKeyValueSyncCoordinator,
+        iCloudMemorySyncCoordinator: ICloudMemorySyncCoordinator
     ) {
         _vm = State(initialValue: ChatViewModel(pipeline: pipeline))
         self.sourceConnectionStore = sourceConnectionStore
@@ -64,6 +66,7 @@ public struct ChatView: View {
         self.locationSnapshotService = locationSnapshotService
         self.longTermMemorySaveCoordinator = longTermMemorySaveCoordinator
         self.iCloudSyncCoordinator = iCloudSyncCoordinator
+        self.iCloudMemorySyncCoordinator = iCloudMemorySyncCoordinator
     }
 
     public var body: some View {
@@ -254,7 +257,8 @@ public struct ChatView: View {
         .sheet(isPresented: $showAccountSettings) {
             AccountSettingsSheetView(
                 accountStore: appleAccountStore,
-                iCloudSyncCoordinator: iCloudSyncCoordinator
+                iCloudSyncCoordinator: iCloudSyncCoordinator,
+                memorySyncCoordinator: iCloudMemorySyncCoordinator
             )
         }
         .sheet(isPresented: $showDataSources) {
@@ -324,11 +328,13 @@ public struct ChatView: View {
         }
         .task {
             await longTermMemorySaveCoordinator.processPendingJobs()
+            _ = await iCloudMemorySyncCoordinator.syncNow()
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             Task {
                 await longTermMemorySaveCoordinator.processPendingJobs()
+                _ = await iCloudMemorySyncCoordinator.syncNow()
             }
         }
         .onChange(of: selectedPhotoItems) { _, newItems in
@@ -960,6 +966,7 @@ public struct ChatView: View {
         switch result {
         case .saved:
             saveStatuses[message.id] = .saved
+            _ = await iCloudMemorySyncCoordinator.syncNow()
         case .queued:
             saveStatuses[message.id] = .queued
         case .failed(let error):
@@ -978,6 +985,9 @@ public struct ChatView: View {
         } catch {
             vm.error = "Kunde inte spara anteckning: \(error.localizedDescription)"
             return
+        }
+        Task {
+            _ = await iCloudMemorySyncCoordinator.syncNow()
         }
         noteTitle = ""
         noteBody = ""

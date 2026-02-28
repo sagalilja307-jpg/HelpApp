@@ -34,6 +34,7 @@ struct HelperApp: App {
     private let locationSnapshotService: LocationSnapshotService
     private let longTermMemorySaveCoordinator: LongTermMemorySaveCoordinator
     private let iCloudSyncCoordinator: ICloudKeyValueSyncCoordinator
+    private let iCloudMemorySyncCoordinator: ICloudMemorySyncCoordinator
 
     // Onboarding flag (sparas i UserDefaults)
     @AppStorage("helper.onboarding.done") private var onboardingDone = false
@@ -286,6 +287,12 @@ struct HelperApp: App {
             self.filesImportService = filesImportService
             self.locationSnapshotService = locationSnapshotService
             self.longTermMemorySaveCoordinator = longTermMemorySaveCoordinator
+            let iCloudMemorySyncCoordinator = ICloudMemorySyncCoordinator(
+                memoryService: service,
+                longTermMemorySaveCoordinator: longTermMemorySaveCoordinator,
+                keyValueSyncCoordinator: iCloudSyncCoordinator
+            )
+            self.iCloudMemorySyncCoordinator = iCloudMemorySyncCoordinator
             
             let supportSettingsService = SupportSettingsAPIService.shared
             self.supportSettingsService = supportSettingsService
@@ -300,6 +307,7 @@ struct HelperApp: App {
             if !isRunningTests {
                 Task {
                     iCloudSyncCoordinator.start()
+                    _ = await iCloudMemorySyncCoordinator.syncNow()
                     await supportSettingsService.syncSupportSettingsCache()
                     await longTermMemorySaveCoordinator.processPendingJobs()
                     _ = try? shareImportService.importPendingSharedItems()
@@ -327,7 +335,8 @@ struct HelperApp: App {
                         filesImportService: filesImportService,
                         locationSnapshotService: locationSnapshotService,
                         longTermMemorySaveCoordinator: longTermMemorySaveCoordinator,
-                        iCloudSyncCoordinator: iCloudSyncCoordinator
+                        iCloudSyncCoordinator: iCloudSyncCoordinator,
+                        iCloudMemorySyncCoordinator: iCloudMemorySyncCoordinator
                     )
 
                 } else {

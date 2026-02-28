@@ -7,17 +7,21 @@ struct AccountSettingsSheetView: View {
     @ObservedObject var accountStore: AppleAccountStore
 
     private let iCloudSyncCoordinator: ICloudKeyValueSyncCoordinator
+    private let memorySyncCoordinator: ICloudMemorySyncCoordinator
 
     @State private var syncEnabled: Bool
     @State private var isSyncingNow = false
     @State private var showSignOutConfirmation = false
+    @State private var syncStatusMessage: String?
 
     init(
         accountStore: AppleAccountStore,
-        iCloudSyncCoordinator: ICloudKeyValueSyncCoordinator
+        iCloudSyncCoordinator: ICloudKeyValueSyncCoordinator,
+        memorySyncCoordinator: ICloudMemorySyncCoordinator
     ) {
         self.accountStore = accountStore
         self.iCloudSyncCoordinator = iCloudSyncCoordinator
+        self.memorySyncCoordinator = memorySyncCoordinator
         _syncEnabled = State(initialValue: iCloudSyncCoordinator.isSyncEnabled)
     }
 
@@ -131,9 +135,13 @@ struct AccountSettingsSheetView: View {
             }
 
             Button {
-                isSyncingNow = true
-                iCloudSyncCoordinator.syncNow()
-                isSyncingNow = false
+                Task {
+                    isSyncingNow = true
+                    iCloudSyncCoordinator.syncNow()
+                    let outcome = await memorySyncCoordinator.syncNow()
+                    syncStatusMessage = outcome.message
+                    isSyncingNow = false
+                }
             } label: {
                 if isSyncingNow {
                     ProgressView()
@@ -142,6 +150,12 @@ struct AccountSettingsSheetView: View {
                 }
             }
             .disabled(!syncEnabled)
+
+            if let syncStatusMessage {
+                Text(syncStatusMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }

@@ -1,6 +1,17 @@
 import Foundation
 import SwiftData
 
+struct LongTermMemorySyncRecord: Codable, Sendable {
+    let id: String
+    let originalText: String
+    let cleanText: String
+    let suggestedType: String
+    let tags: [String]
+    let embedding: [Float]
+    let createdAt: Date
+    let isUserEdited: Bool
+}
+
 struct LongTermMemorySaveCoordinator {
 
     enum SaveOutcome: Equatable {
@@ -111,6 +122,71 @@ struct LongTermMemorySaveCoordinator {
         let allItems = loadAllItems()
         let memberIDs = Set(cluster.memberIDs)
         return allItems.filter { memberIDs.contains($0.id) }
+    }
+
+    func exportSyncRecords() -> [LongTermMemorySyncRecord] {
+        let context = makeContext()
+        let descriptor = FetchDescriptor<LongTermMemoryItem>(
+            sortBy: [SortDescriptor(\LongTermMemoryItem.createdAt, order: .reverse)]
+        )
+        guard let items = try? context.fetch(descriptor) else {
+            return []
+        }
+
+        return items.map { item in
+            LongTermMemorySyncRecord(
+                id: item.id.uuidString,
+                originalText: item.originalText,
+                cleanText: item.cleanText,
+                suggestedType: item.suggestedType,
+                tags: item.tags,
+                embedding: item.embedding,
+                createdAt: item.createdAt,
+                isUserEdited: item.isUserEdited
+            )
+        }
+    }
+
+    @discardableResult
+    func mergeSyncRecords(_ records: [LongTermMemorySyncRecord]) -> Int {
+        guard !records.isEmpty else { return 0 }
+
+        let context = makeContext()
+        guard let existingItems = try? context.fetch(FetchDescriptor<LongTermMemoryItem>()) else {
+            return 0
+        }
+
+        var existingIDs: Set<UUID> = Set(existingItems.map(\.id))
+        var mergedCount = 0
+
+        for record in records {
+            guard let id = UUID(uuidString: record.id) else {
+                continue
+            }
+            guard !existingIDs.contains(id) else {
+                continue
+            }
+
+            let item = LongTermMemoryItem(
+                originalText: record.originalText,
+                cleanText: record.cleanText,
+                suggestedType: record.suggestedType,
+                tags: record.tags,
+                embedding: record.embedding
+            )
+            item.id = id
+            item.createdAt = record.createdAt
+            item.isUserEdited = record.isUserEdited
+            context.insert(item)
+            existingIDs.insert(id)
+            mergedCount += 1
+        }
+
+        if mergedCount > 0 {
+            try? context.save()
+        }
+
+        return mergedCount
     }
 
     private func attempt(jobID: UUID) async {
