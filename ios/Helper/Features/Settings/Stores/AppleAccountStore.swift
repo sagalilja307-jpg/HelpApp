@@ -186,7 +186,16 @@ final class AppleAccountStore: ObservableObject {
             switch authError.code {
             case .canceled:
                 return nil
-            case .failed, .invalidResponse, .notHandled, .unknown:
+            case .failed,
+                    .invalidResponse,
+                    .notHandled,
+                    .notInteractive,
+                    .matchedExcludedCredential,
+                    .credentialImport,
+                    .credentialExport,
+                    .preferSignInWithApple,
+                    .deviceNotConfiguredForPasskeyCreation,
+                    .unknown:
                 break
             @unknown default:
                 break
