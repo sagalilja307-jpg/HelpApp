@@ -10,6 +10,7 @@ struct AccountSettingsSheetView: View {
     private let memorySyncCoordinator: ICloudMemorySyncCoordinator
 
     @State private var syncEnabled: Bool
+    @State private var autoSyncEnabled: Bool
     @State private var isSyncingNow = false
     @State private var showSignOutConfirmation = false
     @State private var syncStatusMessage: String?
@@ -23,6 +24,7 @@ struct AccountSettingsSheetView: View {
         self.iCloudSyncCoordinator = iCloudSyncCoordinator
         self.memorySyncCoordinator = memorySyncCoordinator
         _syncEnabled = State(initialValue: iCloudSyncCoordinator.isSyncEnabled)
+        _autoSyncEnabled = State(initialValue: memorySyncCoordinator.isAutoSyncEnabled)
     }
 
     var body: some View {
@@ -51,6 +53,22 @@ struct AccountSettingsSheetView: View {
         }
         .onChange(of: syncEnabled) { _, newValue in
             iCloudSyncCoordinator.setSyncEnabled(newValue)
+            guard newValue else {
+                memorySyncCoordinator.stopAutoSync()
+                return
+            }
+            if autoSyncEnabled {
+                memorySyncCoordinator.startAutoSync()
+            }
+            Task {
+                isSyncingNow = true
+                let outcome = await memorySyncCoordinator.syncNow()
+                syncStatusMessage = outcome.message
+                isSyncingNow = false
+            }
+        }
+        .onChange(of: autoSyncEnabled) { _, newValue in
+            memorySyncCoordinator.setAutoSyncEnabled(newValue)
         }
         .alert(
             "Inloggningsfel",
@@ -125,6 +143,8 @@ struct AccountSettingsSheetView: View {
     private var syncSection: some View {
         Section("iCloud") {
             Toggle("Synka appdata via iCloud", isOn: $syncEnabled)
+            Toggle("Autosynk minnen", isOn: $autoSyncEnabled)
+                .disabled(!syncEnabled)
 
             HStack(spacing: 10) {
                 Image(systemName: accountStore.hasICloudAccount ? "checkmark.circle.fill" : "xmark.circle")
@@ -133,6 +153,10 @@ struct AccountSettingsSheetView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+
+            Text("Autosynk hämtar och laddar upp minnen automatiskt ungefär var 5:e minut.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
 
             Button {
                 Task {

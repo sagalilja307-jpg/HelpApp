@@ -28,6 +28,8 @@ final class ICloudMemorySyncCoordinator {
         static let payloadVersion = 1
         static let lastSyncAtKey = "helper.icloud.memory.last_sync_at"
         static let deviceIDKey = "helper.icloud.memory.device_id"
+        static let autoSyncEnabledKey = "helper.icloud.memory.autosync.enabled"
+        static let autoSyncIntervalSeconds: UInt64 = 300
     }
 
     private let memoryService: MemoryService
@@ -37,6 +39,7 @@ final class ICloudMemorySyncCoordinator {
     private let defaults: UserDefaults
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
+    private var autoSyncTask: Task<Void, Never>?
 
     init(
         memoryService: MemoryService,
@@ -59,10 +62,60 @@ final class ICloudMemorySyncCoordinator {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         self.decoder = decoder
+
+        if defaults.object(forKey: Constants.autoSyncEnabledKey) == nil {
+            defaults.set(true, forKey: Constants.autoSyncEnabledKey)
+        }
     }
 
     var lastSyncAt: Date? {
         defaults.object(forKey: Constants.lastSyncAtKey) as? Date
+    }
+
+    var isAutoSyncEnabled: Bool {
+        defaults.object(forKey: Constants.autoSyncEnabledKey) as? Bool ?? true
+    }
+
+    deinit {
+        autoSyncTask?.cancel()
+    }
+
+    func startAutoSync() {
+        guard isAutoSyncEnabled else {
+            stopAutoSync()
+            return
+        }
+        guard keyValueSyncCoordinator.isSyncEnabled else {
+            stopAutoSync()
+            return
+        }
+        guard autoSyncTask == nil else { return }
+
+        autoSyncTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                _ = await self.syncNow()
+                do {
+                    try await Task.sleep(nanoseconds: Constants.autoSyncIntervalSeconds * 1_000_000_000)
+                } catch {
+                    return
+                }
+            }
+        }
+    }
+
+    func stopAutoSync() {
+        autoSyncTask?.cancel()
+        autoSyncTask = nil
+    }
+
+    func setAutoSyncEnabled(_ enabled: Bool) {
+        defaults.set(enabled, forKey: Constants.autoSyncEnabledKey)
+        guard enabled else {
+            stopAutoSync()
+            return
+        }
+        startAutoSync()
     }
 
     func syncNow() async -> MemorySyncOutcome {
@@ -123,9 +176,12 @@ final class ICloudMemorySyncCoordinator {
             let data = try encoder.encode(outgoing)
             try data.write(to: fileURL, options: .atomic)
             defaults.set(outgoing.exportedAt, forKey: Constants.lastSyncAtKey)
+            let uploadedNotes = outgoing.notes.count
+            let uploadedLongTermItems = outgoing.longTermItems.count
+            let statusMessage = "Synk klar. Uppladdat \(uploadedNotes) anteckningar och \(uploadedLongTermItems) långtidsminnen. Hämtat \(mergedNotes) anteckningar och \(mergedLongTermItems) långtidsminnen."
             return MemorySyncOutcome(
                 status: .synced,
-                message: "Synk klar. \(mergedNotes) anteckningar och \(mergedLongTermItems) långtidsminnen hämtades.",
+                message: statusMessage,
                 mergedNotes: mergedNotes,
                 mergedLongTermItems: mergedLongTermItems
             )

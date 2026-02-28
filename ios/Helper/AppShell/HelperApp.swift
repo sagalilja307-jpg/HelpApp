@@ -307,7 +307,7 @@ struct HelperApp: App {
             if !isRunningTests {
                 Task {
                     iCloudSyncCoordinator.start()
-                    _ = await iCloudMemorySyncCoordinator.syncNow()
+                    iCloudMemorySyncCoordinator.startAutoSync()
                     await supportSettingsService.syncSupportSettingsCache()
                     await longTermMemorySaveCoordinator.processPendingJobs()
                     _ = try? shareImportService.importPendingSharedItems()
