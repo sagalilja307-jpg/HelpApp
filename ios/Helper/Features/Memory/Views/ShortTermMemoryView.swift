@@ -8,7 +8,7 @@ struct ShortTermMemoryView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            LazyVStack(alignment: .leading, spacing: IOS26Style.Spacing.sm) {
                 if let emptyText = coordinator.emptyStateText {
                     EmptyMemoryCard(text: emptyText)
                         .ios26Card()
@@ -29,10 +29,10 @@ struct ShortTermMemoryView: View {
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, IOS26Style.Spacing.md)
+            .padding(.vertical, IOS26Style.Spacing.sm)
         }
-        .background(IOS26Style.pageBackground)
+        .ios26Page()
         .navigationTitle("Korttidsminne")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
@@ -46,6 +46,10 @@ struct ShortTermMemoryView: View {
                 }
                 .accessibilityLabel("Öppna källor")
             }
+        }
+        .refreshable {
+            await settings.refreshPermissionStatuses()
+            await coordinator.refresh(using: settings)
         }
         .task {
             await settings.refreshPermissionStatuses()

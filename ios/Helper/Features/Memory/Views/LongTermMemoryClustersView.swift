@@ -7,6 +7,7 @@ struct LongTermMemoryClustersView: View {
 
     @State private var clusters: [LongTermMemoryCluster] = []
     @State private var isLoading = false
+    @State private var searchText = ""
 
     init(longTermMemorySaveCoordinator: LongTermMemorySaveCoordinator) {
         self.longTermMemorySaveCoordinator = longTermMemorySaveCoordinator
@@ -14,12 +15,21 @@ struct LongTermMemoryClustersView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                if clusters.isEmpty, !isLoading {
-                    EmptyLongTermMemoryCard()
+            LazyVStack(alignment: .leading, spacing: IOS26Style.Spacing.sm) {
+                if filteredClusters.isEmpty, !isLoading {
+                    if searchText.isEmpty {
+                        EmptyLongTermMemoryCard()
+                            .ios26Card()
+                    } else {
+                        ContentUnavailableView(
+                            "Inga träffar",
+                            systemImage: "magnifyingglass",
+                            description: Text("Prova ett annat sökord.")
+                        )
                         .ios26Card()
+                    }
                 } else {
-                    ForEach(clusters) { cluster in
+                    ForEach(filteredClusters) { cluster in
                         NavigationLink {
                             LongTermMemoryClusterDetailView(
                                 cluster: cluster,
@@ -30,32 +40,42 @@ struct LongTermMemoryClustersView: View {
                                 .ios26Card()
                         }
                         .buttonStyle(.plain)
+                        .ios26Pressable()
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, IOS26Style.Spacing.md)
+            .padding(.vertical, IOS26Style.Spacing.sm)
         }
         .overlay(alignment: .center) {
             if isLoading {
                 ProgressView()
                     .padding(12)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(.separator.opacity(0.55), lineWidth: IOS26Style.Metrics.strokeWidth)
+                    )
             }
         }
-        .background(IOS26Style.pageBackground)
+        .ios26Page()
         .navigationTitle("Långtidsminne")
         .navigationBarTitleDisplayMode(.large)
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Sök kluster")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     Task { await refresh() }
                 } label: {
                     Image(systemName: "arrow.clockwise")
+                        .symbolRenderingMode(.hierarchical)
                 }
                 .disabled(isLoading)
                 .accessibilityLabel("Uppdatera kluster")
             }
+        }
+        .refreshable {
+            await refresh()
         }
         .task {
             await refresh()
@@ -63,6 +83,20 @@ struct LongTermMemoryClustersView: View {
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             Task { await refresh() }
+        }
+        .animation(.snappy, value: filteredClusters.count)
+    }
+
+    private var filteredClusters: [LongTermMemoryCluster] {
+        guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return clusters
+        }
+        let q = searchText.lowercased()
+        return clusters.filter { cluster in
+            let title = (cluster.topTags.first ?? cluster.dominantType.displayName).lowercased()
+            let tags = cluster.topTags.joined(separator: " ").lowercased()
+            let sample = (cluster.sampleText ?? "").lowercased()
+            return title.contains(q) || tags.contains(q) || sample.contains(q)
         }
     }
 
@@ -83,6 +117,8 @@ private struct EmptyLongTermMemoryCard: View {
             Text("Spara fler minnen i chatten för att bygga temagrupper.")
                 .font(.body)
                 .foregroundStyle(.secondary)
+
+            IOS26Style.badge("Tips: spara viktiga svar", systemImage: "sparkles", prominence: .secondary)
         }
     }
 }
@@ -99,9 +135,7 @@ private struct LongTermMemoryClusterCard: View {
 
                 Spacer()
 
-                Text("\(cluster.itemCount)")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                IOS26Style.badge("\(cluster.itemCount)", prominence: .secondary)
 
                 Image(systemName: "chevron.right")
                     .font(.footnote.weight(.semibold))
@@ -115,13 +149,16 @@ private struct LongTermMemoryClusterCard: View {
                     .lineLimit(2)
             }
 
-            HStack(spacing: 8) {
-                TagChip(text: cluster.dominantType.displayName, systemImage: "tag")
+            FlowChips {
+                IOS26Style.badge(cluster.dominantType.displayName, systemImage: "tag", prominence: .secondary)
                 ForEach(cluster.topTags.prefix(3), id: \.self) { tag in
-                    TagChip(text: tag, systemImage: nil)
+                    IOS26Style.badge(tag, prominence: .secondary)
                 }
             }
+            .padding(.top, 2)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(clusterTitle), \(cluster.itemCount) minnen")
     }
 
     private var clusterTitle: String {
@@ -132,28 +169,15 @@ private struct LongTermMemoryClusterCard: View {
     }
 }
 
-private struct TagChip: View {
-    let text: String
-    let systemImage: String?
+/// A tiny flow layout for chips that wraps on small screens.
+private struct FlowChips<Content: View>: View {
+    @ViewBuilder let content: () -> Content
 
     var body: some View {
-        HStack(spacing: 4) {
-            if let systemImage {
-                Image(systemName: systemImage)
-                    .font(.caption2)
-            }
-            Text(text)
-                .font(.footnote.weight(.semibold))
-                .lineLimit(1)
+        // Works well enough for MVP: let it wrap by using an adaptive grid.
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), spacing: 8)], alignment: .leading, spacing: 8) {
+            content()
         }
-        .foregroundStyle(.secondary)
-        .padding(.vertical, 5)
-        .padding(.horizontal, 8)
-        .background(Capsule().fill(.thinMaterial))
-        .overlay(
-            Capsule()
-                .strokeBorder(.separator.opacity(0.55), lineWidth: 0.5)
-        )
     }
 }
 
@@ -162,36 +186,52 @@ private struct LongTermMemoryClusterDetailView: View {
     let longTermMemorySaveCoordinator: LongTermMemorySaveCoordinator
 
     @State private var items: [LongTermMemoryItem] = []
+    @State private var searchText = ""
 
     var body: some View {
         List {
-            if items.isEmpty {
-                Text("Inga minnen i detta kluster ännu.")
-                    .foregroundStyle(.secondary)
+            if filteredItems.isEmpty {
+                ContentUnavailableView(
+                    searchText.isEmpty ? "Inga minnen i detta kluster ännu." : "Inga träffar",
+                    systemImage: searchText.isEmpty ? "tray" : "magnifyingglass"
+                )
+                .foregroundStyle(.secondary)
             } else {
-                ForEach(items, id: \.id) { item in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(item.cleanText)
-                            .font(.body)
-                            .lineLimit(3)
+                ForEach(filteredItems, id: \.id) { item in
+                    NavigationLink {
+                        LongTermMemoryItemDetailView(item: item)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(item.cleanText)
+                                .font(.body)
+                                .lineLimit(3)
 
-                        HStack(spacing: 8) {
-                            Text(item.suggestedType)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                            Text(item.createdAt.formatted(date: .abbreviated, time: .shortened))
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
+                            HStack(spacing: 8) {
+                                IOS26Style.badge(item.suggestedType, prominence: .secondary)
+                                Text(item.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
                         }
+                        .padding(.vertical, 4)
                     }
-                    .padding(.vertical, 4)
                 }
             }
         }
         .navigationTitle(clusterTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $searchText, prompt: "Sök i klustret")
         .task {
             items = longTermMemorySaveCoordinator.loadItems(for: cluster)
+        }
+    }
+
+    private var filteredItems: [LongTermMemoryItem] {
+        guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return items }
+        let q = searchText.lowercased()
+        return items.filter {
+            $0.cleanText.lowercased().contains(q) ||
+            $0.suggestedType.lowercased().contains(q)
         }
     }
 

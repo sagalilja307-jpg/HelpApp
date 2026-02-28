@@ -30,7 +30,9 @@ public struct ChatView: View {
     @State private var showSupportSettings = false
     @State private var showCreateNote = false
     @State private var showDataSources = false
+    @State private var showAccountSettings = false
     @State private var supportSettingsViewModel = SupportSettingsViewModel()
+    @StateObject private var appleAccountStore = AppleAccountStore()
     @State private var noteTitle = ""
     @State private var noteBody = ""
     @State private var showFileImporter = false
@@ -44,6 +46,7 @@ public struct ChatView: View {
     private let filesImportService: FilesImportService
     private let locationSnapshotService: LocationSnapshotService?
     private let longTermMemorySaveCoordinator: LongTermMemorySaveCoordinator
+    private let iCloudSyncCoordinator: ICloudKeyValueSyncCoordinator
 
     init(
         pipeline: QueryPipeline,
@@ -51,7 +54,8 @@ public struct ChatView: View {
         photosIndexService: PhotosIndexService,
         filesImportService: FilesImportService,
         locationSnapshotService: LocationSnapshotService? = nil,
-        longTermMemorySaveCoordinator: LongTermMemorySaveCoordinator
+        longTermMemorySaveCoordinator: LongTermMemorySaveCoordinator,
+        iCloudSyncCoordinator: ICloudKeyValueSyncCoordinator
     ) {
         _vm = State(initialValue: ChatViewModel(pipeline: pipeline))
         self.sourceConnectionStore = sourceConnectionStore
@@ -59,6 +63,7 @@ public struct ChatView: View {
         self.filesImportService = filesImportService
         self.locationSnapshotService = locationSnapshotService
         self.longTermMemorySaveCoordinator = longTermMemorySaveCoordinator
+        self.iCloudSyncCoordinator = iCloudSyncCoordinator
     }
 
     public var body: some View {
@@ -234,9 +239,23 @@ public struct ChatView: View {
                 }
                 .accessibilityLabel("Öppna stödinställningar")
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showAccountSettings = true
+                } label: {
+                    Image(systemName: "person.crop.circle")
+                }
+                .accessibilityLabel("Öppna konto och synk")
+            }
         }
         .sheet(isPresented: $showSupportSettings) {
             SupportSettingsSheetView(viewModel: supportSettingsViewModel)
+        }
+        .sheet(isPresented: $showAccountSettings) {
+            AccountSettingsSheetView(
+                accountStore: appleAccountStore,
+                iCloudSyncCoordinator: iCloudSyncCoordinator
+            )
         }
         .sheet(isPresented: $showDataSources) {
             DataSourcesSheetView(

@@ -33,6 +33,7 @@ struct HelperApp: App {
     private let filesImportService: FilesImportService
     private let locationSnapshotService: LocationSnapshotService
     private let longTermMemorySaveCoordinator: LongTermMemorySaveCoordinator
+    private let iCloudSyncCoordinator: ICloudKeyValueSyncCoordinator
 
     // Onboarding flag (sparas i UserDefaults)
     @AppStorage("helper.onboarding.done") private var onboardingDone = false
@@ -56,6 +57,8 @@ struct HelperApp: App {
             
             let sourceConnectionStore = SourceConnectionStore.shared
             self.sourceConnectionStore = sourceConnectionStore
+            let iCloudSyncCoordinator = ICloudKeyValueSyncCoordinator()
+            self.iCloudSyncCoordinator = iCloudSyncCoordinator
             
             let fileTextExtraction = FileTextExtractionService()
             
@@ -296,6 +299,7 @@ struct HelperApp: App {
 
             if !isRunningTests {
                 Task {
+                    iCloudSyncCoordinator.start()
                     await supportSettingsService.syncSupportSettingsCache()
                     await longTermMemorySaveCoordinator.processPendingJobs()
                     _ = try? shareImportService.importPendingSharedItems()
@@ -322,7 +326,8 @@ struct HelperApp: App {
                         photosIndexService: photosIndexService,
                         filesImportService: filesImportService,
                         locationSnapshotService: locationSnapshotService,
-                        longTermMemorySaveCoordinator: longTermMemorySaveCoordinator
+                        longTermMemorySaveCoordinator: longTermMemorySaveCoordinator,
+                        iCloudSyncCoordinator: iCloudSyncCoordinator
                     )
 
                 } else {

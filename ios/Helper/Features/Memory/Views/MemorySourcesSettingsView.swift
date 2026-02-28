@@ -7,6 +7,12 @@ struct MemorySourcesSettingsView: View {
 
     var body: some View {
         Form {
+            Section {
+                Text("Välj vilka källor som får bidra till korttidsminnet. Du kan stänga av en källa här utan att ta bort behörighet i systemet.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Källor för korttidsminne") {
                 ForEach(MemorySourceID.allCases) { source in
                     MemorySourceToggleRow(source: source)
@@ -16,11 +22,13 @@ struct MemorySourcesSettingsView: View {
 
             if settings.hasDeniedEnabledSources {
                 Section {
-                    Button("Öppna Inställningar") {
+                    Button {
                         openAppSettings()
+                    } label: {
+                        Label("Öppna Inställningar", systemImage: "gear")
                     }
                 } footer: {
-                    Text("En eller flera källor är nekade i systemet. Tillåt åtkomst i Inställningar för att synkning ska fungera.")
+                    Text("En eller flera källor är nekade i systemet. Tillåt åtkomst i Inställningar för att synkningen ska fungera.")
                 }
             }
 
@@ -53,16 +61,23 @@ private struct MemorySourceToggleRow: View {
 
     @EnvironmentObject private var settings: MemorySourceSettings
 
-    private var isSupported: Bool {
-        settings.isSupported(source)
-    }
+    private var isSupported: Bool { settings.isSupported(source) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
                 Label(source.title, systemImage: source.iconName)
 
-                Spacer()
+                Spacer(minLength: 10)
+
+                let permissionLabel = settings.permissionState(for: source).label
+                let isGranted = settings.permissionState(for: source) == .granted
+
+                IOS26Style.badge(
+                    permissionLabel,
+                    systemImage: isGranted ? "checkmark.circle" : "exclamationmark.triangle",
+                    prominence: isGranted ? .secondary : .primary
+                )
 
                 Toggle(
                     "",
@@ -84,16 +99,19 @@ private struct MemorySourceToggleRow: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            Text("Status: \(settings.permissionState(for: source).label)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if !isSupported {
+                Text("Den här källan stöds inte på din enhet just nu.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
 
             if source == .mail, settings.permissionState(for: .mail) != .granted {
                 Text("Anslut Gmail i Datakällor för att aktivera mail här.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.tertiary)
             }
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
     }
 }

@@ -9,7 +9,7 @@ struct LongTermMemoryLibraryView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            LazyVStack(alignment: .leading, spacing: IOS26Style.Spacing.sm) {
                 NavigationLink {
                     LongTermMemoryTimelineView(
                         longTermMemorySaveCoordinator: longTermMemorySaveCoordinator
@@ -55,10 +55,10 @@ struct LongTermMemoryLibraryView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Öppna långtidsminnets typer")
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, IOS26Style.Spacing.md)
+            .padding(.vertical, IOS26Style.Spacing.sm)
         }
-        .background(IOS26Style.pageBackground)
+        .ios26Page()
         .navigationTitle("Långtidsminne")
         .navigationBarTitleDisplayMode(.large)
     }
@@ -109,7 +109,7 @@ struct LongTermMemoryTimelineView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            LazyVStack(alignment: .leading, spacing: IOS26Style.Spacing.sm) {
                 if items.isEmpty, !isLoading {
                     LongTermMemoryEmptyCard(
                         title: "Inga minnen ännu",
@@ -128,8 +128,8 @@ struct LongTermMemoryTimelineView: View {
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, IOS26Style.Spacing.md)
+            .padding(.vertical, IOS26Style.Spacing.sm)
         }
         .overlay(alignment: .center) {
             if isLoading {
@@ -138,7 +138,7 @@ struct LongTermMemoryTimelineView: View {
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
             }
         }
-        .background(IOS26Style.pageBackground)
+        .ios26Page()
         .navigationTitle("Långtidsminne · Tidslinje")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -152,6 +152,7 @@ struct LongTermMemoryTimelineView: View {
                 .accessibilityLabel("Uppdatera tidslinje")
             }
         }
+        .refreshable { await refresh() }
         .task {
             await refresh()
         }
@@ -219,7 +220,7 @@ struct LongTermMemoryTypesView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            LazyVStack(alignment: .leading, spacing: IOS26Style.Spacing.sm) {
                 if sections.isEmpty, !isLoading {
                     LongTermMemoryEmptyCard(
                         title: "Inga typer ännu",
@@ -238,8 +239,8 @@ struct LongTermMemoryTypesView: View {
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, IOS26Style.Spacing.md)
+            .padding(.vertical, IOS26Style.Spacing.sm)
         }
         .overlay(alignment: .center) {
             if isLoading {
@@ -248,7 +249,7 @@ struct LongTermMemoryTypesView: View {
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
             }
         }
-        .background(IOS26Style.pageBackground)
+        .ios26Page()
         .navigationTitle("Långtidsminne · Typer")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -349,7 +350,7 @@ private struct LongTermMemoryTypeDetailView: View {
     }
 }
 
-private struct LongTermMemoryItemDetailView: View {
+struct LongTermMemoryItemDetailView: View {
     let item: LongTermMemoryItem
 
     var body: some View {

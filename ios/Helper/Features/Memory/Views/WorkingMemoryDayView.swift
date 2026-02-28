@@ -7,10 +7,11 @@ struct WorkingMemoryDayView: View {
     @EnvironmentObject private var coordinator: ShortTermMemoryCoordinator
 
     @State private var dayData: WorkingMemoryDayData?
+    @State private var isLoading = false
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            LazyVStack(alignment: .leading, spacing: IOS26Style.Spacing.sm) {
                 header
                     .ios26Card()
 
@@ -93,34 +94,63 @@ struct WorkingMemoryDayView: View {
                         .ios26Card()
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, IOS26Style.Spacing.md)
+            .padding(.vertical, IOS26Style.Spacing.sm)
         }
-        .background(IOS26Style.pageBackground)
+        .overlay(alignment: .center) {
+            if isLoading {
+                ProgressView()
+                    .padding(12)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(.separator.opacity(0.55), lineWidth: IOS26Style.Metrics.strokeWidth)
+                    )
+            }
+        }
+        .ios26Page()
         .navigationTitle("Arbetsminne")
         .navigationBarTitleDisplayMode(.large)
+        .refreshable {
+            await reload()
+        }
         .task {
-            dayData = await coordinator.loadWorkingDay(date, using: settings)
+            await reload()
         }
         .onChange(of: settings.calendarEnabled) { _, _ in
-            Task { dayData = await coordinator.loadWorkingDay(date, using: settings) }
+            Task { await reload() }
         }
         .onChange(of: settings.remindersEnabled) { _, _ in
-            Task { dayData = await coordinator.loadWorkingDay(date, using: settings) }
+            Task { await reload() }
         }
         .onChange(of: settings.mailEnabled) { _, _ in
-            Task { dayData = await coordinator.loadWorkingDay(date, using: settings) }
+            Task { await reload() }
         }
+        .animation(.snappy, value: dayData?.events.count ?? 0)
+    }
+
+    private func reload() async {
+        isLoading = true
+        defer { isLoading = false }
+        dayData = await coordinator.loadWorkingDay(date, using: settings)
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(date.formatted(.dateTime.weekday(.wide).day().month(.wide)).capitalized)
                 .font(.title2.weight(.semibold))
 
             Text("Detaljer per källa, baserat på det du har synkat.")
                 .font(.body)
                 .foregroundStyle(.secondary)
+
+            FlowChips {
+                if settings.calendarEnabled { IOS26Style.badge("Kalender", systemImage: "calendar", prominence: .secondary) }
+                if settings.remindersEnabled { IOS26Style.badge("Påminnelser", systemImage: "checklist", prominence: .secondary) }
+                if settings.mailEnabled { IOS26Style.badge("Mail", systemImage: "envelope", prominence: .secondary) }
+                if settings.healthEnabled { IOS26Style.badge("Kropp", systemImage: "heart", prominence: .sensitive) }
+            }
+            .padding(.top, 2)
         }
     }
 
@@ -148,15 +178,16 @@ private struct DayRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(left)
-                .font(.footnote.weight(.semibold))
+                .font(.footnote.monospacedDigit())
                 .foregroundStyle(.secondary)
-                .frame(width: 64, alignment: .leading)
+                .frame(width: 62, alignment: .leading)
 
             Text(title)
-                .font(.body.weight(.semibold))
-                .lineLimit(1)
+                .font(.body)
+                .foregroundStyle(.primary)
+                .lineLimit(2)
 
-            Spacer()
+            Spacer(minLength: 10)
 
             if !right.isEmpty {
                 Text(right)
@@ -165,11 +196,17 @@ private struct DayRow: View {
                     .lineLimit(1)
             }
         }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.thinMaterial))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(.separator.opacity(0.55), lineWidth: 0.5)
-        )
+        .ios26Pill()
+    }
+}
+
+/// Duplicated here to keep the file self-contained.
+private struct FlowChips<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 98), spacing: 8)], alignment: .leading, spacing: 8) {
+            content()
+        }
     }
 }
