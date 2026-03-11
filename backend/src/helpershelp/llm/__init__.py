@@ -2,8 +2,10 @@ from .embedding_service import EmbeddingService, EmbeddingStatus, get_embedding_
 from .qwen_adapter import (
     QwenClassifier,
     QwenFilterStructurer,
+    QwenIntentStructurer,
     get_qwen_classifier,
     get_qwen_filter_structurer,
+    get_qwen_intent_structurer,
 )
 
 __all__ = [
@@ -12,6 +14,8 @@ __all__ = [
     "get_embedding_service",
     "QwenClassifier",
     "QwenFilterStructurer",
+    "QwenIntentStructurer",
     "get_qwen_classifier",
     "get_qwen_filter_structurer",
+    "get_qwen_intent_structurer",
 ]

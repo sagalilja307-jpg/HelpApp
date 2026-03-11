@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import re
-from typing import Any, Callable, Dict, Optional, cast
+from typing import Any, Callable, Dict, Optional, cast, get_args
 
 from helpershelp.query.intent_plan import (
     Domain,
@@ -15,7 +15,7 @@ from helpershelp.query.intent_plan import (
     TimeScopeDTO,
     TimeScopeType,
 )
-from helpershelp.llm import get_qwen_classifier, get_qwen_filter_structurer
+from helpershelp.llm import get_qwen_intent_structurer
 from helpershelp.query.time_policy import TimePolicy, TimePolicyConfig
 from helpershelp.query.timeframe_resolver import QueryTimeframeResolver, TimeIntent
 from helpershelp.core.time_utils import utcnow_aware
@@ -110,6 +110,8 @@ ALLOWED_HEALTH_METRICS: set[str] = HEALTH_ACTIVITY_METRICS.union(HEALTH_WELLBEIN
 ALLOWED_HEALTH_SUBDOMAINS: set[str] = {"activity", "wellbeing"}
 ALLOWED_HEALTH_WORKOUT_TYPES: set[str] = {"running", "cycling", "strength"}
 ALLOWED_HEALTH_AGGREGATIONS: set[str] = {"sum", "average", "count", "duration"}
+ALLOWED_DOMAIN_VALUES: set[str] = set(get_args(Domain))
+ALLOWED_OPERATION_VALUES: set[str] = set(get_args(Operation))
 
 
 def _looks_like_health_query(query: str) -> bool:
@@ -371,6 +373,36 @@ def _operation_for_query(
     return "count"
 
 
+def _is_explicit_operation_phrase(query: str, operation: Operation) -> bool:
+    q = (query or "").lower().strip()
+    if operation == "exists":
+        return (
+            q.startswith("finns det")
+            or q.startswith("finns det någon")
+            or q.startswith("har jag några")
+            or q.startswith("har jag någon")
+        )
+    if operation == "count":
+        return q.startswith("hur många") or "antal" in q
+    if operation == "sum":
+        return q.startswith("hur länge") or "hur lång tid" in q
+    if operation == "latest":
+        return q.startswith("när") and any(
+            k in q for k in ("nästa", "när är nästa", "senaste", "senast", "next", "last")
+        )
+    if operation == "list":
+        if (
+            q.startswith("vilka")
+            or q.startswith("vad har jag")
+            or q.startswith("vad är")
+            or q.startswith("vad händer")
+            or q.startswith("var")
+        ):
+            return True
+        return any(word in q for word in ["sök", "söker", "search", "find", "hitta", "visa"])
+    return False
+
+
 def _fallback_domain_for_query(query: str) -> Domain:
     lower_q = (query or "").lower()
 
@@ -491,6 +523,24 @@ def _coerce_string_list(value: object) -> list[str]:
 def _coerce_optional_bool(value: object) -> Optional[bool]:
     if isinstance(value, bool):
         return value
+    return None
+
+
+def _coerce_domain(value: object) -> Optional[Domain]:
+    if not isinstance(value, str):
+        return None
+    normalized = _normalize_filter_value(value)
+    if normalized in ALLOWED_DOMAIN_VALUES:
+        return cast(Domain, normalized)
+    return None
+
+
+def _coerce_operation(value: object) -> Optional[Operation]:
+    if not isinstance(value, str):
+        return None
+    normalized = _normalize_filter_value(value)
+    if normalized in ALLOWED_OPERATION_VALUES:
+        return cast(Operation, normalized)
     return None
 
 
@@ -747,8 +797,7 @@ class DataIntentRouter:
     ) -> None:
         _now = now_provider or utcnow_aware
 
-        self.domain_classifier = get_qwen_classifier()
-        self.filter_structurer = get_qwen_filter_structurer()
+        self.intent_structurer = get_qwen_intent_structurer()
         self.time_resolver = QueryTimeframeResolver(
             timezone_name=timezone_name, now_provider=_now
         )
@@ -758,48 +807,33 @@ class DataIntentRouter:
 
     def route(self, query: str, language: str = "sv") -> Dict[str, object]:
         q = (query or "").strip()
-        ambiguous_fallback = _is_ambiguous_fallback_query(q)
-
-        # Fast path for explicit source keywords: avoids an LLM roundtrip for common queries.
-        explicit_domain = _keyword_domain_for_query(q)
-        dom = None
-        if explicit_domain is None and not ambiguous_fallback:
-            try:
-                dom = self.domain_classifier.classify(q)
-            except Exception:
-                dom = None
 
         parsed = self.time_resolver.resolve(q)
 
-        # Always definitively resolve domain, default to calendar
-        resolved_domain: Domain = _fallback_domain_for_query(q)
-        if explicit_domain is not None:
-            resolved_domain = explicit_domain
-        elif not ambiguous_fallback and dom is not None:
-            if dom.domain is not None and _accept_classifier_domain(q, dom.domain):
-                resolved_domain = dom.domain
-            elif dom.suggestions:
-                for suggestion in dom.suggestions:
-                    if _accept_classifier_domain(q, suggestion):
-                        resolved_domain = suggestion
-                        break
+        raw_llm_intent: Dict[str, object] = {}
+        try:
+            candidate_llm_intent = self.intent_structurer.structure_intent(
+                query=q,
+                language=language,
+            )
+            if isinstance(candidate_llm_intent, dict):
+                raw_llm_intent = cast(Dict[str, object], candidate_llm_intent)
+        except Exception:
+            raw_llm_intent = {}
+
+        llm_domain = _coerce_domain(raw_llm_intent.get("domain"))
+        if llm_domain is not None and not _accept_classifier_domain(q, llm_domain):
+            llm_domain = None
+
+        resolved_domain: Domain = llm_domain or _fallback_domain_for_query(q)
 
         if resolved_domain == "health":
             deterministic_filters = _resolve_health_filters(q)
         else:
             deterministic_filters = _resolve_non_health_filters(q, resolved_domain)
 
-        raw_llm_filters: Dict[str, object] = {}
-        try:
-            candidate_llm_filters = self.filter_structurer.structure_filters(
-                query=q,
-                domain=resolved_domain,
-                language=language,
-            )
-            if isinstance(candidate_llm_filters, dict):
-                raw_llm_filters = cast(Dict[str, object], candidate_llm_filters)
-        except Exception:
-            raw_llm_filters = {}
+        raw_filters = raw_llm_intent.get("filters")
+        raw_llm_filters = cast(Dict[str, object], raw_filters) if isinstance(raw_filters, dict) else {}
 
         llm_filters = _sanitize_llm_filters(raw_llm_filters, domain=resolved_domain)
         filters = _merge_filters(
@@ -811,7 +845,12 @@ class DataIntentRouter:
 
         timeframe = self.time_policy.apply(resolved_domain, parsed)
         time_scope = _time_scope_from_time_intent(parsed.time_intent, timeframe)
-        operation = _operation_for_query(resolved_domain, q, filters)
+        heuristic_operation = _operation_for_query(resolved_domain, q, filters)
+        llm_operation = _coerce_operation(raw_llm_intent.get("operation"))
+        if llm_operation is not None and _is_explicit_operation_phrase(q, llm_operation):
+            operation = llm_operation
+        else:
+            operation = heuristic_operation
 
         plan_payload: Dict[str, Any] = {
             "domain": resolved_domain,

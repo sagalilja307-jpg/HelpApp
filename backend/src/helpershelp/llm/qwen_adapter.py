@@ -6,11 +6,12 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, cast, get_args
 
 from helpershelp.core.config import OLLAMA_MODEL
-from helpershelp.query.intent_plan import Domain
+from helpershelp.query.intent_plan import Domain, Operation
 
 from .ollama_adapter import OllamaClient, OllamaUnavailable
 
 _VALID_DOMAINS = frozenset(get_args(Domain))
+_VALID_OPERATIONS = frozenset(get_args(Operation))
 _JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
 _DEFAULT_FALLBACK_REASON = "Fallback p.g.a tekniskt fel."
 
@@ -251,8 +252,101 @@ JSON:"""
         return {}
 
 
+class QwenIntentStructurer:
+    """
+    Qwen2.5 via Ollama for one-shot intent structuring.
+
+    Returns a best-effort intent dict. Any parse/model error returns {}.
+    Strict validation/sanitization is expected in the router layer.
+    """
+
+    def __init__(
+        self,
+        ollama: Optional[OllamaClient] = None,
+        model: Optional[str] = None,
+        request_timeout_seconds: int = 12,
+    ):
+        self.model = (model or OLLAMA_MODEL or "qwen2.5:7b").strip() or "qwen2.5:7b"
+        self.request_timeout_seconds = max(1, int(request_timeout_seconds))
+        try:
+            self.ollama = ollama or OllamaClient()
+        except OllamaUnavailable:
+            self.ollama = None
+
+    def _build_prompt(self, *, query: str, language: str) -> str:
+        domains = ", ".join(sorted(_VALID_DOMAINS))
+        operations = ", ".join(sorted(_VALID_OPERATIONS))
+        safe_query = json.dumps(query, ensure_ascii=False)
+        safe_language = json.dumps((language or "sv").strip().lower(), ensure_ascii=False)
+
+        return f"""Du tolkar användarfrågor till ett intent-objekt.
+
+Regler:
+- Svara EXAKT och ENDAST med ett JSON-objekt.
+- JSON-format:
+{{
+  "domain": null | "{'" | "'.join(sorted(_VALID_DOMAINS))}",
+  "operation": null | "{'" | "'.join(sorted(_VALID_OPERATIONS))}",
+  "filters": {{
+    "status": null | "unread" | "cancelled" | "completed" | "pending",
+    "participants": string[],
+    "location": null | string,
+    "text_contains": null | string,
+    "tags": string[],
+    "priority": null | "high" | "medium" | "low",
+    "has_attachment": null | true | false,
+    "source_account": null | "gmail" | "outlook" | "icloud",
+    "subdomain": null | "activity" | "wellbeing",
+    "metric": null | "step_count" | "distance" | "exercise_time" | "workout" | "sleep" | "mindful_session" | "state_of_mind" | "heart_rate" | "resting_heart_rate" | "hrv" | "respiratory_rate" | "blood_oxygen",
+    "workout_type": null | "running" | "cycling" | "strength",
+    "aggregation": null | "sum" | "average" | "count" | "duration"
+  }}
+}}
+- Hitta inte på nya domäner eller operationer.
+- Om osäker, använd null för domain/operation och tomma filter.
+
+Tillåtna domäner: {domains}
+Tillåtna operationer: {operations}
+Språk: {safe_language}
+Användarfråga: {safe_query}
+JSON:"""
+
+    def structure_intent(self, *, query: str, language: str = "sv") -> Dict[str, Any]:
+        normalized_query = (query or "").strip()
+        if not normalized_query or self.ollama is None:
+            return {}
+
+        payload = {
+            "model": self.model,
+            "prompt": self._build_prompt(query=normalized_query, language=language),
+            "stream": False,
+            "options": {
+                "temperature": 0,
+                "top_p": 0.9,
+            },
+        }
+
+        try:
+            response = self.ollama.post_json(
+                "/api/generate",
+                payload,
+                timeout_s=self.request_timeout_seconds,
+            )
+            raw_content = str(response.get("response", "")).strip()
+            data = QwenClassifier._parse_json_block(raw_content)
+        except (OllamaUnavailable, ValueError, json.JSONDecodeError):
+            return {}
+
+        if isinstance(data.get("intent"), dict):
+            return cast(Dict[str, Any], data.get("intent"))
+        if isinstance(data, dict):
+            return data
+        return {}
+
+
 _qwen_classifier: Optional[QwenClassifier] = None
 _qwen_filter_structurer: Optional[QwenFilterStructurer] = None
+_qwen_intent_structurer: Optional[QwenIntentStructurer] = None
 
 
 def get_qwen_classifier() -> QwenClassifier:
@@ -267,3 +361,10 @@ def get_qwen_filter_structurer() -> QwenFilterStructurer:
     if _qwen_filter_structurer is None:
         _qwen_filter_structurer = QwenFilterStructurer()
     return _qwen_filter_structurer
+
+
+def get_qwen_intent_structurer() -> QwenIntentStructurer:
+    global _qwen_intent_structurer
+    if _qwen_intent_structurer is None:
+        _qwen_intent_structurer = QwenIntentStructurer()
+    return _qwen_intent_structurer

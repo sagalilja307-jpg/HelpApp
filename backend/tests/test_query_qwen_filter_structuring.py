@@ -7,48 +7,46 @@ from helpershelp.query.data_intent_router import DataIntentRouter
 
 
 class _StubDomainResult:
-    def __init__(self, domain=None, suggestions=None):
+    def __init__(self, domain=None, operation=None, filters=None):
         self.domain = domain
-        self.suggestions = suggestions or []
+        self.operation = operation
+        self.filters = filters or {}
 
 
-class _StubClassifier:
-    def __init__(self, result: _StubDomainResult):
-        self._result = result
-
-    def classify(self, query: str):
-        _ = query
-        return self._result
-
-
-class _StubFilterStructurer:
-    def __init__(self, payload):
+class _StubIntentStructurer:
+    def __init__(self, payload: _StubDomainResult):
         self.payload = payload
 
-    def structure_filters(self, *, query: str, domain: str, language: str = "sv"):
-        _ = (query, domain, language)
-        return self.payload
+    def structure_intent(self, *, query: str, language: str = "sv"):
+        _ = (query, language)
+        return {
+            "domain": self.payload.domain,
+            "operation": self.payload.operation,
+            "filters": self.payload.filters,
+        }
 
 
 class QueryQwenFilterStructuringTests(unittest.TestCase):
-    def _router_with(self, *, filter_payload, domain_result: _StubDomainResult) -> DataIntentRouter:
+    def _router_with(self, *, intent_payload: _StubDomainResult) -> DataIntentRouter:
         router = DataIntentRouter(
             timezone_name="Europe/Stockholm",
             now_provider=lambda: datetime(2026, 2, 28, 13, 0, tzinfo=timezone.utc),
         )
-        router.domain_classifier = _StubClassifier(domain_result)
-        router.filter_structurer = _StubFilterStructurer(filter_payload)
+        router.intent_structurer = _StubIntentStructurer(intent_payload)
         return router
 
     def test_mail_uses_qwen_filter_values_and_drops_unknown_keys(self):
         router = self._router_with(
-            filter_payload={
-                "status": "unread",
-                "participants": ["Klarna AB"],
-                "source_account": "gmail",
-                "unknown_key": "ignored",
-            },
-            domain_result=_StubDomainResult(domain="mail"),
+            intent_payload=_StubDomainResult(
+                domain="mail",
+                operation="list",
+                filters={
+                    "status": "unread",
+                    "participants": ["Klarna AB"],
+                    "source_account": "gmail",
+                    "unknown_key": "ignored",
+                },
+            ),
         )
 
         plan = router.route("Vad har jag för mejl från klarna?", language="sv")
@@ -62,12 +60,15 @@ class QueryQwenFilterStructuringTests(unittest.TestCase):
 
     def test_invalid_llm_filter_values_fall_back_to_deterministic_filters(self):
         router = self._router_with(
-            filter_payload={
-                "status": "super_urgent",
-                "participants": "klarna",
-                "has_attachment": "yes",
-            },
-            domain_result=_StubDomainResult(domain="mail"),
+            intent_payload=_StubDomainResult(
+                domain="mail",
+                operation="list",
+                filters={
+                    "status": "super_urgent",
+                    "participants": "klarna",
+                    "has_attachment": "yes",
+                },
+            ),
         )
 
         plan = router.route("Vad har jag för mejl från klarna?", language="sv")
@@ -79,12 +80,15 @@ class QueryQwenFilterStructuringTests(unittest.TestCase):
 
     def test_health_merge_keeps_workout_type_consistent_with_metric(self):
         router = self._router_with(
-            filter_payload={
-                "metric": "step_count",
-                "aggregation": "sum",
-                "workout_type": "running",
-            },
-            domain_result=_StubDomainResult(domain="health"),
+            intent_payload=_StubDomainResult(
+                domain="health",
+                operation="sum",
+                filters={
+                    "metric": "step_count",
+                    "aggregation": "sum",
+                    "workout_type": "running",
+                },
+            ),
         )
 
         plan = router.route("Hur var min puls igår?", language="sv")
