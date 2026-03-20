@@ -17,6 +17,8 @@ public enum DecisionAction: String, Codable, Sendable {
     case noAction    = "no_action"
     case suggested   = "suggested"
     case suppressed  = "suppressed"
+    case executed    = "executed"
+    case dismissed   = "dismissed"
 
     // MARK: - System follow-up actions (executed after user consent)
 

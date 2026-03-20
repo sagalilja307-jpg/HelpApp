@@ -63,7 +63,7 @@ async def http_exception_handler(_: Request, exc: HTTPException):
 async def validation_exception_handler(_: Request, exc: RequestValidationError):
     if _is_query_alias_validation_error(exc):
         return _error_response(status.HTTP_400_BAD_REQUEST, str(exc))
-    return _error_response(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
+    return _error_response(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
 
 
 @app.exception_handler(Exception)

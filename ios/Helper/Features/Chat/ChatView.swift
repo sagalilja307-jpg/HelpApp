@@ -8,6 +8,7 @@
 import SwiftData
 import SwiftUI
 import CoreLocation
+import EventKit
 import PhotosUI
 import UniformTypeIdentifiers
 import UIKit
@@ -40,6 +41,9 @@ public struct ChatView: View {
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var importStatusMessage: String?
     @State private var saveStatuses: [UUID: MessageSaveStatus] = [:]
+    @State private var reminderSuggestionDraft: ReminderSuggestionPresentation?
+    @State private var noteSuggestionDraft: NoteSuggestionPresentation?
+    @State private var calendarSuggestionDraft: CalendarSuggestionPresentation?
 
     private let sourceConnectionStore: SourceConnectionStore
     private let photosIndexService: PhotosIndexService
@@ -51,6 +55,7 @@ public struct ChatView: View {
 
     init(
         pipeline: QueryPipeline,
+        suggestionLogger: ChatSuggestionLogging? = nil,
         sourceConnectionStore: SourceConnectionStore,
         photosIndexService: PhotosIndexService,
         filesImportService: FilesImportService,
@@ -59,7 +64,10 @@ public struct ChatView: View {
         iCloudSyncCoordinator: ICloudKeyValueSyncCoordinator,
         iCloudMemorySyncCoordinator: ICloudMemorySyncCoordinator
     ) {
-        _vm = State(initialValue: ChatViewModel(pipeline: pipeline))
+        _vm = State(initialValue: ChatViewModel(
+            pipeline: pipeline,
+            suggestionLogger: suggestionLogger
+        ))
         self.sourceConnectionStore = sourceConnectionStore
         self.photosIndexService = photosIndexService
         self.filesImportService = filesImportService
@@ -299,6 +307,47 @@ public struct ChatView: View {
                 }
             }
         }
+        .sheet(item: $reminderSuggestionDraft) { presentation in
+            ChatReminderDraftSheet(
+                draft: presentation.draft,
+                onConfirm: { draft in
+                    await createReminderSuggestion(
+                        messageID: presentation.messageID,
+                        draft: draft
+                    )
+                },
+                onCancel: {
+                    reminderSuggestionDraft = nil
+                    vm.restoreSuggestionVisible(for: presentation.messageID)
+                }
+            )
+        }
+        .sheet(item: $noteSuggestionDraft) { presentation in
+            ChatNoteDraftSheet(
+                draft: presentation.draft,
+                onConfirm: { draft in
+                    await createNoteSuggestion(
+                        messageID: presentation.messageID,
+                        draft: draft
+                    )
+                },
+                onCancel: {
+                    noteSuggestionDraft = nil
+                    vm.restoreSuggestionVisible(for: presentation.messageID)
+                }
+            )
+        }
+        .sheet(item: $calendarSuggestionDraft) { presentation in
+            EventEditView(
+                event: presentation.event,
+                store: presentation.store
+            ) { result in
+                handleCalendarSuggestionResult(
+                    result,
+                    messageID: presentation.messageID
+                )
+            }
+        }
         .fileImporter(
             isPresented: $showFileImporter,
             allowedContentTypes: [.item],
@@ -389,6 +438,23 @@ public struct ChatView: View {
                 .background(isUser ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.1))
                 .clipShape(RoundedRectangle(cornerRadius: 14))
                 if !isUser { Spacer() }
+            }
+
+            if !isUser, let suggestion = msg.suggestion, !suggestion.isDismissed {
+                HStack {
+                    ChatSuggestionCardView(
+                        suggestion: suggestion,
+                        onPrimary: {
+                            Task {
+                                await handleSuggestionPrimaryAction(for: msg)
+                            }
+                        },
+                        onDismiss: {
+                            vm.dismissSuggestion(for: msg.id)
+                        }
+                    )
+                    Spacer()
+                }
             }
 
             if !isUser {
@@ -1046,6 +1112,194 @@ public struct ChatView: View {
         noteBody = ""
         showCreateNote = false
     }
+
+    private func handleSuggestionPrimaryAction(for message: ChatViewModel.ChatMessage) async {
+        guard let suggestion = message.suggestion else { return }
+        vm.markSuggestionExecuting(for: message.id)
+
+        switch suggestion.draft {
+        case .calendar(let draft):
+            await prepareCalendarSuggestion(messageID: message.id, draft: draft)
+        case .reminder(let draft):
+            await prepareReminderSuggestion(messageID: message.id, draft: draft)
+        case .note(let draft):
+            prepareNoteSuggestion(messageID: message.id, draft: draft)
+        }
+    }
+
+    private func prepareCalendarSuggestion(
+        messageID: UUID,
+        draft: ChatSuggestionDraft.CalendarDraft
+    ) async {
+        let hasCalendarAccess = await ensureCalendarAccess()
+        guard hasCalendarAccess else {
+            presentSuggestionFailure(
+                messageID: messageID,
+                suggestionError: "Kalenderåtkomst saknas.",
+                alertMessage: "Tillåt kalenderåtkomst i Inställningar för att skapa kalenderutkast."
+            )
+            return
+        }
+
+        let store = PermissionManager.shared.eventStore
+        let event = EKEvent(eventStore: store)
+        event.title = draft.title
+        event.notes = draft.notes.isEmpty ? nil : draft.notes
+        event.startDate = draft.startDate
+        event.endDate = draft.endDate
+        event.isAllDay = draft.isAllDay
+        event.calendar = store.defaultCalendarForNewEvents
+
+        calendarSuggestionDraft = CalendarSuggestionPresentation(
+            messageID: messageID,
+            event: event,
+            store: store
+        )
+    }
+
+    private func prepareReminderSuggestion(
+        messageID: UUID,
+        draft: ChatSuggestionDraft.ReminderDraft
+    ) async {
+        let hasReminderAccess = await ensureReminderAccess()
+        guard hasReminderAccess else {
+            presentSuggestionFailure(
+                messageID: messageID,
+                suggestionError: "Påminnelseåtkomst saknas.",
+                alertMessage: "Tillåt påminnelseåtkomst i Inställningar för att skapa påminnelser."
+            )
+            return
+        }
+
+        reminderSuggestionDraft = ReminderSuggestionPresentation(
+            messageID: messageID,
+            draft: draft
+        )
+    }
+
+    private func prepareNoteSuggestion(
+        messageID: UUID,
+        draft: ChatSuggestionDraft.NoteDraft
+    ) {
+        noteSuggestionDraft = NoteSuggestionPresentation(
+            messageID: messageID,
+            draft: draft
+        )
+    }
+
+    private func handleCalendarSuggestionResult(
+        _ result: Result<Void, Error>,
+        messageID: UUID
+    ) {
+        calendarSuggestionDraft = nil
+
+        switch result {
+        case .success:
+            vm.completeSuggestion(for: messageID)
+        case .failure(let error):
+            if isUserCancelledCalendarEdit(error) {
+                vm.restoreSuggestionVisible(for: messageID)
+            } else {
+                presentSuggestionFailure(
+                    messageID: messageID,
+                    suggestionError: "Kalenderutkastet kunde inte sparas.",
+                    alertMessage: "Kalenderutkastet kunde inte sparas: \(error.localizedDescription)"
+                )
+            }
+        }
+    }
+
+    private func createReminderSuggestion(
+        messageID: UUID,
+        draft: ChatSuggestionDraft.ReminderDraft
+    ) async {
+        reminderSuggestionDraft = nil
+
+        do {
+            let reminder = ReminderItem(
+                title: draft.title,
+                dueDate: draft.dueDate,
+                notes: optionalTrimmed(draft.notes),
+                location: draft.location,
+                priority: draft.priority?.eventKitValue
+            )
+            try ReminderSyncManager.shared.createReminder(from: reminder)
+            vm.completeSuggestion(for: messageID)
+        } catch {
+            presentSuggestionFailure(
+                messageID: messageID,
+                suggestionError: "Påminnelsen kunde inte skapas.",
+                alertMessage: "Påminnelsen kunde inte skapas: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func createNoteSuggestion(
+        messageID: UUID,
+        draft: ChatSuggestionDraft.NoteDraft
+    ) async {
+        noteSuggestionDraft = nil
+
+        do {
+            _ = try NotesStoreService().createNote(
+                title: draft.title,
+                body: draft.body,
+                source: "chat_suggestion",
+                in: modelContext
+            )
+            vm.completeSuggestion(for: messageID)
+            _ = await iCloudMemorySyncCoordinator.syncNow()
+        } catch {
+            presentSuggestionFailure(
+                messageID: messageID,
+                suggestionError: "Anteckningen kunde inte sparas.",
+                alertMessage: "Anteckningen kunde inte sparas: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func presentSuggestionFailure(
+        messageID: UUID,
+        suggestionError: String,
+        alertMessage: String
+    ) {
+        vm.failSuggestion(for: messageID, message: suggestionError)
+        vm.error = alertMessage
+    }
+
+    private func ensureCalendarAccess() async -> Bool {
+        do {
+            var status = await PermissionManager.shared.status(for: .calendar)
+            if status == .notDetermined {
+                status = try await PermissionManager.shared.requestAccess(for: .calendar)
+            }
+            return status == .granted
+        } catch {
+            return false
+        }
+    }
+
+    private func ensureReminderAccess() async -> Bool {
+        do {
+            var status = await PermissionManager.shared.status(for: .reminder)
+            if status == .notDetermined {
+                status = try await PermissionManager.shared.requestAccess(for: .reminder)
+            }
+            return status == .granted
+        } catch {
+            return false
+        }
+    }
+
+    private func isUserCancelledCalendarEdit(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == "UserCancelled"
+    }
+
+    private func optionalTrimmed(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
 }
 
 private struct CameraCaptureSheet: UIViewControllerRepresentable {
@@ -1087,5 +1341,36 @@ private struct CameraCaptureSheet: UIViewControllerRepresentable {
             }
             parent.dismiss()
         }
+    }
+}
+
+private struct ReminderSuggestionPresentation: Identifiable {
+    let messageID: UUID
+    let draft: ChatSuggestionDraft.ReminderDraft
+
+    var id: UUID { messageID }
+}
+
+private struct NoteSuggestionPresentation: Identifiable {
+    let messageID: UUID
+    let draft: ChatSuggestionDraft.NoteDraft
+
+    var id: UUID { messageID }
+}
+
+private struct CalendarSuggestionPresentation: Identifiable {
+    let messageID: UUID
+    let event: EKEvent
+    let store: EKEventStore
+
+    var id: UUID { messageID }
+}
+
+private extension ChatSuggestionCard {
+    var isDismissed: Bool {
+        if case .dismissed = state {
+            return true
+        }
+        return false
     }
 }

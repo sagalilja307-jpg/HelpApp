@@ -34,6 +34,7 @@ struct HelperApp: App {
                 if onboardingDone {
                     ChatView(
                         pipeline: runtime.queryPipeline,
+                        suggestionLogger: runtime.chatSuggestionLogger,
                         sourceConnectionStore: runtime.sourceConnectionStore,
                         photosIndexService: runtime.photosIndexService,
                         filesImportService: runtime.filesImportService,

@@ -13,6 +13,7 @@ struct HelperAppRuntime {
     let modelContext: ModelContext
     let legacy: HelperAppLegacyRuntime
     let queryPipeline: QueryPipeline
+    let chatSuggestionLogger: ChatSuggestionLogger
     let supportSettingsService: SupportSettingsAPIService
     let shareImportService: ShareImportService
     let sourceConnectionStore: SourceConnectionStore
@@ -44,6 +45,7 @@ enum HelperAppBootstrap {
         let fileTextExtraction = FileTextExtractionService()
 
         let decisionLogger = DecisionLogger(memoryService: memoryService)
+        let chatSuggestionLogger = ChatSuggestionLogger(memoryService: memoryService)
         let legacy = HelperAppLegacyRuntime(
             memoryCoordinator: MemoryCoordinator(memoryService: memoryService),
             decisionLogger: decisionLogger,
@@ -89,6 +91,7 @@ enum HelperAppBootstrap {
             modelContext: modelContext,
             legacy: legacy,
             queryPipeline: queryPipeline,
+            chatSuggestionLogger: chatSuggestionLogger,
             supportSettingsService: supportSettingsService,
             shareImportService: shareImportService,
             sourceConnectionStore: sourceConnectionStore,

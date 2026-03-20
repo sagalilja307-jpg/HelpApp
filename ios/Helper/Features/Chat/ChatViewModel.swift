@@ -14,7 +14,7 @@ final class ChatViewModel {
 
     struct ChatMessage: Identifiable, Equatable {
         enum Role { case user, assistant }
-        let id = UUID()
+        let id: UUID
         let role: Role
         let text: String
         let visualizationComponent: VisualizationComponent?
@@ -23,9 +23,58 @@ final class ChatViewModel {
         let timeRange: DateInterval?
         let intentPlan: BackendIntentPlanDTO?
         let interpretationHint: String?
+        let suggestion: ChatSuggestionCard?
         let clarificationDomains: [BackendIntentDomain]
         let submittedQuery: String?
-        let timestamp: Date = .now
+        let timestamp: Date
+
+        init(
+            id: UUID = UUID(),
+            role: Role,
+            text: String,
+            visualizationComponent: VisualizationComponent?,
+            filters: [String: AnyCodable],
+            entries: [QueryResult.Entry],
+            timeRange: DateInterval?,
+            intentPlan: BackendIntentPlanDTO?,
+            interpretationHint: String?,
+            suggestion: ChatSuggestionCard?,
+            clarificationDomains: [BackendIntentDomain],
+            submittedQuery: String?,
+            timestamp: Date = .now
+        ) {
+            self.id = id
+            self.role = role
+            self.text = text
+            self.visualizationComponent = visualizationComponent
+            self.filters = filters
+            self.entries = entries
+            self.timeRange = timeRange
+            self.intentPlan = intentPlan
+            self.interpretationHint = interpretationHint
+            self.suggestion = suggestion
+            self.clarificationDomains = clarificationDomains
+            self.submittedQuery = submittedQuery
+            self.timestamp = timestamp
+        }
+
+        func updating(suggestion: ChatSuggestionCard?) -> ChatMessage {
+            ChatMessage(
+                id: id,
+                role: role,
+                text: text,
+                visualizationComponent: visualizationComponent,
+                filters: filters,
+                entries: entries,
+                timeRange: timeRange,
+                intentPlan: intentPlan,
+                interpretationHint: interpretationHint,
+                suggestion: suggestion,
+                clarificationDomains: clarificationDomains,
+                submittedQuery: submittedQuery,
+                timestamp: timestamp
+            )
+        }
     }
 
     // MARK: - UI-state
@@ -38,9 +87,17 @@ final class ChatViewModel {
     // MARK: - Pipeline
 
     private let pipeline: QueryPipeline
+    private let suggestionEngine: ChatSuggestionEvaluating
+    private let suggestionLogger: ChatSuggestionLogging
 
-    init(pipeline: QueryPipeline) {
+    init(
+        pipeline: QueryPipeline,
+        suggestionEngine: ChatSuggestionEvaluating? = nil,
+        suggestionLogger: ChatSuggestionLogging? = nil
+    ) {
         self.pipeline = pipeline
+        self.suggestionEngine = suggestionEngine ?? ChatSuggestionEngine()
+        self.suggestionLogger = suggestionLogger ?? NoopChatSuggestionLogger()
     }
 
     // MARK: - Public API
@@ -53,7 +110,7 @@ final class ChatViewModel {
         defer { isSending = false }
         error = nil
 
-        messages.append(.init(
+        let userMessage = ChatMessage(
             role: .user,
             text: trimmed,
             visualizationComponent: nil,
@@ -62,16 +119,20 @@ final class ChatViewModel {
             timeRange: nil,
             intentPlan: nil,
             interpretationHint: nil,
+            suggestion: nil,
             clarificationDomains: [],
             submittedQuery: trimmed
-        ))
+        )
+        messages.append(userMessage)
         query = ""
+
+        let suggestionDecision = suggestionEngine.decide(for: trimmed)
 
         do {
             let userQuery = UserQuery(text: trimmed, source: .userTyped)
             let result = try await pipeline.run(userQuery)
             let responseText = normalizedResponseText(from: result)
-            messages.append(.init(
+            let assistantMessage = ChatMessage(
                 role: .assistant,
                 text: responseText,
                 visualizationComponent: resolveVisualizationComponent(from: result.intentPlan),
@@ -80,12 +141,19 @@ final class ChatViewModel {
                 timeRange: result.timeRange,
                 intentPlan: result.intentPlan,
                 interpretationHint: interpretationHint(from: result.intentPlan),
+                suggestion: suggestion(from: suggestionDecision),
                 clarificationDomains: clarificationDomains(from: result.intentPlan),
                 submittedQuery: trimmed
-            ))
+            )
+            messages.append(assistantMessage)
+            logSuggestionDecision(
+                suggestionDecision,
+                userMessageID: userMessage.id.uuidString,
+                assistantMessageID: assistantMessage.id.uuidString
+            )
         } catch {
             self.error = error.localizedDescription
-            messages.append(.init(
+            let assistantMessage = ChatMessage(
                 role: .assistant,
                 text: "Förlåt, något gick fel (\(error.localizedDescription)).",
                 visualizationComponent: nil,
@@ -94,9 +162,16 @@ final class ChatViewModel {
                 timeRange: nil,
                 intentPlan: nil,
                 interpretationHint: nil,
+                suggestion: suggestion(from: suggestionDecision),
                 clarificationDomains: [],
                 submittedQuery: trimmed
-            ))
+            )
+            messages.append(assistantMessage)
+            logSuggestionDecision(
+                suggestionDecision,
+                userMessageID: userMessage.id.uuidString,
+                assistantMessageID: assistantMessage.id.uuidString
+            )
         }
     }
 
@@ -150,6 +225,53 @@ final class ChatViewModel {
             return "\(trimmed.dropLast()) \(suffix)?"
         }
         return "\(trimmed) \(suffix)"
+    }
+
+    func dismissSuggestion(for messageID: UUID) {
+        guard let message = message(withID: messageID), let suggestion = message.suggestion else {
+            return
+        }
+        updateSuggestion(for: messageID) { $0.updating(state: .dismissed) }
+        suggestionLogger.log(
+            action: .dismissed,
+            messageID: messageID.uuidString,
+            kind: suggestion.kind,
+            confidence: suggestion.confidence,
+            reasons: suggestion.auditReasons
+        )
+    }
+
+    func markSuggestionExecuting(for messageID: UUID) {
+        updateSuggestion(for: messageID) { $0.updating(state: .executing) }
+    }
+
+    func restoreSuggestionVisible(for messageID: UUID) {
+        updateSuggestion(for: messageID) { suggestion in
+            switch suggestion.state {
+            case .completed, .dismissed:
+                return suggestion
+            default:
+                return suggestion.updating(state: .visible)
+            }
+        }
+    }
+
+    func completeSuggestion(for messageID: UUID) {
+        guard let message = message(withID: messageID), let suggestion = message.suggestion else {
+            return
+        }
+        updateSuggestion(for: messageID) { $0.updating(state: .completed) }
+        suggestionLogger.log(
+            action: .executed,
+            messageID: messageID.uuidString,
+            kind: suggestion.kind,
+            confidence: suggestion.confidence,
+            reasons: suggestion.auditReasons
+        )
+    }
+
+    func failSuggestion(for messageID: UUID, message: String) {
+        updateSuggestion(for: messageID) { $0.updating(state: .failed(message)) }
     }
 
     private func normalizedResponseText(from result: QueryResult) -> String {
@@ -466,5 +588,60 @@ final class ChatViewModel {
         case .health:
             return "hälsa"
         }
+    }
+
+    private func suggestion(from decision: ChatSuggestionDecision) -> ChatSuggestionCard? {
+        guard case .suggestion(let suggestion) = decision else {
+            return nil
+        }
+        return suggestion
+    }
+
+    private func logSuggestionDecision(
+        _ decision: ChatSuggestionDecision,
+        userMessageID: String,
+        assistantMessageID: String
+    ) {
+        switch decision {
+        case .suggestion(let suggestion):
+            suggestionLogger.log(
+                action: .suggested,
+                messageID: assistantMessageID,
+                kind: suggestion.kind,
+                confidence: suggestion.confidence,
+                reasons: suggestion.auditReasons
+            )
+        case .suppressed(let kind, let confidence, let reasons):
+            suggestionLogger.log(
+                action: .suppressed,
+                messageID: userMessageID,
+                kind: kind,
+                confidence: confidence,
+                reasons: reasons
+            )
+        case .noAction(let reasons):
+            suggestionLogger.log(
+                action: .noAction,
+                messageID: userMessageID,
+                kind: nil,
+                confidence: nil,
+                reasons: reasons
+            )
+        }
+    }
+
+    private func updateSuggestion(
+        for messageID: UUID,
+        transform: (ChatSuggestionCard) -> ChatSuggestionCard
+    ) {
+        guard let index = messages.firstIndex(where: { $0.id == messageID }),
+              let suggestion = messages[index].suggestion else {
+            return
+        }
+        messages[index] = messages[index].updating(suggestion: transform(suggestion))
+    }
+
+    private func message(withID id: UUID) -> ChatMessage? {
+        messages.first(where: { $0.id == id })
     }
 }
