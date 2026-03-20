@@ -46,16 +46,15 @@ class QueryDataIntentTests(unittest.TestCase):
         self.assertEqual(payload.get("domain"), "notes")
         self.assertEqual(payload.get("operation"), "list")
 
-    def test_ambiguous_query_uses_deterministic_fallback_domain(self):
+    def test_ambiguous_query_returns_clarification_payload(self):
         resp = self.client.post(
             "/query",
             json={"query": "Vad händer?", "language": "sv"},
         )
         self.assertEqual(resp.status_code, 200)
         payload = resp.json().get("data_intent") or {}
-        # No analysis/clarification payload: ambiguous queries fall back deterministically.
-        self.assertEqual(payload.get("domain"), "calendar")
-        self.assertEqual(payload.get("operation"), "list")
+        self.assertEqual(payload.get("domain"), "system")
+        self.assertEqual(payload.get("operation"), "needs_clarification")
 
 
 if __name__ == "__main__":

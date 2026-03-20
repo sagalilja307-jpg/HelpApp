@@ -40,7 +40,22 @@ class QueryIntentFilterTests(unittest.TestCase):
         self.assertEqual(time_scope.get("value"), "next_week")
         self.assertIsNotNone(time_scope.get("start"))
         self.assertIsNotNone(time_scope.get("end"))
-        self.assertEqual(payload.get("filters"), {
+        filters = payload.get("filters") or {}
+        self.assertEqual(
+            {
+                key: filters.get(key)
+                for key in (
+                    "status",
+                    "participants",
+                    "location",
+                    "text_contains",
+                    "tags",
+                    "priority",
+                    "has_attachment",
+                    "source_account",
+                )
+            },
+            {
             "status": None,
             "participants": [],
             "location": None,
@@ -49,7 +64,10 @@ class QueryIntentFilterTests(unittest.TestCase):
             "priority": None,
             "has_attachment": None,
             "source_account": None,
-        })
+            },
+        )
+        self.assertEqual(filters.get("_confidence"), "medium")
+        self.assertEqual(filters.get("_candidate_domains"), ["calendar"])
 
     def test_birthday_query_sets_participants_filter(self):
         response = self.client.post(

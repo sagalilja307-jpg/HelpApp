@@ -143,6 +143,135 @@ final class ChatIntentVisualizationTests: XCTestCase {
         XCTAssertEqual(vm.messages.last?.text, "Text-only fallback.")
     }
 
+    func testAssistantMessageIncludesInterpretationHint() async {
+        let plan = makePlan(
+            domain: .calendar,
+            operation: .list,
+            timeScopeType: .relative,
+            timeScopeValue: "today",
+            filters: [:]
+        )
+        let vm = makeViewModel(plan: plan)
+
+        vm.query = "vad har jag idag?"
+        await vm.send()
+
+        XCTAssertEqual(vm.messages.last?.interpretationHint, "Tolkat som kalender · idag")
+    }
+
+    func testContactsInterpretationHintIncludesParticipantName() async {
+        let plan = makePlan(
+            domain: .contacts,
+            operation: .list,
+            timeScopeType: .all,
+            timeScopeValue: nil,
+            filters: ["participants": AnyCodable(["alva"])]
+        )
+        let vm = makeViewModel(plan: plan)
+
+        vm.query = "vad har jag för mejladress till alva?"
+        await vm.send()
+
+        XCTAssertEqual(vm.messages.last?.interpretationHint, "Tolkat som kontakter · Alva")
+    }
+
+    func testFilesInterpretationHintIncludesSearchTerm() async {
+        let plan = makePlan(
+            domain: .files,
+            operation: .list,
+            timeScopeType: .all,
+            timeScopeValue: nil,
+            filters: ["text_contains": AnyCodable("boardingkort")]
+        )
+        let vm = makeViewModel(plan: plan)
+
+        vm.query = "hitta pdf om boardingkort"
+        await vm.send()
+
+        XCTAssertEqual(vm.messages.last?.interpretationHint, "Tolkat som filer · boardingkort")
+    }
+
+    func testNotesInterpretationHintIncludesSearchTerm() async {
+        let plan = makePlan(
+            domain: .notes,
+            operation: .list,
+            timeScopeType: .all,
+            timeScopeValue: nil,
+            filters: ["text_contains": AnyCodable("resan")]
+        )
+        let vm = makeViewModel(plan: plan)
+
+        vm.query = "vad skrev jag om resan?"
+        await vm.send()
+
+        XCTAssertEqual(vm.messages.last?.interpretationHint, "Tolkat som anteckningar · resan")
+    }
+
+    func testLocationInterpretationHintIncludesPlaceAndTimeScope() async {
+        let plan = makePlan(
+            domain: .location,
+            operation: .list,
+            timeScopeType: .relative,
+            timeScopeValue: "today",
+            filters: ["location": AnyCodable("gymmet")]
+        )
+        let vm = makeViewModel(plan: plan)
+
+        vm.query = "har jag varit på gymmet idag?"
+        await vm.send()
+
+        XCTAssertEqual(vm.messages.last?.interpretationHint, "Tolkat som plats · Gymmet · idag")
+    }
+
+    func testHealthInterpretationHintIncludesMetricAndTimeScope() async {
+        let plan = makePlan(
+            domain: .health,
+            operation: .sum,
+            timeScopeType: .relative,
+            timeScopeValue: "last_week",
+            filters: [
+                "metric": AnyCodable("sleep"),
+                "aggregation": AnyCodable("duration")
+            ]
+        )
+        let vm = makeViewModel(plan: plan)
+
+        vm.query = "hur sov jag förra veckan?"
+        await vm.send()
+
+        XCTAssertEqual(vm.messages.last?.interpretationHint, "Tolkat som hälsa · sömn · förra veckan")
+    }
+
+    func testClarificationMessageCarriesCandidateDomainsFromFilters() async {
+        let plan = BackendIntentPlanDTO(
+            domain: nil,
+            mode: .info,
+            operation: .needsClarification,
+            timeScope: BackendTimeScopeDTO(
+                type: .relative,
+                value: "today",
+                start: nil,
+                end: nil
+            ),
+            filters: [
+                "_confidence": AnyCodable("low"),
+                "_candidate_domains": AnyCodable(["calendar", "mail"])
+            ],
+            grouping: nil,
+            sort: nil,
+            needsClarification: true,
+            clarificationMessage: nil,
+            suggestions: []
+        )
+        let vm = makeViewModel(plan: plan)
+
+        vm.query = "vad händer idag?"
+        await vm.send()
+
+        XCTAssertEqual(vm.messages.last?.clarificationDomains, [.calendar, .mail])
+        XCTAssertNil(vm.messages.last?.interpretationHint)
+    }
+
     func testMissingDataIntentRendersTextOnly() async {
         let pipeline = QueryPipeline(
             backendQueryService: FailingBackend(),

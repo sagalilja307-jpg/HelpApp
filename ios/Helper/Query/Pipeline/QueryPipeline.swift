@@ -175,7 +175,7 @@ protocol QuerySourceAccessChecking {
 
 // MARK: - Helpers
 
-private extension QueryPipeline {
+extension QueryPipeline {
 
     nonisolated static func mapDomainToSource(_ domain: BackendIntentDomain?) -> QuerySource? {
         switch domain {
@@ -195,17 +195,22 @@ private extension QueryPipeline {
     }
 
     nonisolated static func clarificationMessage(from plan: BackendIntentPlanDTO) -> String {
-        let suggestions = plan.suggestions
+        if let clarificationMessage = plan.clarificationMessage?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !clarificationMessage.isEmpty {
+            return clarificationMessage
+        }
+
+        let suggestions = candidateDomains(from: plan)
 
         if suggestions.isEmpty {
-            return "Jag behöver förtydligande – men jag vet inte vilken källa du menar."
+            return "Jag är inte helt säker ännu. Kan du förtydliga vilken källa du menar?"
         }
         if suggestions.count == 1 {
-            return "Menar du \(localizedDomain(suggestions[0]))?"
+            return "Jag är inte helt säker ännu. Menar du \(localizedDomain(suggestions[0]))?"
         }
 
         let rendered = suggestions.prefix(3).map(localizedDomain).joined(separator: " eller ")
-        return "Menar du \(rendered)?"
+        return "Jag är inte helt säker ännu. Menar du \(rendered)?"
     }
 
     static func resolvedTimeRange(
@@ -742,6 +747,7 @@ private extension QueryPipeline {
         var collected: [String] = []
 
         for (key, value) in filters {
+            guard !key.hasPrefix("_") else { continue }
             collectFilterTerms(
                 value: value.value,
                 key: key.lowercased(),
@@ -767,6 +773,7 @@ private extension QueryPipeline {
         includeQueryHints: Bool,
         output: inout [String]
     ) {
+        guard !key.hasPrefix("_") else { return }
         switch value {
         case let text as String:
             let shouldUseDirect = keyHints.contains(where: { key.contains($0) })
@@ -878,6 +885,27 @@ private extension QueryPipeline {
             .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
             .lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    nonisolated static func candidateDomains(from plan: BackendIntentPlanDTO) -> [BackendIntentDomain] {
+        if !plan.suggestions.isEmpty {
+            return plan.suggestions
+        }
+
+        guard let raw = plan.filters["_candidate_domains"]?.value else {
+            return []
+        }
+
+        if let values = raw as? [String] {
+            return values.compactMap(BackendIntentDomain.init(rawValue:))
+        }
+        if let values = raw as? [Any] {
+            return values.compactMap { value in
+                guard let string = value as? String else { return nil }
+                return BackendIntentDomain(rawValue: string)
+            }
+        }
+        return []
     }
 
     // Use DateService for all date parsing/formatting to keep locale/timezone consistent

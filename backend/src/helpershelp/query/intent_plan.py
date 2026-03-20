@@ -17,6 +17,7 @@ Domain = Literal[
     "memory",
     "health",
 ]
+IntentPlanDomain = Domain | Literal["system"]
 
 Operation = Literal[
     "count",
@@ -25,6 +26,7 @@ Operation = Literal[
     "sum",
     "latest",
 ]
+IntentPlanOperation = Operation | Literal["needs_clarification"]
 Mode = Literal["info"]
 TimeScopeType = Literal["relative", "absolute", "all"]
 TimeScopeValue = Literal[
@@ -65,8 +67,8 @@ class TimeScopeDTO(BaseModel):
 class IntentPlanDTO(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    domain: Domain
+    domain: IntentPlanDomain
     mode: Mode = "info"
-    operation: Operation = "count"
+    operation: IntentPlanOperation = "count"
     time_scope: TimeScopeDTO
     filters: Dict[str, Any] = Field(default_factory=dict)

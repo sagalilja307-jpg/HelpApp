@@ -81,6 +81,33 @@ final class BackendQueryPipelineTests: XCTestCase {
         XCTAssertFalse(decoded.hasDataIntent)
     }
 
+    func testBackendQueryResponseDecodesSystemClarificationWithCandidateDomains() throws {
+        let json = """
+        {
+          "data_intent": {
+            "domain": "system",
+            "mode": "info",
+            "operation": "needs_clarification",
+            "time_scope": {
+              "type": "relative",
+              "value": "today"
+            },
+            "filters": {
+              "_confidence": "low",
+              "_candidate_domains": ["calendar", "mail"]
+            }
+          }
+        }
+        """
+
+        let data = try XCTUnwrap(json.data(using: .utf8))
+        let decoded = try BackendQueryAPIService.decoder.decode(BackendQueryResponseDTO.self, from: data)
+
+        XCTAssertNil(decoded.intentPlan.domain)
+        XCTAssertEqual(decoded.intentPlan.operation, .needsClarification)
+        XCTAssertEqual(QueryPipeline.candidateDomains(from: decoded.intentPlan), [.calendar, .mail])
+    }
+
     func testPipelinePassesThroughIntentPlan() async throws {
         let plan = makePlan(domain: .calendar, operation: .count, type: .relative, value: "today")
         let pipeline = QueryPipeline(
@@ -219,6 +246,39 @@ final class BackendQueryPipelineTests: XCTestCase {
         XCTAssertEqual(collector.lastTimeRange?.end, range.end)
         XCTAssertGreaterThan(range.duration, 6 * 24 * 3600)
         XCTAssertLessThan(range.duration, 8 * 24 * 3600)
+    }
+
+    func testPipelineUsesCandidateDomainsFromFiltersWhenClarifying() async throws {
+        let plan = BackendIntentPlanDTO(
+            domain: nil,
+            mode: .info,
+            operation: .needsClarification,
+            timeScope: BackendTimeScopeDTO(
+                type: .relative,
+                value: "today",
+                start: nil,
+                end: nil
+            ),
+            filters: [
+                "_confidence": AnyCodable("low"),
+                "_candidate_domains": AnyCodable(["calendar", "mail"])
+            ],
+            grouping: nil,
+            sort: nil,
+            needsClarification: true,
+            clarificationMessage: nil,
+            suggestions: []
+        )
+        let pipeline = QueryPipeline(
+            backendQueryService: MockBackendQueryService(response: BackendQueryResponseDTO(intentPlan: plan)),
+            localCollector: RecordingCollector(),
+            accessGate: AllowingAccess()
+        )
+
+        let result = try await pipeline.run(UserQuery(text: "vad händer idag"))
+
+        XCTAssertEqual(result.answer, "Jag är inte helt säker ännu. Menar du kalender eller mejl?")
+        XCTAssertEqual(QueryPipeline.candidateDomains(from: plan), [.calendar, .mail])
     }
 
     func testPipelineAppliesEntityFiltersBeforeBuildingAnswer() async throws {

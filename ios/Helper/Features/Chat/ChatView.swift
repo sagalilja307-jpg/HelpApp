@@ -357,11 +357,37 @@ public struct ChatView: View {
 
             HStack {
                 if isUser { Spacer() }
-                Text(msg.text)
-                    .padding(12)
-                    .background(isUser ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                    .textSelection(.enabled)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(msg.text)
+                        .textSelection(.enabled)
+
+                    if !isUser,
+                       let interpretationHint = msg.interpretationHint,
+                       !interpretationHint.isEmpty {
+                        Text(interpretationHint)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if !isUser, !msg.clarificationDomains.isEmpty {
+                        HStack(spacing: 8) {
+                            ForEach(msg.clarificationDomains, id: \.rawValue) { domain in
+                                Button {
+                                    Task {
+                                        await vm.sendClarification(for: msg, domain: domain)
+                                    }
+                                } label: {
+                                    Text(clarificationTitle(for: domain))
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            }
+                        }
+                    }
+                }
+                .padding(12)
+                .background(isUser ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
                 if !isUser { Spacer() }
             }
 
@@ -677,6 +703,31 @@ public struct ChatView: View {
             return "Minne"
         case .rawEvents:
             return "Råhändelser"
+        }
+    }
+
+    private func clarificationTitle(for domain: BackendIntentDomain) -> String {
+        switch domain {
+        case .calendar:
+            return "Kalender"
+        case .reminders:
+            return "Påminnelser"
+        case .mail:
+            return "Mejl"
+        case .contacts:
+            return "Kontakter"
+        case .files:
+            return "Filer"
+        case .photos:
+            return "Bilder"
+        case .location:
+            return "Plats"
+        case .notes:
+            return "Anteckningar"
+        case .memory:
+            return "Minne"
+        case .health:
+            return "Hälsa"
         }
     }
 
