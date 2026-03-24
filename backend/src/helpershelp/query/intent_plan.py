@@ -24,6 +24,7 @@ Operation = Literal[
     "list",
     "exists",
     "sum",
+    "sum_duration",
     "latest",
 ]
 IntentPlanOperation = Operation | Literal["needs_clarification"]

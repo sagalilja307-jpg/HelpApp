@@ -128,6 +128,29 @@ final class ChatViewModel {
 
         let suggestionDecision = suggestionEngine.decide(for: trimmed)
 
+        if let immediateSuggestion = immediateCalendarCreateSuggestion(from: suggestionDecision) {
+            let assistantMessage = ChatMessage(
+                role: .assistant,
+                text: "Jag kan lägga in det här i kalendern. Vill du öppna utkastet?",
+                visualizationComponent: nil,
+                filters: [:],
+                entries: [],
+                timeRange: nil,
+                intentPlan: nil,
+                interpretationHint: nil,
+                suggestion: immediateSuggestion,
+                clarificationDomains: [],
+                submittedQuery: trimmed
+            )
+            messages.append(assistantMessage)
+            logSuggestionDecision(
+                suggestionDecision,
+                userMessageID: userMessage.id.uuidString,
+                assistantMessageID: assistantMessage.id.uuidString
+            )
+            return
+        }
+
         do {
             let userQuery = UserQuery(text: trimmed, source: .userTyped)
             let result = try await pipeline.run(userQuery)
@@ -385,6 +408,10 @@ final class ChatViewModel {
     }
 
     private func interpretationQualifier(from plan: BackendIntentPlanDTO) -> String? {
+        if let workQualifier = workQualifier(from: plan) {
+            return workQualifier
+        }
+
         if let status = plan.filters["status"]?.value as? String {
             switch status {
             case "unread":
@@ -434,6 +461,15 @@ final class ChatViewModel {
         }
 
         return nil
+    }
+
+    private func workQualifier(from plan: BackendIntentPlanDTO) -> String? {
+        guard plan.domain == .calendar else { return nil }
+        guard let semanticIntent = plan.filters["semantic_intent"]?.value as? String,
+              semanticIntent.hasPrefix("work") else {
+            return nil
+        }
+        return combinedQualifier(primary: "jobb", secondary: localizedTimeScope(plan.timeScope))
     }
 
     private func locationQualifier(from plan: BackendIntentPlanDTO) -> String? {
@@ -643,5 +679,14 @@ final class ChatViewModel {
 
     private func message(withID id: UUID) -> ChatMessage? {
         messages.first(where: { $0.id == id })
+    }
+
+    private func immediateCalendarCreateSuggestion(from decision: ChatSuggestionDecision) -> ChatSuggestionCard? {
+        guard case .suggestion(let suggestion) = decision,
+              suggestion.kind == .calendar,
+              suggestion.auditReasons.contains("intent:create_request") else {
+            return nil
+        }
+        return suggestion
     }
 }

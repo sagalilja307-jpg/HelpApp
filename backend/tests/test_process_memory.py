@@ -1,14 +1,11 @@
 import logging
-import os
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 from helpershelp.llm.embedding_service import EmbeddingStatus
-from helpershelp.store.sqlite_storage import SqliteStore, StoreConfig
+from tests.api_test_case import APIRouteTestCase
 
 
 class _FakeEmbeddingService:
@@ -54,22 +51,8 @@ class _CaptureHandler(logging.Handler):
         self.messages.append(record.getMessage())
 
 
-class ProcessMemoryRouteTests(unittest.TestCase):
-    def setUp(self):
-        self.tmpdir = tempfile.TemporaryDirectory()
-        self.db_path = Path(self.tmpdir.name) / "test_process_memory.db"
-
-        os.environ["HELPERSHELP_DB_PATH"] = str(self.db_path)
-        os.environ["HELPERSHELP_ENABLE_SYNC_LOOP"] = "0"
-
-        from helpershelp.api.app import app  # noqa: PLC0415
-
-        store = SqliteStore(StoreConfig(db_path=self.db_path))
-        store.init()
-        self.client = TestClient(app)
-
-    def tearDown(self):
-        self.tmpdir.cleanup()
+class ProcessMemoryRouteTests(APIRouteTestCase):
+    db_filename = "test_process_memory.db"
 
     def test_process_memory_success_returns_expected_shape(self):
         fake = _FakeEmbeddingService(vectors=[[0.01, 0.02, -0.03]])

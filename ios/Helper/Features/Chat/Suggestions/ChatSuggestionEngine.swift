@@ -44,6 +44,17 @@ struct ChatSuggestionEngine: ChatSuggestionEvaluating {
             )
         }
 
+        if let createCandidate = calendarCreationCandidate(from: trimmed) {
+            if createCandidate.confidence < policy.minimumConfidence {
+                return .suppressed(
+                    kind: createCandidate.kind,
+                    confidence: createCandidate.confidence,
+                    reasons: createCandidate.auditReasons + ["reason:below_confidence_threshold"]
+                )
+            }
+            return .suggestion(createCandidate)
+        }
+
         if isDataQueryLike(trimmed) {
             return .noAction(reasons: ["trigger:user_text", "reason:data_query_like"])
         }
@@ -69,6 +80,68 @@ struct ChatSuggestionEngine: ChatSuggestionEvaluating {
 }
 
 private extension ChatSuggestionEngine {
+    func calendarCreationCandidate(from text: String) -> ChatSuggestionCard? {
+        let normalized = normalize(text)
+        let creationSignals = [
+            "lägg in", "lagg in", "lägga in", "lagga in",
+            "lägg till", "lagg till", "lägga till", "lagga till",
+            "boka in", "skapa event", "skapa ett event",
+            "sätt in", "satt in", "sätta in", "satta in"
+        ]
+        let matchedSignals = creationSignals.filter { normalized.contains($0) }
+        let hasCalendarTarget = normalized.contains("i kalendern")
+        let hasBookingVerb = normalized.contains("boka ")
+            || normalized.hasPrefix("boka ")
+            || normalized.contains("boka möte")
+            || normalized.contains("boka mote")
+        let hasPlanningStatement = normalized.hasPrefix("jag ska ")
+            || normalized.contains(" jag ska ")
+            || normalized.hasPrefix("jag behöver ")
+            || normalized.contains(" jag behöver ")
+            || normalized.hasPrefix("jag måste ")
+            || normalized.contains(" jag måste ")
+
+        guard !matchedSignals.isEmpty || hasBookingVerb else {
+            return nil
+        }
+
+        guard hasCalendarTarget || hasPlanningStatement || hasBookingVerb else {
+            return nil
+        }
+
+        guard let resolvedDate = resolveDateHint(in: text, requireDate: true) else {
+            return nil
+        }
+
+        let cleanedTitle = calendarCreationTitle(from: text)
+        let title = cleanedTitle.isEmpty ? "Ny händelse" : cleanedTitle
+        let notes = title.caseInsensitiveCompare(text.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame ? "" : text
+        let hasExplicitTime = resolvedDate.reasons.contains("date:explicit_time")
+        let confidence = hasExplicitTime ? 0.96 : 0.88
+
+        return ChatSuggestionCard(
+            kind: .calendar,
+            title: "Det här ser ut som något att lägga i kalendern",
+            explanation: "Vill du öppna ett kalenderutkast med det här förifyllt?",
+            draft: .calendar(
+                .init(
+                    title: title,
+                    notes: notes,
+                    startDate: resolvedDate.startDate,
+                    endDate: resolvedDate.endDate,
+                    isAllDay: resolvedDate.isAllDay
+                )
+            ),
+            state: .visible,
+            confidence: confidence,
+            auditReasons: [
+                "trigger:user_text",
+                "action_kind:calendar",
+                "intent:create_request"
+            ] + matchedSignals.map { "keyword:\($0)" } + resolvedDate.reasons
+        )
+    }
+
     func calendarCandidate(from text: String) -> ChatSuggestionCard? {
         let normalized = normalize(text)
         let eventKeywords = [
@@ -259,6 +332,7 @@ private extension ChatSuggestionEngine {
     func stripTemporalTokens(from text: String) -> String {
         let patterns = [
             #"\b(i kväll|ikväll|idag|imorgon|i morgon|nästa vecka|nasta vecka|på måndag|pa mandag|på tisdag|pa tisdag|på onsdag|pa onsdag|på torsdag|pa torsdag|på fredag|pa fredag|på lördag|pa lordag|på söndag|pa sondag)\b"#,
+            #"\bkl\.?\s*\d{1,2}(?::\d{2})?\s*(?:-|–|—|till)\s*\d{1,2}(?::\d{2})?\b"#,
             #"\bkl\.?\s*\d{1,2}(:\d{2})?\b"#,
             #"\b\d{1,2}[/-]\d{1,2}([/-]\d{2,4})?\b"#,
             #"\b\d{1,2}\s+(jan|januari|feb|februari|mar|mars|apr|april|maj|jun|juni|jul|juli|aug|augusti|sep|september|okt|oktober|nov|november|dec|december)\b"#,
@@ -271,6 +345,45 @@ private extension ChatSuggestionEngine {
                 options: [.regularExpression, .caseInsensitive]
             )
         }
+        result = result.replacingOccurrences(of: "  ", with: " ")
+        result = result.trimmingCharacters(in: CharacterSet(charactersIn: " ,.-"))
+        return suggestionTitle(from: result, fallback: "")
+    }
+
+    func calendarCreationTitle(from text: String) -> String {
+        var result = text
+        let patterns = [
+            #"\b(?:kan du|skulle du kunna|vill du|hjälp mig att|hjalp mig att)\b"#,
+            #"\b(?:lägga in|lagga in|lägg in|lagg in|lägga till|lagga till|lägg till|lagg till|boka in|skapa(?: ett)? event|sätta in|satta in|sätt in|satt in)\b"#,
+            #"\bi kalendern\b"#,
+            #"\b(?:tack|snälla|snalla)\b"#,
+            #"\?$"#
+        ]
+        for pattern in patterns {
+            result = result.replacingOccurrences(
+                of: pattern,
+                with: " ",
+                options: [.regularExpression, .caseInsensitive]
+            )
+        }
+
+        result = result.replacingOccurrences(
+            of: #"^\s*jag ska\s+"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        result = result.replacingOccurrences(
+            of: #"^\s*jag behöver\s+"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        result = result.replacingOccurrences(
+            of: #"^\s*jag måste\s+"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+
+        result = stripTemporalTokens(from: result)
         result = result.replacingOccurrences(of: "  ", with: " ")
         result = result.trimmingCharacters(in: CharacterSet(charactersIn: " ,.-"))
         return suggestionTitle(from: result, fallback: "")
@@ -348,7 +461,8 @@ private extension ChatSuggestionEngine {
             matchedReasons.append("date:absolute")
         }
 
-        let explicitTime = resolveTime(in: normalized)
+        let explicitTimeRange = resolveTimeRange(in: normalized)
+        let explicitTime = explicitTimeRange?.start ?? resolveTime(in: normalized)
         if explicitTime != nil {
             matchedReasons.append("date:explicit_time")
         }
@@ -384,7 +498,10 @@ private extension ChatSuggestionEngine {
         }
 
         let endDate: Date
-        if isAllDay {
+        if let explicitTimeRange {
+            isAllDay = false
+            endDate = explicitTimeRange.endDate(startDate, calendar)
+        } else if isAllDay {
             endDate = calendar.date(byAdding: .day, value: 1, to: startDate) ?? startDate
         } else {
             endDate = calendar.date(byAdding: .hour, value: 1, to: startDate) ?? startDate
@@ -515,6 +632,39 @@ private extension ChatSuggestionEngine {
             return (hour, 0)
         }
         return nil
+    }
+
+    func resolveTimeRange(in normalized: String) -> (start: (hour: Int, minute: Int), endDate: (Date, Calendar) -> Date)? {
+        guard
+            let regex = try? NSRegularExpression(
+                pattern: #"\b(?:kl\.?\s*)?(\d{1,2})(?::(\d{2}))?\s*(?:-|–|—|till)\s*(\d{1,2})(?::(\d{2}))?\b"#,
+                options: [.caseInsensitive]
+            ),
+            let match = regex.firstMatch(in: normalized, range: NSRange(normalized.startIndex..., in: normalized)),
+            let startHour = intFrom(match.range(at: 1), in: normalized),
+            let endHour = intFrom(match.range(at: 3), in: normalized)
+        else {
+            return nil
+        }
+
+        let startMinute = intFrom(match.range(at: 2), in: normalized) ?? 0
+        let endMinute = intFrom(match.range(at: 4), in: normalized) ?? 0
+
+        return (
+            start: (startHour, startMinute),
+            endDate: { startDate, calendar in
+                var end = calendar.date(
+                    bySettingHour: endHour,
+                    minute: endMinute,
+                    second: 0,
+                    of: startDate
+                ) ?? startDate
+                if end <= startDate {
+                    end = calendar.date(byAdding: .day, value: 1, to: end) ?? end
+                }
+                return end
+            }
+        )
     }
 
     func intFrom(_ range: NSRange, in text: String) -> Int? {

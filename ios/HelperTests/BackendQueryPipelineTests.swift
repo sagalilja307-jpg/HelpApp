@@ -202,6 +202,112 @@ final class BackendQueryPipelineTests: XCTestCase {
         XCTAssertEqual(collector.lastSource, .mail)
     }
 
+    func testWorkNextCalendarQueryBuildsSemanticAnswer() async throws {
+        let start = Date(timeIntervalSince1970: 1_742_837_100)
+        let collector = RecordingCollector(
+            stubEntries: [
+                QueryResult.Entry(
+                    id: UUID(),
+                    source: .calendar,
+                    title: "Jobb",
+                    body: "Plats: Torpet",
+                    date: start,
+                    endDate: start.addingTimeInterval(4 * 60 * 60),
+                    isAllDay: false
+                ),
+                QueryResult.Entry(
+                    id: UUID(),
+                    source: .calendar,
+                    title: "Sommartid börjar",
+                    body: nil,
+                    date: start.addingTimeInterval(24 * 60 * 60),
+                    endDate: start.addingTimeInterval(48 * 60 * 60),
+                    isAllDay: true
+                )
+            ]
+        )
+        let plan = makePlan(
+            domain: .calendar,
+            operation: .latest,
+            type: .all,
+            value: nil,
+            filters: [
+                "semantic_intent": AnyCodable("work_next"),
+                "work_terms": AnyCodable(["jobb", "skift", "arbetspass"]),
+                "exclude_all_day": AnyCodable(true)
+            ]
+        )
+        let pipeline = QueryPipeline(
+            backendQueryService: MockBackendQueryService(response: BackendQueryResponseDTO(intentPlan: plan)),
+            localCollector: collector,
+            accessGate: AllowingAccess()
+        )
+
+        let result = try await pipeline.run(UserQuery(text: "När jobbar jag nästa gång?"))
+
+        XCTAssertEqual(result.entries.count, 1)
+        XCTAssertEqual(result.entries.first?.title, "Jobb")
+        XCTAssertTrue(result.answer?.hasPrefix("Nästa jobbpass är ") == true)
+        XCTAssertTrue(result.answer?.contains("kl") == true)
+    }
+
+    func testWorkDurationCalendarQuerySumsTimedEntriesAndExcludesAllDay() async throws {
+        let start = Date(timeIntervalSince1970: 1_742_837_100)
+        let collector = RecordingCollector(
+            stubEntries: [
+                QueryResult.Entry(
+                    id: UUID(),
+                    source: .calendar,
+                    title: "Jobb",
+                    body: "Plats: Torpet",
+                    date: start,
+                    endDate: start.addingTimeInterval(4 * 60 * 60),
+                    isAllDay: false
+                ),
+                QueryResult.Entry(
+                    id: UUID(),
+                    source: .calendar,
+                    title: "Jobb",
+                    body: "Plats: Torpet",
+                    date: start.addingTimeInterval(24 * 60 * 60),
+                    endDate: start.addingTimeInterval(30 * 60 * 60),
+                    isAllDay: false
+                ),
+                QueryResult.Entry(
+                    id: UUID(),
+                    source: .calendar,
+                    title: "Daylight Saving Time starts",
+                    body: nil,
+                    date: start.addingTimeInterval(48 * 60 * 60),
+                    endDate: start.addingTimeInterval(72 * 60 * 60),
+                    isAllDay: true
+                )
+            ]
+        )
+        let plan = makePlan(
+            domain: .calendar,
+            operation: .sumDuration,
+            type: .relative,
+            value: "this_week",
+            filters: [
+                "semantic_intent": AnyCodable("work_duration"),
+                "work_terms": AnyCodable(["jobb", "skift", "arbetspass"]),
+                "exclude_all_day": AnyCodable(true)
+            ]
+        )
+        let pipeline = QueryPipeline(
+            backendQueryService: MockBackendQueryService(response: BackendQueryResponseDTO(intentPlan: plan)),
+            localCollector: collector,
+            accessGate: AllowingAccess()
+        )
+
+        let result = try await pipeline.run(UserQuery(text: "Hur många timmar jobbar jag den här veckan?"))
+
+        XCTAssertEqual(result.entries.count, 2)
+        XCTAssertTrue(result.answer?.contains("Du jobbar 10 timmar") == true)
+        XCTAssertTrue(result.answer?.contains("2 pass") == true)
+    }
+
     func testMailWithoutDataIntentReturnsTextOnlyAndSkipsCollector() async throws {
         let collector = RecordingCollector()
         let plan = makePlan(domain: .mail, operation: .count, type: .all, value: nil)

@@ -1,29 +1,9 @@
-import os
-import tempfile
 import unittest
-from pathlib import Path
-
-from fastapi.testclient import TestClient
-
-from helpershelp.store.sqlite_storage import SqliteStore, StoreConfig
+from tests.api_test_case import APIRouteTestCase
 
 
-class QueryNotesAndMailTests(unittest.TestCase):
-    def setUp(self):
-        self.tmpdir = tempfile.TemporaryDirectory()
-        self.db_path = Path(self.tmpdir.name) / "test_query_notes_mail.db"
-
-        os.environ["HELPERSHELP_DB_PATH"] = str(self.db_path)
-        os.environ["HELPERSHELP_ENABLE_SYNC_LOOP"] = "0"
-
-        from helpershelp.api.app import app  # noqa: PLC0415
-        store = SqliteStore(StoreConfig(db_path=self.db_path))
-        store.init()
-
-        self.client = TestClient(app)
-
-    def tearDown(self):
-        self.tmpdir.cleanup()
+class QueryNotesAndMailTests(APIRouteTestCase):
+    db_filename = "test_query_notes_mail.db"
 
     def test_query_notes_domain(self):
         response = self.client.post(

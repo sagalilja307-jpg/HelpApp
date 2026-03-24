@@ -610,7 +610,9 @@ extension QueryDataFetcher {
             source: .calendar,
             title: snapshot.title,
             body: detailParts.isEmpty ? nil : detailParts.joined(separator: "\n"),
-            date: snapshot.startDate
+            date: snapshot.startDate,
+            endDate: snapshot.endDate,
+            isAllDay: snapshot.isAllDay
         )
     }
 

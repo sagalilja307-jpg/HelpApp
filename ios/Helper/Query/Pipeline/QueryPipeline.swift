@@ -297,6 +297,10 @@ extension QueryPipeline {
             }
         }
 
+        if source == .calendar, hasWorkCalendarFilters(plan.filters) {
+            result = filterWorkCalendarEntries(result, filters: plan.filters)
+        }
+
         return result
     }
 
@@ -312,6 +316,15 @@ extension QueryPipeline {
                 collected: collected,
                 timeRange: timeRange
             )
+        }
+
+        if source == .calendar,
+           let calendarAnswer = buildCalendarAnswer(
+            plan: plan,
+            collected: collected,
+            timeRange: timeRange
+           ) {
+            return calendarAnswer
         }
 
         let sourceLabel = localizedSource(source)
@@ -350,6 +363,79 @@ extension QueryPipeline {
         }
 
         return lines.joined(separator: "\n")
+    }
+
+    static func buildCalendarAnswer(
+        plan: BackendIntentPlanDTO,
+        collected: LocalCollectedResult,
+        timeRange: DateInterval?
+    ) -> String? {
+        guard hasWorkCalendarFilters(plan.filters) else { return nil }
+
+        let entries = sortedEntries(collected.entries, source: .calendar, operation: plan.operation)
+        let period = formattedPeriod(timeRange)
+        let semanticIntent = workSemanticIntent(from: plan.filters)
+
+        if entries.isEmpty {
+            if let period {
+                return "Jag hittade inga jobbpass i kalendern för perioden \(period)."
+            }
+            return "Jag hittade inga jobbpass i kalendern."
+        }
+
+        if semanticIntent == "work_next" || plan.operation == .latest {
+            let now = DateService.shared.now()
+            let nextEntry = entries
+                .filter { ($0.date ?? .distantPast) >= now }
+                .sorted { ($0.date ?? .distantFuture) < ($1.date ?? .distantFuture) }
+                .first
+                ?? entries.sorted { ($0.date ?? .distantFuture) < ($1.date ?? .distantFuture) }.first
+
+            guard let nextEntry, let start = nextEntry.date else {
+                return "Jag hittade jobbpass i kalendern, men kunde inte avgöra nästa tid."
+            }
+
+            return "Nästa jobbpass är \(formattedWorkDate(start))."
+        }
+
+        if semanticIntent == "work_duration" || plan.operation == .sumDuration {
+            let timedEntries = entries.filter { entry in
+                guard let start = entry.date, let end = entry.endDate else { return false }
+                return end > start
+            }
+            let totalDuration = timedEntries.reduce(0.0) { partialResult, entry in
+                guard let start = entry.date, let end = entry.endDate else { return partialResult }
+                return partialResult + end.timeIntervalSince(start)
+            }
+
+            if totalDuration <= 0 {
+                if let period {
+                    return "Jag hittade jobbpass i kalendern för perioden \(period), men ingen tidsatt arbetstid att summera."
+                }
+                return "Jag hittade jobbpass i kalendern, men ingen tidsatt arbetstid att summera."
+            }
+
+            let durationText = formattedDuration(totalDuration)
+            let shiftCount = timedEntries.count
+            if shiftCount > 0 {
+                let shiftLabel = shiftCount == 1 ? "pass" : "pass"
+                if let period {
+                    return "Du jobbar \(durationText) under perioden \(period), fördelat på \(shiftCount) \(shiftLabel)."
+                }
+                return "Du jobbar \(durationText), fördelat på \(shiftCount) \(shiftLabel)."
+            }
+            return "Du jobbar \(durationText)."
+        }
+
+        if plan.operation == .count || plan.operation == .exists {
+            let count = entries.count
+            if let period {
+                return "Jag hittade \(count) jobbpass i kalendern för perioden \(period)."
+            }
+            return "Jag hittade \(count) jobbpass i kalendern."
+        }
+
+        return nil
     }
 
     nonisolated static func localizedSource(_ source: QuerySource) -> String {
@@ -543,6 +629,90 @@ extension QueryPipeline {
         }
 
         return "Jag hittade \(entries.count) hälsoposter."
+    }
+
+    static func hasWorkCalendarFilters(_ filters: [String: AnyCodable]) -> Bool {
+        filters["semantic_intent"] != nil || filters["work_terms"] != nil
+    }
+
+    static func workSemanticIntent(from filters: [String: AnyCodable]) -> String? {
+        guard let raw = filters["semantic_intent"]?.value as? String,
+              !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        return raw
+    }
+
+    static func workTerms(from filters: [String: AnyCodable]) -> [String] {
+        let fallback = ["jobb", "jobbar", "arbete", "arbetar", "skift", "arbetspass", "jobbpass", "pass"]
+        guard let raw = filters["work_terms"]?.value else {
+            return workSemanticIntent(from: filters) == nil ? [] : fallback
+        }
+
+        let terms: [String]
+        if let values = raw as? [String] {
+            terms = values
+        } else if let values = raw as? [Any] {
+            terms = values.compactMap { $0 as? String }
+        } else {
+            terms = fallback
+        }
+
+        let normalized = terms.map(normalizedText).filter { !$0.isEmpty }
+        return normalized.isEmpty ? fallback : Array(Set(normalized))
+    }
+
+    static func filterWorkCalendarEntries(
+        _ entries: [QueryResult.Entry],
+        filters: [String: AnyCodable]
+    ) -> [QueryResult.Entry] {
+        var result = entries
+        let excludeAllDay = filters["exclude_all_day"]?.value as? Bool ?? false
+        if excludeAllDay {
+            result = result.filter { $0.isAllDay != true }
+        }
+
+        let terms = workTerms(from: filters)
+        if !terms.isEmpty {
+            result = result.filter { entry in
+                matchesAny(entry: entry, terms: terms)
+            }
+        }
+
+        return result
+    }
+
+    static func matchesAny(entry: QueryResult.Entry, terms: [String]) -> Bool {
+        let haystack = normalizedText([entry.title, entry.body ?? ""].joined(separator: " "))
+        guard !haystack.isEmpty else { return false }
+        return terms.contains { term in
+            let normalizedTerm = normalizedText(term)
+            guard !normalizedTerm.isEmpty else { return false }
+            return haystack.contains(normalizedTerm)
+        }
+    }
+
+    static func formattedWorkDate(_ date: Date) -> String {
+        let formatter = DateService.shared.dateFormatter(dateFormat: "EEEE d MMMM 'kl' HH:mm")
+        return formatter.string(from: date)
+    }
+
+    static func formattedDuration(_ seconds: TimeInterval) -> String {
+        let totalMinutes = Int(seconds.rounded() / 60.0)
+        let hours = totalMinutes / 60
+        let minutes = totalMinutes % 60
+
+        if hours > 0 && minutes > 0 {
+            let hourLabel = hours == 1 ? "timme" : "timmar"
+            let minuteLabel = minutes == 1 ? "minut" : "minuter"
+            return "\(hours) \(hourLabel) och \(minutes) \(minuteLabel)"
+        }
+        if hours > 0 {
+            let hourLabel = hours == 1 ? "timme" : "timmar"
+            return "\(hours) \(hourLabel)"
+        }
+        let minuteLabel = minutes == 1 ? "minut" : "minuter"
+        return "\(minutes) \(minuteLabel)"
     }
 
     static func parseAbsoluteRange(_ rawValue: String) -> DateInterval? {

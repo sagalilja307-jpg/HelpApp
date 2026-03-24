@@ -5,8 +5,9 @@ import os
 
 from fastapi import APIRouter, HTTPException, status
 
-from helpershelp.core.time_utils import utcnow
 from helpershelp.core.config import DEFAULT_DB_PATH, OLLAMA_EMBED_MODEL
+from helpershelp.core.logging_config import build_log_extra
+from helpershelp.core.time_utils import utcnow
 from helpershelp.llm import get_embedding_service
 
 router = APIRouter()
@@ -48,7 +49,14 @@ def health_details():
 def readiness_check():
     configured_model = (OLLAMA_EMBED_MODEL or "").strip()
     if not _is_allowed_model(configured_model):
-        logger.error("Readiness check failed route=/health/ready reason=config_model")
+        logger.error(
+            "Readiness check failed route=/health/ready reason=config_model",
+            extra=build_log_extra(
+                route="/health/ready",
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                reason="config_model",
+            ),
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Service unavailable",
@@ -61,6 +69,12 @@ def readiness_check():
         logger.warning(
             "Readiness check failed route=/health/ready reason=runtime_status exc_type=%s",
             exc.__class__.__name__,
+            extra=build_log_extra(
+                route="/health/ready",
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                reason="runtime_status",
+                exc_type=exc.__class__.__name__,
+            ),
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -68,14 +82,28 @@ def readiness_check():
         ) from exc
 
     if not _is_allowed_model(runtime.embedding_model):
-        logger.error("Readiness check failed route=/health/ready reason=runtime_model")
+        logger.error(
+            "Readiness check failed route=/health/ready reason=runtime_model",
+            extra=build_log_extra(
+                route="/health/ready",
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                reason="runtime_model",
+            ),
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Service unavailable",
         )
 
     if not runtime.model_available:
-        logger.warning("Readiness check failed route=/health/ready reason=model_unavailable")
+        logger.warning(
+            "Readiness check failed route=/health/ready reason=model_unavailable",
+            extra=build_log_extra(
+                route="/health/ready",
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                reason="model_unavailable",
+            ),
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Service unavailable",

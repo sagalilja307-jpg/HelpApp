@@ -14,6 +14,25 @@ final class ChatSuggestionEngineTests: XCTestCase {
         XCTAssertEqual(suggestion.kind, .calendar)
     }
 
+    func testExplicitCalendarCreateQueryProducesCalendarSuggestionWithTimeRange() throws {
+        let engine = makeEngine()
+
+        let decision = engine.decide(for: "Jag ska tvätta imorgon kl 10-13 kan du lägga in i kalendern?")
+
+        guard case .suggestion(let suggestion) = decision else {
+            return XCTFail("Expected suggestion")
+        }
+        guard case .calendar(let draft) = suggestion.draft else {
+            return XCTFail("Expected calendar draft")
+        }
+
+        XCTAssertEqual(suggestion.kind, .calendar)
+        XCTAssertTrue(suggestion.auditReasons.contains("intent:create_request"))
+        XCTAssertEqual(draft.title, "Tvätta")
+        XCTAssertEqual(draft.endDate.timeIntervalSince(draft.startDate), 3 * 60 * 60, accuracy: 1)
+        XCTAssertFalse(draft.isAllDay)
+    }
+
     func testReminderTextProducesReminderSuggestion() {
         let engine = makeEngine()
 

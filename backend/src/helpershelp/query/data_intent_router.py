@@ -4,7 +4,7 @@ Deterministisk router som mappar användarfrågor till IntentPlanDTO-liknande Da
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 import re
 from typing import Any, Callable, Dict, Optional, cast, get_args
@@ -70,6 +70,19 @@ HEALTH_DOMAIN_KEYWORDS: tuple[str, ...] = (
     "calories",
 )
 
+WORK_SCHEDULE_GUARD_TERMS: tuple[str, ...] = (
+    "jobb",
+    "jobbar",
+    "jobba",
+    "arbete",
+    "arbetar",
+    "arbeta",
+    "skift",
+    "arbetspass",
+    "jobbpass",
+    "schema",
+)
+
 HEALTH_ACTIVITY_METRICS: set[str] = {
     "step_count",
     "distance",
@@ -128,6 +141,22 @@ CALENDAR_CONTEXT_SIGNALS: tuple[tuple[str, str], ...] = (
     ("på gång", r"\bpå gång\b|\bpa gang\b"),
     ("händer", r"\bhänder\b|\bhanda\b|\bhänder det\b|\bvad händer\b"),
     ("schema", r"\bschema(?:t)?\b"),
+)
+
+WORK_SCHEDULE_PRIMARY_SIGNALS: tuple[tuple[str, str], ...] = (
+    ("jobbar", r"\bjobba(?:r|de|t)?\b|\barbeta(?:r|de|t)?\b"),
+    ("jobb", r"\bjobb(?:et)?\b"),
+    ("skift", r"\bskift(?:et)?\b"),
+    ("arbetspass", r"\barbetspass\b|\bjobbpass\b"),
+    ("pass", r"\bpass\b"),
+    ("schema", r"\bschema(?:t)?\b"),
+)
+
+WORK_SCHEDULE_CONTEXT_SIGNALS: tuple[tuple[str, str], ...] = (
+    ("nästa", r"\bnästa\b|\bnext\b"),
+    ("antal", r"\bhur många\b|\bantal\b"),
+    ("duration", r"\bhur länge\b|\bhur lange\b|\bhur lång tid\b|\bhur lang tid\b"),
+    ("den här veckan", r"\bden här veckan\b|\bden har veckan\b|\bi veckan\b"),
 )
 
 MAIL_PRIMARY_SIGNALS: tuple[tuple[str, str], ...] = (
@@ -356,11 +385,26 @@ class DomainUnderstanding:
     candidate_domains: list[Domain]
     confidence: str
     matched_signals: dict[str, list[str]]
+    resolved_filters: dict[str, object] = field(default_factory=dict)
 
 
 def _looks_like_health_query(query: str) -> bool:
     q = (query or "").lower()
-    return any(keyword in q for keyword in HEALTH_DOMAIN_KEYWORDS)
+    has_health_language = any(keyword in q for keyword in HEALTH_DOMAIN_KEYWORDS)
+    if not has_health_language:
+        return False
+
+    has_work_language = any(keyword in q for keyword in WORK_SCHEDULE_GUARD_TERMS)
+    has_explicit_health_signal = bool(
+        _collect_signal_matches(q, HEALTH_PRIMARY_SIGNALS)
+        or _collect_signal_matches(q, HEALTH_CONTEXT_SIGNALS)
+        or any(keyword in q for keyword in ("hälsa", "halsa", "health"))
+    )
+
+    if has_work_language and not has_explicit_health_signal:
+        return False
+
+    return True
 
 
 def _accept_classifier_domain(query: str, domain: Domain) -> bool:
@@ -553,6 +597,13 @@ def _operation_for_query(
     domain: Domain, query: str, filters: Optional[Dict[str, object]] = None
 ) -> Operation:
     q = (query or "").lower().strip()
+    semantic_intent = str((filters or {}).get("semantic_intent") or "").lower()
+
+    if domain == "calendar":
+        if semantic_intent == "work_next":
+            return "latest"
+        if semantic_intent == "work_duration":
+            return "sum_duration"
 
     if domain == "health":
         if (
@@ -757,6 +808,17 @@ def _is_explicit_operation_phrase(query: str, operation: Operation) -> bool:
         return q.startswith("hur många") or "antal" in q
     if operation == "sum":
         return q.startswith("hur länge") or "hur lång tid" in q
+    if operation == "sum_duration":
+        return (
+            q.startswith("hur länge")
+            or q.startswith("hur lange")
+            or "hur lång tid" in q
+            or "hur lang tid" in q
+            or (
+                (q.startswith("hur många") or q.startswith("hur manga"))
+                and any(token in q for token in ("timme", "timmar"))
+            )
+        )
     if operation == "latest":
         return q.startswith("när") and any(
             k in q for k in ("nästa", "när är nästa", "senaste", "senast", "next", "last")
@@ -929,6 +991,144 @@ def _collect_signal_matches(query: str, patterns: tuple[tuple[str, str], ...]) -
 def _sorted_candidate_domains(scores: dict[Domain, int]) -> list[Domain]:
     ordered = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
     return [domain for domain, score in ordered if score > 0]
+
+
+def _looks_like_work_location_query(query: str) -> bool:
+    q = (query or "").lower()
+    patterns = (
+        r"\bhur länge var jag på jobbet\b|\bhur lange var jag pa jobbet\b",
+        r"\bhur lång tid tog det att resa till jobbet\b|\bhur lang tid tog det att resa till jobbet\b",
+        r"\bvar jag på jobbet\b|\bvar jag pa jobbet\b",
+        r"\bhar jag varit på jobbet\b|\bhar jag varit pa jobbet\b",
+        r"\btill jobbet\b.*\b(?:reste|rest|resa|åkte|akte|tog det)\b",
+        r"\bpå kontoret\b.*\b(?:var|varit|reste|rest|resa|åkte|akte)\b",
+    )
+    return any(re.search(pattern, q) for pattern in patterns)
+
+
+def _looks_like_work_schedule_query(query: str) -> bool:
+    q = (query or "").lower()
+
+    if _looks_like_work_location_query(q):
+        return False
+
+    work_signals = _collect_signal_matches(q, WORK_SCHEDULE_PRIMARY_SIGNALS)
+    if not work_signals:
+        return False
+
+    if "schema" in work_signals:
+        return True
+
+    if q.startswith("när") and any(token in q for token in ("nästa", "nasta", "senaste", "senast", "gång", "gang")):
+        return True
+
+    if (q.startswith("hur många") or q.startswith("hur manga")) and any(
+        token in q for token in ("timme", "timmar", "pass", "skift")
+    ):
+        return True
+
+    if q.startswith("hur länge") or q.startswith("hur lange") or "hur lång tid" in q or "hur lang tid" in q:
+        return any(token in q for token in ("jobb", "jobbar", "arbete", "arbetar"))
+
+    if "pass" in work_signals and any(
+        token in q for token in ("vecka", "veckan", "månad", "manad", "idag", "imorgon", "nästa", "nasta")
+    ):
+        return True
+
+    return any(
+        token in q
+        for token in (
+            "den här veckan",
+            "den har veckan",
+            "i veckan",
+            "idag",
+            "imorgon",
+            "nästa",
+            "nasta",
+        )
+    )
+
+
+def _resolve_calendar_work_understanding(
+    query: str,
+    parsed_time_intent: TimeIntent,
+) -> Optional[DomainUnderstanding]:
+    work_primary = _collect_signal_matches(query, WORK_SCHEDULE_PRIMARY_SIGNALS)
+    work_context = _collect_signal_matches(query, WORK_SCHEDULE_CONTEXT_SIGNALS)
+    health_primary = _collect_signal_matches(query, HEALTH_PRIMARY_SIGNALS)
+    health_context = _collect_signal_matches(query, HEALTH_CONTEXT_SIGNALS)
+    health_like = _looks_like_health_query(query)
+
+    if _looks_like_work_location_query(query):
+        location_signals = _dedupe_terms([*work_primary, "jobbet"])
+        return DomainUnderstanding(
+            resolved_domain="location",
+            candidate_domains=["location", "calendar"],
+            confidence="high",
+            matched_signals={
+                "location": location_signals,
+                "calendar": _dedupe_terms(work_primary),
+            },
+        )
+
+    has_time_signal = parsed_time_intent.category != "NONE"
+    work_schedule = _looks_like_work_schedule_query(query)
+    if not work_schedule and not any(signal != "pass" for signal in work_primary):
+        return None
+
+    work_signals = list(work_primary)
+    if work_context:
+        work_signals.extend(work_context)
+    if has_time_signal:
+        work_signals.append(f"time:{parsed_time_intent.category.lower()}")
+
+    matched_signals = {
+        "calendar": _dedupe_terms(work_signals),
+        "health": _dedupe_terms([*health_primary, *health_context]),
+    }
+
+    strong_work_signals = [signal for signal in work_primary if signal != "pass"]
+    if (health_primary or health_context or health_like) and strong_work_signals:
+        return DomainUnderstanding(
+            resolved_domain=None,
+            candidate_domains=["calendar", "health"],
+            confidence="low",
+            matched_signals=matched_signals,
+        )
+
+    semantic_intent: Optional[str] = None
+    q = (query or "").lower()
+    if q.startswith("när") and any(token in q for token in ("nästa", "nasta", "gång", "gang")):
+        semantic_intent = "work_next"
+    elif (
+        (q.startswith("hur många") or q.startswith("hur manga")) and any(token in q for token in ("timme", "timmar"))
+    ) or q.startswith("hur länge") or q.startswith("hur lange") or "hur lång tid" in q or "hur lang tid" in q:
+        semantic_intent = "work_duration"
+
+    resolved_filters: dict[str, object] = {
+        "work_terms": [
+            "jobb",
+            "jobbar",
+            "arbete",
+            "arbetar",
+            "skift",
+            "arbetspass",
+            "jobbpass",
+            "pass",
+        ],
+        "exclude_all_day": True,
+    }
+    if semantic_intent is not None:
+        resolved_filters["semantic_intent"] = semantic_intent
+
+    confidence = "high" if strong_work_signals else "medium"
+    return DomainUnderstanding(
+        resolved_domain="calendar",
+        candidate_domains=["calendar", "health"] if health_like else ["calendar"],
+        confidence=confidence,
+        matched_signals=matched_signals,
+        resolved_filters=resolved_filters,
+    )
 
 
 def _resolve_calendar_mail_understanding(
@@ -1911,6 +2111,9 @@ def _resolve_special_understanding(
 ) -> Optional[DomainUnderstanding]:
     resolvers: list[Optional[DomainUnderstanding]] = []
 
+    if keyword_domain in {None, "calendar", "location", "health"}:
+        resolvers.append(_resolve_calendar_work_understanding(query, parsed_time_intent))
+
     if keyword_domain in {None, "location", "health"}:
         resolvers.append(_resolve_location_health_understanding(query, parsed_time_intent))
 
@@ -1986,12 +2189,14 @@ class DataIntentRouter:
             llm_domain = None
 
         clarification_filters: Dict[str, object] = {}
+        special_filters: Dict[str, object] = {}
         if special_understanding is not None:
             clarification_filters = {
                 "_confidence": special_understanding.confidence,
                 "_candidate_domains": special_understanding.candidate_domains,
                 "_matched_signals": special_understanding.matched_signals,
             }
+            special_filters = dict(special_understanding.resolved_filters)
             if special_understanding.resolved_domain is None:
                 time_scope = _time_scope_from_time_intent(parsed.time_intent, parsed.timeframe)
                 plan = IntentPlanDTO.model_validate(
@@ -2026,13 +2231,19 @@ class DataIntentRouter:
             deterministic_filters=deterministic_filters,
             llm_filters=llm_filters,
         )
+        filters.update(special_filters)
         filters.update(clarification_filters)
 
         timeframe = self.time_policy.apply(resolved_domain, parsed)
         time_scope = _time_scope_from_time_intent(parsed.time_intent, timeframe)
         heuristic_operation = _operation_for_query(resolved_domain, q, filters)
         llm_operation = _coerce_operation(raw_llm_intent.get("operation"))
-        if llm_operation is not None and _is_explicit_operation_phrase(q, llm_operation):
+        semantic_intent = str(filters.get("semantic_intent") or "").lower()
+        if semantic_intent == "work_next":
+            operation = cast(Operation, "latest")
+        elif semantic_intent == "work_duration":
+            operation = cast(Operation, "sum_duration")
+        elif llm_operation is not None and _is_explicit_operation_phrase(q, llm_operation):
             operation = llm_operation
         else:
             operation = heuristic_operation

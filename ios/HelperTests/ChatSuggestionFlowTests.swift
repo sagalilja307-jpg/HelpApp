@@ -59,6 +59,34 @@ final class ChatSuggestionFlowTests: XCTestCase {
         )
     }
 
+    func testImmediateCalendarCreateSuggestionSkipsQueryPipeline() async {
+        let logger = RecordingSuggestionLogger()
+        let backend = CountingSuggestionBackend(
+            response: BackendQueryResponseDTO(
+                intentPlan: Self.plan,
+                answer: "Det här ska inte användas",
+                hasDataIntent: true
+            )
+        )
+        let pipeline = QueryPipeline(
+            backendQueryService: backend,
+            localCollector: EmptySuggestionCollector(),
+            accessGate: AllowingSuggestionAccess()
+        )
+        let vm = ChatViewModel(
+            pipeline: pipeline,
+            suggestionEngine: StubSuggestionEngine(decision: .suggestion(Self.createCalendarSuggestion)),
+            suggestionLogger: logger
+        )
+
+        vm.query = "Jag ska tvätta imorgon kl 10-13 kan du lägga in i kalendern?"
+        await vm.send()
+
+        XCTAssertEqual(backend.callCount, 0)
+        XCTAssertEqual(vm.messages.last?.text, "Jag kan lägga in det här i kalendern. Vill du öppna utkastet?")
+        XCTAssertEqual(vm.messages.last?.suggestion?.kind, .calendar)
+    }
+
     func testFailSuggestionUpdatesStateToFailed() async throws {
         let vm = makeViewModel(
             decision: .suggestion(Self.reminderSuggestion),
@@ -113,27 +141,10 @@ final class ChatSuggestionFlowTests: XCTestCase {
         decision: ChatSuggestionDecision,
         logger: RecordingSuggestionLogger
     ) -> ChatViewModel {
-        let plan = BackendIntentPlanDTO(
-            domain: .calendar,
-            mode: .info,
-            operation: .list,
-            timeScope: BackendTimeScopeDTO(
-                type: .relative,
-                value: "today",
-                start: nil,
-                end: nil
-            ),
-            filters: [:],
-            grouping: nil,
-            sort: nil,
-            needsClarification: false,
-            clarificationMessage: nil,
-            suggestions: []
-        )
         let pipeline = QueryPipeline(
             backendQueryService: StaticSuggestionBackend(
                 response: BackendQueryResponseDTO(
-                    intentPlan: plan,
+                    intentPlan: Self.plan,
                     answer: "Här är svaret",
                     hasDataIntent: true
                 )
@@ -147,6 +158,24 @@ final class ChatSuggestionFlowTests: XCTestCase {
             suggestionLogger: logger
         )
     }
+
+    private static let plan = BackendIntentPlanDTO(
+        domain: .calendar,
+        mode: .info,
+        operation: .list,
+        timeScope: BackendTimeScopeDTO(
+            type: .relative,
+            value: "today",
+            start: nil,
+            end: nil
+        ),
+        filters: [:],
+        grouping: nil,
+        sort: nil,
+        needsClarification: false,
+        clarificationMessage: nil,
+        suggestions: []
+    )
 
     private static let calendarSuggestion = ChatSuggestionCard(
         kind: .calendar,
@@ -164,6 +193,24 @@ final class ChatSuggestionFlowTests: XCTestCase {
         state: .visible,
         confidence: 0.92,
         auditReasons: ["trigger:user_text", "action_kind:calendar"]
+    )
+
+    private static let createCalendarSuggestion = ChatSuggestionCard(
+        kind: .calendar,
+        title: "Kalenderförslag",
+        explanation: "Vill du lägga det i kalendern?",
+        draft: .calendar(
+            .init(
+                title: "Tvätta",
+                notes: "",
+                startDate: Date(timeIntervalSince1970: 1_742_601_600),
+                endDate: Date(timeIntervalSince1970: 1_742_612_400),
+                isAllDay: false
+            )
+        ),
+        state: .visible,
+        confidence: 0.97,
+        auditReasons: ["trigger:user_text", "action_kind:calendar", "intent:create_request"]
     )
 
     private static let reminderSuggestion = ChatSuggestionCard(
@@ -245,6 +292,22 @@ private struct StaticSuggestionBackend: BackendQuerying {
 
     func query(text: String) async throws -> BackendQueryResponseDTO {
         _ = text
+        return response
+    }
+}
+
+@MainActor
+private final class CountingSuggestionBackend: BackendQuerying {
+    let response: BackendQueryResponseDTO
+    private(set) var callCount = 0
+
+    init(response: BackendQueryResponseDTO) {
+        self.response = response
+    }
+
+    func query(text: String) async throws -> BackendQueryResponseDTO {
+        _ = text
+        callCount += 1
         return response
     }
 }

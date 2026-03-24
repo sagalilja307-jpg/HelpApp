@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 
 from helpershelp.core.config import OLLAMA_EMBED_MODEL
+from helpershelp.core.logging_config import build_log_extra
 from helpershelp.llm import get_embedding_service
 
 logger = logging.getLogger(__name__)
@@ -433,6 +434,13 @@ async def process_memory(request: ProcessMemoryRequest) -> ProcessMemoryResponse
             request.language,
             timezone_name,
             status.HTTP_503_SERVICE_UNAVAILABLE,
+            extra=build_log_extra(
+                route=route,
+                lang=request.language,
+                tz=timezone_name,
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                reason="config_model",
+            ),
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -450,6 +458,14 @@ async def process_memory(request: ProcessMemoryRequest) -> ProcessMemoryResponse
             timezone_name,
             status.HTTP_503_SERVICE_UNAVAILABLE,
             exc.__class__.__name__,
+            extra=build_log_extra(
+                route=route,
+                lang=request.language,
+                tz=timezone_name,
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                reason="runtime_status",
+                exc_type=exc.__class__.__name__,
+            ),
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -462,6 +478,13 @@ async def process_memory(request: ProcessMemoryRequest) -> ProcessMemoryResponse
             request.language,
             timezone_name,
             status.HTTP_503_SERVICE_UNAVAILABLE,
+            extra=build_log_extra(
+                route=route,
+                lang=request.language,
+                tz=timezone_name,
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                reason="runtime_model",
+            ),
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -474,6 +497,13 @@ async def process_memory(request: ProcessMemoryRequest) -> ProcessMemoryResponse
             request.language,
             timezone_name,
             status.HTTP_503_SERVICE_UNAVAILABLE,
+            extra=build_log_extra(
+                route=route,
+                lang=request.language,
+                tz=timezone_name,
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                reason="model_unavailable",
+            ),
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -497,6 +527,14 @@ async def process_memory(request: ProcessMemoryRequest) -> ProcessMemoryResponse
             timezone_name,
             status.HTTP_503_SERVICE_UNAVAILABLE,
             exc.__class__.__name__,
+            extra=build_log_extra(
+                route=route,
+                lang=request.language,
+                tz=timezone_name,
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                reason="embed_backend",
+                exc_type=exc.__class__.__name__,
+            ),
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -510,6 +548,13 @@ async def process_memory(request: ProcessMemoryRequest) -> ProcessMemoryResponse
             request.language,
             timezone_name,
             status.HTTP_503_SERVICE_UNAVAILABLE,
+            extra=build_log_extra(
+                route=route,
+                lang=request.language,
+                tz=timezone_name,
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                reason="empty_vector",
+            ),
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -522,6 +567,12 @@ async def process_memory(request: ProcessMemoryRequest) -> ProcessMemoryResponse
         request.language,
         timezone_name,
         status.HTTP_200_OK,
+        extra=build_log_extra(
+            route=route,
+            lang=request.language,
+            tz=timezone_name,
+            status=status.HTTP_200_OK,
+        ),
     )
 
     return ProcessMemoryResponse(

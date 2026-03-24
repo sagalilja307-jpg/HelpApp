@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, model_validator
 
 from helpershelp.api.models import DataIntent
+from helpershelp.core.logging_config import build_log_extra
 from helpershelp.query.data_intent_router import DataIntentRouter
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,12 @@ async def unified_query(request: QueryRequest) -> QueryResponse:
             request.language,
             tz,
             status.HTTP_200_OK,
+            extra=build_log_extra(
+                route="/query",
+                lang=request.language,
+                tz=tz,
+                status=status.HTTP_200_OK,
+            ),
         )
         return QueryResponse(data_intent=data_intent)
 
@@ -69,6 +76,12 @@ async def unified_query(request: QueryRequest) -> QueryResponse:
             request.language,
             tz,
             exc.status_code,
+            extra=build_log_extra(
+                route="/query",
+                lang=request.language,
+                tz=tz,
+                status=exc.status_code,
+            ),
         )
         raise
     except Exception as exc:
@@ -78,6 +91,13 @@ async def unified_query(request: QueryRequest) -> QueryResponse:
             tz,
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             exc.__class__.__name__,
+            extra=build_log_extra(
+                route="/query",
+                lang=request.language,
+                tz=tz,
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                exc_type=exc.__class__.__name__,
+            ),
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

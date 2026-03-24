@@ -1,30 +1,9 @@
-import os
-import tempfile
 import unittest
-from pathlib import Path
-
-from fastapi.testclient import TestClient
-
-from helpershelp.store.sqlite_storage import SqliteStore, StoreConfig
+from tests.api_test_case import APIRouteTestCase
 
 
-class QueryIntentFilterTests(unittest.TestCase):
-    def setUp(self):
-        self.tmpdir = tempfile.TemporaryDirectory()
-        self.db_path = Path(self.tmpdir.name) / "test_query_intent_filters.db"
-
-        os.environ["HELPERSHELP_DB_PATH"] = str(self.db_path)
-        os.environ["HELPERSHELP_ENABLE_SYNC_LOOP"] = "0"
-
-        from helpershelp.api.app import app  # noqa: PLC0415
-
-        store = SqliteStore(StoreConfig(db_path=self.db_path))
-        store.init()
-
-        self.client = TestClient(app)
-
-    def tearDown(self):
-        self.tmpdir.cleanup()
+class QueryIntentFilterTests(APIRouteTestCase):
+    db_filename = "test_query_intent_filters.db"
 
     def test_next_week_query_keeps_next_week_value_and_bounds(self):
         response = self.client.post(
