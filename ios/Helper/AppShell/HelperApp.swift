@@ -35,6 +35,7 @@ struct HelperApp: App {
                     ChatView(
                         pipeline: runtime.queryPipeline,
                         suggestionLogger: runtime.chatSuggestionLogger,
+                        suggestionActionCoordinator: runtime.chatSuggestionActionCoordinator,
                         sourceConnectionStore: runtime.sourceConnectionStore,
                         photosIndexService: runtime.photosIndexService,
                         filesImportService: runtime.filesImportService,

@@ -52,10 +52,12 @@ public struct ChatView: View {
     private let longTermMemorySaveCoordinator: LongTermMemorySaveCoordinator
     private let iCloudSyncCoordinator: ICloudKeyValueSyncCoordinator
     private let iCloudMemorySyncCoordinator: ICloudMemorySyncCoordinator
+    private let suggestionActionCoordinator: ChatSuggestionActionCoordinating
 
     init(
         pipeline: QueryPipeline,
         suggestionLogger: ChatSuggestionLogging? = nil,
+        suggestionActionCoordinator: ChatSuggestionActionCoordinating,
         sourceConnectionStore: SourceConnectionStore,
         photosIndexService: PhotosIndexService,
         filesImportService: FilesImportService,
@@ -75,6 +77,7 @@ public struct ChatView: View {
         self.longTermMemorySaveCoordinator = longTermMemorySaveCoordinator
         self.iCloudSyncCoordinator = iCloudSyncCoordinator
         self.iCloudMemorySyncCoordinator = iCloudMemorySyncCoordinator
+        self.suggestionActionCoordinator = suggestionActionCoordinator
     }
 
     public var body: some View {
@@ -1141,20 +1144,25 @@ public struct ChatView: View {
             return
         }
 
-        let store = PermissionManager.shared.eventStore
-        let event = EKEvent(eventStore: store)
-        event.title = draft.title
-        event.notes = draft.notes.isEmpty ? nil : draft.notes
-        event.startDate = draft.startDate
-        event.endDate = draft.endDate
-        event.isAllDay = draft.isAllDay
-        event.calendar = store.defaultCalendarForNewEvents
+        do {
+            let store = PermissionManager.shared.eventStore
+            let event = try suggestionActionCoordinator.makeCalendarEvent(
+                from: draft,
+                using: store
+            )
 
-        calendarSuggestionDraft = CalendarSuggestionPresentation(
-            messageID: messageID,
-            event: event,
-            store: store
-        )
+            calendarSuggestionDraft = CalendarSuggestionPresentation(
+                messageID: messageID,
+                event: event,
+                store: store
+            )
+        } catch {
+            presentSuggestionFailure(
+                messageID: messageID,
+                suggestionError: "Kalenderutkastet kunde inte förberedas.",
+                alertMessage: "Kalenderutkastet kunde inte förberedas: \(error.localizedDescription)"
+            )
+        }
     }
 
     private func prepareReminderSuggestion(
@@ -1195,6 +1203,7 @@ public struct ChatView: View {
 
         switch result {
         case .success:
+            suggestionActionCoordinator.enableCalendarSource()
             vm.completeSuggestion(for: messageID)
         case .failure(let error):
             if isUserCancelledCalendarEdit(error) {
@@ -1216,14 +1225,7 @@ public struct ChatView: View {
         reminderSuggestionDraft = nil
 
         do {
-            let reminder = ReminderItem(
-                title: draft.title,
-                dueDate: draft.dueDate,
-                notes: optionalTrimmed(draft.notes),
-                location: draft.location,
-                priority: draft.priority?.eventKitValue
-            )
-            try ReminderSyncManager.shared.createReminder(from: reminder)
+            try await suggestionActionCoordinator.createReminder(from: draft)
             vm.completeSuggestion(for: messageID)
         } catch {
             presentSuggestionFailure(
@@ -1241,14 +1243,11 @@ public struct ChatView: View {
         noteSuggestionDraft = nil
 
         do {
-            _ = try NotesStoreService().createNote(
-                title: draft.title,
-                body: draft.body,
-                source: "chat_suggestion",
+            try await suggestionActionCoordinator.createNote(
+                from: draft,
                 in: modelContext
             )
             vm.completeSuggestion(for: messageID)
-            _ = await iCloudMemorySyncCoordinator.syncNow()
         } catch {
             presentSuggestionFailure(
                 messageID: messageID,
@@ -1294,11 +1293,6 @@ public struct ChatView: View {
     private func isUserCancelledCalendarEdit(_ error: Error) -> Bool {
         let nsError = error as NSError
         return nsError.domain == "UserCancelled"
-    }
-
-    private func optionalTrimmed(_ value: String) -> String? {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 }
 
