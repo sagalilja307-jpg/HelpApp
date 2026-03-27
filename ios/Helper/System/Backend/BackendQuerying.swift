@@ -10,4 +10,18 @@ import Foundation
 
 protocol BackendQuerying {
     func query(text: String) async throws -> BackendQueryResponseDTO
+    func query(
+        text: String,
+        clarificationContext: BackendQueryClarificationContextDTO?
+    ) async throws -> BackendQueryResponseDTO
+}
+
+extension BackendQuerying {
+    func query(
+        text: String,
+        clarificationContext: BackendQueryClarificationContextDTO?
+    ) async throws -> BackendQueryResponseDTO {
+        _ = clarificationContext
+        return try await query(text: text)
+    }
 }

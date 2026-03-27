@@ -122,6 +122,19 @@ ALLOWED_SOURCE_ACCOUNT_VALUES: set[str] = {
 
 LLM_DOMAIN_CONFIDENCE_THRESHOLD = 0.75
 
+CLARIFICATION_DOMAIN_TERMS: dict[Domain, tuple[str, ...]] = {
+    "calendar": ("kalender", "kalendern", "calendar", "event", "events"),
+    "reminders": ("påminnelse", "påminnelser", "reminder", "reminders", "todo", "todos", "att göra", "att gora"),
+    "mail": ("mejl", "mejlen", "mail", "mejlet", "email", "emails", "epost", "e-post"),
+    "notes": ("anteckning", "anteckningar", "notes", "notering", "noteringar"),
+    "files": ("fil", "filer", "file", "files", "dokument", "document", "documents", "pdf"),
+    "photos": ("bild", "bilder", "foto", "foton", "photo", "photos", "album"),
+    "contacts": ("kontakt", "kontakter", "contact", "contacts", "adressbok", "phonebook"),
+    "location": ("plats", "platser", "location", "location history", "platshistorik", "platshistoriken"),
+    "memory": ("minne", "minnen", "memory", "historik", "minnet"),
+    "health": ("hälsa", "halsa", "health", "hälsodata", "halsodata", "hälsodatan", "halsodatan"),
+}
+
 ALLOWED_HEALTH_METRICS: set[str] = HEALTH_ACTIVITY_METRICS.union(HEALTH_WELLBEING_METRICS)
 ALLOWED_HEALTH_SUBDOMAINS: set[str] = {"activity", "wellbeing"}
 ALLOWED_HEALTH_WORKOUT_TYPES: set[str] = {"running", "cycling", "strength"}
@@ -390,6 +403,18 @@ class DomainUnderstanding:
     resolved_filters: dict[str, object] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class ClarificationContext:
+    original_query: str
+    candidate_domains: list[Domain]
+
+
+@dataclass(frozen=True)
+class ClarificationResolution:
+    effective_query: str
+    resolved_domain: Domain
+
+
 def _looks_like_health_query(query: str) -> bool:
     q = (query or "").lower()
     has_health_language = any(keyword in q for keyword in HEALTH_DOMAIN_KEYWORDS)
@@ -423,6 +448,71 @@ def _coerce_classifier_confidence(value: object) -> float:
     except (TypeError, ValueError):
         confidence = 0.0
     return max(0.0, min(1.0, confidence))
+
+
+def _normalize_clarification_text(text: str) -> str:
+    lowered = (text or "").lower()
+    without_punctuation = re.sub(r"[^\w\såäö]", " ", lowered)
+    return re.sub(r"\s+", " ", without_punctuation).strip()
+
+
+def _clarification_query_mentions_domain(query: str, domain: Domain) -> bool:
+    normalized = _normalize_clarification_text(query)
+    if not normalized:
+        return False
+
+    for term in CLARIFICATION_DOMAIN_TERMS.get(domain, ()):
+        pattern = r"(?<!\w)" + re.escape(term) + r"(?!\w)"
+        if re.search(pattern, normalized):
+            return True
+    return False
+
+
+def _resolved_domain_from_clarification_response(
+    query: str,
+    candidate_domains: list[Domain],
+) -> Optional[Domain]:
+    matches = [domain for domain in candidate_domains if _clarification_query_mentions_domain(query, domain)]
+    if len(matches) != 1:
+        return None
+    return matches[0]
+
+
+def _looks_like_direct_clarification_choice(query: str, domain: Domain) -> bool:
+    normalized = _normalize_clarification_text(query)
+    if not normalized:
+        return False
+    if not _clarification_query_mentions_domain(normalized, domain):
+        return False
+    return len(normalized.split()) <= 4
+
+
+def _resolve_clarification_response(
+    query: str,
+    clarification_context: Optional[ClarificationContext],
+) -> Optional[ClarificationResolution]:
+    if clarification_context is None:
+        return None
+
+    original_query = clarification_context.original_query.strip()
+    if not original_query or not clarification_context.candidate_domains:
+        return None
+
+    resolved_domain = _resolved_domain_from_clarification_response(
+        query,
+        clarification_context.candidate_domains,
+    )
+    if resolved_domain is None:
+        return None
+
+    effective_query = query.strip()
+    if _looks_like_direct_clarification_choice(query, resolved_domain):
+        effective_query = original_query
+
+    return ClarificationResolution(
+        effective_query=effective_query,
+        resolved_domain=resolved_domain,
+    )
 
 
 def _resolve_health_metric(query: str) -> str:
@@ -2155,8 +2245,16 @@ class DataIntentRouter:
             TimePolicyConfig(timezone_name=timezone_name), now_provider=_now
         )
 
-    def route(self, query: str, language: str = "sv") -> Dict[str, object]:
-        q = (query or "").strip()
+    def route(
+        self,
+        query: str,
+        language: str = "sv",
+        clarification_context: Optional[ClarificationContext] = None,
+    ) -> Dict[str, object]:
+        raw_query = (query or "").strip()
+        clarification_resolution = _resolve_clarification_response(raw_query, clarification_context)
+        q = clarification_resolution.effective_query if clarification_resolution is not None else raw_query
+        clarification_domain = clarification_resolution.resolved_domain if clarification_resolution is not None else None
 
         parsed = self.time_resolver.resolve(q)
         keyword_domain = _keyword_domain_for_query(q)
@@ -2194,20 +2292,24 @@ class DataIntentRouter:
             }
             special_filters = dict(special_understanding.resolved_filters)
             if special_understanding.resolved_domain is None:
-                time_scope = _time_scope_from_time_intent(parsed.time_intent, parsed.timeframe)
-                plan = IntentPlanDTO.model_validate(
-                    {
-                        "domain": "system",
-                        "mode": "info",
-                        "operation": "needs_clarification",
-                        "time_scope": time_scope,
-                        "filters": clarification_filters,
-                    }
-                )
-                return plan.model_dump(mode="python")
-            resolved_domain = special_understanding.resolved_domain
+                if clarification_domain is not None and clarification_domain in special_understanding.candidate_domains:
+                    resolved_domain = clarification_domain
+                else:
+                    time_scope = _time_scope_from_time_intent(parsed.time_intent, parsed.timeframe)
+                    plan = IntentPlanDTO.model_validate(
+                        {
+                            "domain": "system",
+                            "mode": "info",
+                            "operation": "needs_clarification",
+                            "time_scope": time_scope,
+                            "filters": clarification_filters,
+                        }
+                    )
+                    return plan.model_dump(mode="python")
+            else:
+                resolved_domain = clarification_domain or special_understanding.resolved_domain
         else:
-            resolved_domain = None
+            resolved_domain = clarification_domain
 
         if resolved_domain is None:
             resolved_domain = keyword_domain or llm_domain or _fallback_domain_for_query(q) or "calendar"

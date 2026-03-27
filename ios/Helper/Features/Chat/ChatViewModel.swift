@@ -109,6 +109,7 @@ final class ChatViewModel {
         isSending = true
         defer { isSending = false }
         error = nil
+        let clarificationContext = clarificationContextForNextTurn()
 
         let userMessage = ChatMessage(
             role: .user,
@@ -152,7 +153,11 @@ final class ChatViewModel {
         }
 
         do {
-            let userQuery = UserQuery(text: trimmed, source: .userTyped)
+            let userQuery = UserQuery(
+                text: trimmed,
+                source: .userTyped,
+                clarificationContext: clarificationContext
+            )
             let result = try await pipeline.run(userQuery)
             let responseText = normalizedResponseText(from: result)
             let assistantMessage = ChatMessage(
@@ -254,7 +259,7 @@ final class ChatViewModel {
         guard let message = message(withID: messageID), let suggestion = message.suggestion else {
             return
         }
-        updateSuggestion(for: messageID) { $0.updating(state: .dismissed) }
+        transitionSuggestionState(for: messageID, event: .dismiss)
         suggestionLogger.log(
             action: .dismissed,
             messageID: messageID.uuidString,
@@ -265,18 +270,11 @@ final class ChatViewModel {
     }
 
     func markSuggestionExecuting(for messageID: UUID) {
-        updateSuggestion(for: messageID) { $0.updating(state: .executing) }
+        transitionSuggestionState(for: messageID, event: .beginExecution)
     }
 
     func restoreSuggestionVisible(for messageID: UUID) {
-        updateSuggestion(for: messageID) { suggestion in
-            switch suggestion.state {
-            case .completed, .dismissed:
-                return suggestion
-            default:
-                return suggestion.updating(state: .visible)
-            }
-        }
+        transitionSuggestionState(for: messageID, event: .restoreApproval)
     }
 
     func completeSuggestion(
@@ -286,7 +284,7 @@ final class ChatViewModel {
         guard let message = message(withID: messageID), let suggestion = message.suggestion else {
             return
         }
-        updateSuggestion(for: messageID) { $0.updating(state: .completed) }
+        transitionSuggestionState(for: messageID, event: .complete)
         guard let action else { return }
         suggestionLogger.log(
             action: action,
@@ -298,7 +296,7 @@ final class ChatViewModel {
     }
 
     func failSuggestion(for messageID: UUID, message: String) {
-        updateSuggestion(for: messageID) { $0.updating(state: .failed(message)) }
+        transitionSuggestionState(for: messageID, event: .fail(message))
     }
 
     private func normalizedResponseText(from result: QueryResult) -> String {
@@ -393,6 +391,24 @@ final class ChatViewModel {
     private func clarificationDomains(from plan: BackendIntentPlanDTO?) -> [BackendIntentDomain] {
         guard let plan else { return [] }
         return QueryPipeline.candidateDomains(from: plan)
+    }
+
+    private func clarificationContextForNextTurn() -> BackendQueryClarificationContextDTO? {
+        guard let lastAssistant = messages.last, lastAssistant.role == .assistant else {
+            return nil
+        }
+        guard !lastAssistant.clarificationDomains.isEmpty else {
+            return nil
+        }
+        guard let originalQuery = lastAssistant.submittedQuery?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !originalQuery.isEmpty else {
+            return nil
+        }
+
+        return BackendQueryClarificationContextDTO(
+            originalQuery: originalQuery,
+            candidateDomains: lastAssistant.clarificationDomains
+        )
     }
 
     private func interpretationHint(from plan: BackendIntentPlanDTO?) -> String? {
@@ -679,6 +695,19 @@ final class ChatViewModel {
             return
         }
         messages[index] = messages[index].updating(suggestion: transform(suggestion))
+    }
+
+    private func transitionSuggestionState(
+        for messageID: UUID,
+        event: ActionConfirmationEvent
+    ) {
+        updateSuggestion(for: messageID) { suggestion in
+            let nextState = ActionConfirmationFlow.transition(
+                from: ActionConfirmationState(suggestion.state),
+                event: event
+            )
+            return suggestion.updating(state: ChatSuggestionState(nextState))
+        }
     }
 
     private func message(withID id: UUID) -> ChatMessage? {

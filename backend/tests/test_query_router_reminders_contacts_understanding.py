@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import unittest
 
-from helpershelp.query.data_intent_router import DataIntentRouter
+from helpershelp.query.data_intent_router import ClarificationContext, DataIntentRouter
 
 
 class _StubIntentStructurer:
@@ -76,6 +76,53 @@ class QueryRouterRemindersContactsUnderstandingTests(unittest.TestCase):
         self.assertEqual(plan.get("domain"), "mail")
         filters = plan.get("filters") or {}
         self.assertEqual(filters.get("participants"), ["alva"])
+
+    def test_direct_choice_resolves_latest_clarification_to_calendar(self):
+        router = self._router()
+
+        plan = router.route(
+            "Kalender",
+            language="sv",
+            clarification_context=ClarificationContext(
+                original_query="Vad ska jag göra idag?",
+                candidate_domains=["reminders", "calendar"],
+            ),
+        )
+
+        self.assertEqual(plan.get("domain"), "calendar")
+        self.assertNotEqual(plan.get("operation"), "needs_clarification")
+        time_scope = plan.get("time_scope") or {}
+        self.assertEqual(time_scope.get("value"), "today")
+
+    def test_rewritten_clarification_reply_resolves_to_calendar(self):
+        router = self._router()
+
+        plan = router.route(
+            "Vad ska jag göra idag i kalendern?",
+            language="sv",
+            clarification_context=ClarificationContext(
+                original_query="Vad ska jag göra idag?",
+                candidate_domains=["reminders", "calendar"],
+            ),
+        )
+
+        self.assertEqual(plan.get("domain"), "calendar")
+        self.assertNotEqual(plan.get("operation"), "needs_clarification")
+
+    def test_unresolved_followup_keeps_clarification_when_no_choice_is_made(self):
+        router = self._router()
+
+        plan = router.route(
+            "Vad ska jag göra idag?",
+            language="sv",
+            clarification_context=ClarificationContext(
+                original_query="Vad ska jag göra idag?",
+                candidate_domains=["reminders", "calendar"],
+            ),
+        )
+
+        self.assertEqual(plan.get("domain"), "system")
+        self.assertEqual(plan.get("operation"), "needs_clarification")
 
 
 if __name__ == "__main__":

@@ -61,6 +61,7 @@ public struct ChatView: View {
     init(
         memoryService: MemoryService,
         pipeline: QueryPipeline,
+        suggestionEngine: ChatSuggestionEvaluating? = nil,
         suggestionLogger: ChatSuggestionLogging? = nil,
         suggestionActionCoordinator: ChatSuggestionActionCoordinating,
         followUpCoordinator: FollowUpCoordinating,
@@ -74,6 +75,7 @@ public struct ChatView: View {
     ) {
         _vm = State(initialValue: ChatViewModel(
             pipeline: pipeline,
+            suggestionEngine: suggestionEngine,
             suggestionLogger: suggestionLogger
         ))
         self.memoryService = memoryService

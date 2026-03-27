@@ -35,6 +35,9 @@ struct HelperApp: App {
                     ChatView(
                         memoryService: runtime.memoryService,
                         pipeline: runtime.queryPipeline,
+                        suggestionEngine: ChatSuggestionEngine(
+                            actionSuggestionDetector: runtime.actionSuggestionDetector
+                        ),
                         suggestionLogger: runtime.chatSuggestionLogger,
                         suggestionActionCoordinator: runtime.chatSuggestionActionCoordinator,
                         followUpCoordinator: runtime.followUpCoordinator,

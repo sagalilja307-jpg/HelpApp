@@ -35,9 +35,10 @@ struct BackendQueryRequestDTO: Codable, Sendable {
     let query: String
     let language: String?
     let timezone: String?
+    let clarificationContext: BackendQueryClarificationContextDTO?
 
     enum CodingKeys: String, CodingKey {
-        case query, language, timezone
+        case query, language, timezone, clarificationContext
     }
 }
 
@@ -52,6 +53,11 @@ enum BackendIntentDomain: String, Codable, Sendable, Equatable {
     case location
     case memory
     case health
+}
+
+struct BackendQueryClarificationContextDTO: Codable, Sendable, Equatable {
+    let originalQuery: String
+    let candidateDomains: [BackendIntentDomain]
 }
 
 enum BackendIntentMode: String, Codable, Sendable, Equatable {

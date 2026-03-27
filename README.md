@@ -21,7 +21,7 @@ Exempel:
 - Hur sov jag?
 
 ### 3. Suggestion layer
-Upptäcker försiktigt möjliga handlingar i chatten.
+Upptäcker försiktigt möjliga handlingar i chatten och formar dem som förslag.
 
 Exempel:
 - Det här låter som något att lägga i kalendern
@@ -29,7 +29,18 @@ Exempel:
 - Det här ser ut som info att spara
 - Det här låter som något att följa upp
 
-### 4. State layer
+### 4. Action layer
+Håller den explicita kedjan mellan förslag, användarens godkännande och faktisk handling.
+
+Exempel:
+- `ProposedAction`
+- action confirmation state
+- executors för kalender, reminders, notes
+- koordinering av uppföljningar
+
+Det här lagret ska inte blandas ihop med datakällor eller allmänt minne. Det tar redan tolkad förståelse och gör den handlingsbar.
+
+### 5. State layer
 Håller tillstånd som pågår över tid.
 
 Exempel:
@@ -38,10 +49,10 @@ Exempel:
 - handlingsutkast
 - andra framtida pending states
 
-### 5. Memory layer
+### 6. Memory layer
 Lång- och korttidsminne, embeddings, kluster, historik och annan sparad betydelse över tid.
 
-### 6. Decision log
+### 7. Decision log
 Loggar vad systemet föreslog, undertryckte eller genomförde. Detta är inte samma sak som full användarbesluts-historik.
 
 ## Min rekommenderade framtida struktur
@@ -52,16 +63,27 @@ Kalender, reminders, mail, files, health, notes, etc.
 ### B. Query layer
 Tolkar informationsfrågor om datalagret.
 
-### C. Suggestion layer
-Upptäcker försiktigt möjliga handlingar i chatten.
+På backend ligger detta främst i:
+- `backend/src/helpershelp/api/routes/query.py`
+- `backend/src/helpershelp/api/routes/process_memory.py`
 
-### D. State layer
+### C. Suggestion layer
+Upptäcker försiktigt möjliga handlingar och producerar `ProposedAction`.
+
+### D. Action layer
+Hanterar:
+- förslag som väntar på godkännande
+- bekräftelseflöde
+- exekvering mot kalender, reminders, notes
+- överlämning till pending follow-up state när en handling fortsätter över tid
+
+### E. State layer
 `PendingFollowUp`, andra pending states, handlingsutkast.
 
-### E. Memory layer
+### F. Memory layer
 Lång- och korttidsminne, embeddings, kluster, historik.
 
-### F. Decision memory layer
+### G. Decision memory layer
 Användarens val, orsaker, alternativ, lärdomar.
 
 ## Designprincip
@@ -75,8 +97,9 @@ Helper ska skilja på:
 
 Det betyder att:
 - **Query** hämtar och strukturerar information
-- **Suggestion** föreslår möjliga handlingar
-- **State** håller reda på sådant som fortfarande väntar
+- **Suggestion** upptäcker möjliga handlingar
+- **Action** håller ihop förslag, godkännande och exekvering
+- **State** håller reda på sådant som fortfarande väntar efter att en handling startat
 - **Memory** sparar betydelse över tid
 - **Decision memory** är ett framtida lager för användarens egna val och lärdomar
 

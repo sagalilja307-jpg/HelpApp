@@ -13,6 +13,8 @@ struct HelperAppRuntime {
     let modelContext: ModelContext
     let legacy: HelperAppLegacyRuntime
     let queryPipeline: QueryPipeline
+    let actionSuggestionDetector: HeuristicActionSuggestionDetector
+    let actionExecutionCoordinator: ActionExecutionCoordinator
     let chatSuggestionLogger: ChatSuggestionLogger
     let chatSuggestionActionCoordinator: ChatSuggestionActionCoordinator
     let followUpNotificationCoordinator: FollowUpNotificationCoordinator
@@ -82,17 +84,23 @@ enum HelperAppBootstrap {
             longTermMemorySaveCoordinator: longTermMemorySaveCoordinator,
             keyValueSyncCoordinator: iCloudSyncCoordinator
         )
-        let chatSuggestionActionCoordinator = ChatSuggestionActionCoordinator(
-            reminderService: ChatSuggestionReminderService(),
-            noteService: ChatSuggestionNoteService(),
-            memorySyncCoordinator: iCloudMemorySyncCoordinator,
-            sourceConnectionStore: sourceConnectionStore
-        )
+        let actionSuggestionDetector = HeuristicActionSuggestionDetector()
         let followUpNotificationCoordinator = FollowUpNotificationCoordinator()
         let followUpCoordinator = FollowUpCoordinator(
             memoryService: memoryService,
             notificationScheduler: followUpNotificationCoordinator,
             logger: chatSuggestionLogger
+        )
+        let actionExecutionCoordinator = ActionExecutionCoordinator(
+            reminderService: ChatSuggestionReminderService(),
+            noteService: ChatSuggestionNoteService(),
+            memorySyncCoordinator: iCloudMemorySyncCoordinator,
+            sourceConnectionStore: sourceConnectionStore,
+            followUpCoordinator: followUpCoordinator,
+            noteSource: "chat_suggestion"
+        )
+        let chatSuggestionActionCoordinator = ChatSuggestionActionCoordinator(
+            actionCoordinator: actionExecutionCoordinator
         )
 
         let supportSettingsService = SupportSettingsAPIService.shared
@@ -106,6 +114,8 @@ enum HelperAppBootstrap {
             modelContext: modelContext,
             legacy: legacy,
             queryPipeline: queryPipeline,
+            actionSuggestionDetector: actionSuggestionDetector,
+            actionExecutionCoordinator: actionExecutionCoordinator,
             chatSuggestionLogger: chatSuggestionLogger,
             chatSuggestionActionCoordinator: chatSuggestionActionCoordinator,
             followUpNotificationCoordinator: followUpNotificationCoordinator,

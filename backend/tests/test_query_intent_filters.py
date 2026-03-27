@@ -73,6 +73,27 @@ class QueryIntentFilterTests(APIRouteTestCase):
         self.assertEqual(filters.get("participants"), ["klarna"])
         self.assertEqual(filters.get("status"), None)
 
+    def test_query_route_resolves_clarification_context_from_latest_assistant_turn(self):
+        response = self.client.post(
+            "/query",
+            json={
+                "query": "Kalender",
+                "language": "sv",
+                "clarificationContext": {
+                    "originalQuery": "Vad ska jag göra idag?",
+                    "candidateDomains": ["reminders", "calendar"],
+                },
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json().get("data_intent") or {}
+        time_scope = payload.get("time_scope") or {}
+
+        self.assertEqual(payload.get("domain"), "calendar")
+        self.assertNotEqual(payload.get("operation"), "needs_clarification")
+        self.assertEqual(time_scope.get("value"), "today")
+
 
 if __name__ == "__main__":
     unittest.main()

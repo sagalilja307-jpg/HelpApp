@@ -34,7 +34,10 @@ struct QueryPipeline {
         // 0) Backend call with graceful error handling
         let response: BackendQueryResponseDTO
         do {
-            response = try await backendQueryService.query(text: query.text)
+            response = try await backendQueryService.query(
+                text: query.text,
+                clarificationContext: query.clarificationContext
+            )
         } catch {
             return QueryResult(
                 timeRange: nil,

@@ -31,10 +31,18 @@ final class BackendQueryAPIService: BackendQuerying {
     }
 
     func query(text: String) async throws -> BackendQueryResponseDTO {
+        try await query(text: text, clarificationContext: nil)
+    }
+
+    func query(
+        text: String,
+        clarificationContext: BackendQueryClarificationContextDTO?
+    ) async throws -> BackendQueryResponseDTO {
         let payload = BackendQueryRequestDTO(
             query: text,
             language: "sv", // kan göras nil om backend sätter själv
-            timezone: TimeZone.current.identifier // hint
+            timezone: TimeZone.current.identifier, // hint
+            clarificationContext: clarificationContext
         )
 
         let body = try Self.encoder.encode(payload)

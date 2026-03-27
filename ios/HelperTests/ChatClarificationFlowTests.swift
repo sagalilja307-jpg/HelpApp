@@ -318,18 +318,95 @@ final class ChatClarificationFlowTests: XCTestCase {
         )
         XCTAssertEqual(vm.messages.last?.interpretationHint, "Tolkat som hälsa · löpning · igår")
     }
+
+    func testManualReplyAfterClarificationSendsClarificationContextToBackend() async throws {
+        let clarificationPlan = BackendIntentPlanDTO(
+            domain: nil,
+            mode: .info,
+            operation: .needsClarification,
+            timeScope: BackendTimeScopeDTO(
+                type: .relative,
+                value: "today",
+                start: nil,
+                end: nil
+            ),
+            filters: [
+                "_confidence": AnyCodable("low"),
+                "_candidate_domains": AnyCodable(["reminders", "calendar"])
+            ],
+            grouping: nil,
+            sort: nil,
+            needsClarification: true,
+            clarificationMessage: nil,
+            suggestions: []
+        )
+        let resolvedPlan = BackendIntentPlanDTO(
+            domain: .calendar,
+            mode: .info,
+            operation: .list,
+            timeScope: BackendTimeScopeDTO(
+                type: .relative,
+                value: "today",
+                start: nil,
+                end: nil
+            ),
+            filters: [:],
+            grouping: nil,
+            sort: nil,
+            needsClarification: false,
+            clarificationMessage: nil,
+            suggestions: []
+        )
+
+        let backend = RecordingBackend(responses: [
+            BackendQueryResponseDTO(intentPlan: clarificationPlan, hasDataIntent: true),
+            BackendQueryResponseDTO(intentPlan: resolvedPlan, hasDataIntent: true),
+        ])
+        let pipeline = QueryPipeline(
+            backendQueryService: backend,
+            localCollector: EmptyCollector(),
+            accessGate: AllowingAccess()
+        )
+        let vm = ChatViewModel(pipeline: pipeline)
+
+        vm.query = "Vad ska jag göra idag?"
+        await vm.send()
+
+        vm.query = "Vad ska jag göra idag i kalendern?"
+        await vm.send()
+
+        XCTAssertEqual(
+            backend.receivedClarificationContexts,
+            [
+                nil,
+                BackendQueryClarificationContextDTO(
+                    originalQuery: "Vad ska jag göra idag?",
+                    candidateDomains: [.reminders, .calendar]
+                ),
+            ]
+        )
+    }
 }
 
 private final class RecordingBackend: BackendQuerying {
     private var responses: [BackendQueryResponseDTO]
     private(set) var receivedQueries: [String] = []
+    private(set) var receivedClarificationContexts: [BackendQueryClarificationContextDTO?] = []
 
     init(responses: [BackendQueryResponseDTO]) {
         self.responses = responses
     }
 
     func query(text: String) async throws -> BackendQueryResponseDTO {
+        try await query(text: text, clarificationContext: nil)
+    }
+
+    func query(
+        text: String,
+        clarificationContext: BackendQueryClarificationContextDTO?
+    ) async throws -> BackendQueryResponseDTO {
         receivedQueries.append(text)
+        receivedClarificationContexts.append(clarificationContext)
         return responses.removeFirst()
     }
 }
