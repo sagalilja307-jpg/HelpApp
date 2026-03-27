@@ -4,6 +4,7 @@ enum ChatSuggestionKind: String, Sendable, Codable, Equatable {
     case calendar
     case reminder
     case note
+    case followUp
 
     var badgeTitle: String {
         switch self {
@@ -13,6 +14,8 @@ enum ChatSuggestionKind: String, Sendable, Codable, Equatable {
             return "Påminnelse"
         case .note:
             return "Anteckning"
+        case .followUp:
+            return "Uppföljning"
         }
     }
 
@@ -24,6 +27,8 @@ enum ChatSuggestionKind: String, Sendable, Codable, Equatable {
             return "Skapa påminnelse"
         case .note:
             return "Spara som anteckning"
+        case .followUp:
+            return "Planera uppföljning"
         }
     }
 }
@@ -90,9 +95,20 @@ enum ChatSuggestionDraft: Sendable, Equatable {
         static let empty = NoteDraft(title: "", body: "")
     }
 
+    struct FollowUpDraft: Sendable, Equatable {
+        let title: String
+        let draftText: String
+        let contextText: String
+        let waitingSince: Date
+        let eligibleAt: Date
+        let dueAt: Date
+        let clusterID: String?
+    }
+
     case calendar(CalendarDraft)
     case reminder(ReminderDraft)
     case note(NoteDraft)
+    case followUp(FollowUpDraft)
 }
 
 struct ChatSuggestionCard: Sendable, Equatable {

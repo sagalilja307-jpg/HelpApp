@@ -33,9 +33,11 @@ struct HelperApp: App {
             NavigationStack {
                 if onboardingDone {
                     ChatView(
+                        memoryService: runtime.memoryService,
                         pipeline: runtime.queryPipeline,
                         suggestionLogger: runtime.chatSuggestionLogger,
                         suggestionActionCoordinator: runtime.chatSuggestionActionCoordinator,
+                        followUpCoordinator: runtime.followUpCoordinator,
                         sourceConnectionStore: runtime.sourceConnectionStore,
                         photosIndexService: runtime.photosIndexService,
                         filesImportService: runtime.filesImportService,

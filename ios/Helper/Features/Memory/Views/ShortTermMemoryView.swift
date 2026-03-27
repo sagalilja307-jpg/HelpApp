@@ -4,7 +4,18 @@ struct ShortTermMemoryView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @StateObject private var settings = MemorySourceSettings()
-    @StateObject private var coordinator = ShortTermMemoryCoordinator()
+    @StateObject private var coordinator: ShortTermMemoryCoordinator
+    private let followUpCoordinator: FollowUpCoordinating
+
+    init(
+        memoryService: MemoryService,
+        followUpCoordinator: FollowUpCoordinating
+    ) {
+        _coordinator = StateObject(
+            wrappedValue: ShortTermMemoryCoordinator(memoryService: memoryService)
+        )
+        self.followUpCoordinator = followUpCoordinator
+    }
 
     var body: some View {
         ScrollView {
@@ -23,7 +34,10 @@ struct ShortTermMemoryView: View {
                         .ios26Card()
 
                     WeekSummaryList(days: coordinator.daySummaries) { day in
-                        WorkingMemoryDayView(date: day.date)
+                        WorkingMemoryDayView(
+                            date: day.date,
+                            followUpCoordinator: followUpCoordinator
+                        )
                             .environmentObject(settings)
                             .environmentObject(coordinator)
                     }
@@ -162,6 +176,8 @@ private struct NextMemoryItemCard: View {
             return "Kalender"
         case .reminder:
             return "Påminnelse"
+        case .followUp:
+            return "Uppföljning"
         }
     }
 }

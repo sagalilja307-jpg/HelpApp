@@ -87,6 +87,34 @@ final class ChatSuggestionFlowTests: XCTestCase {
         XCTAssertEqual(vm.messages.last?.suggestion?.kind, .calendar)
     }
 
+    func testImmediateFollowUpSuggestionSkipsQueryPipeline() async {
+        let logger = RecordingSuggestionLogger()
+        let backend = CountingSuggestionBackend(
+            response: BackendQueryResponseDTO(
+                intentPlan: Self.plan,
+                answer: "Det här ska inte användas",
+                hasDataIntent: true
+            )
+        )
+        let pipeline = QueryPipeline(
+            backendQueryService: backend,
+            localCollector: EmptySuggestionCollector(),
+            accessGate: AllowingSuggestionAccess()
+        )
+        let vm = ChatViewModel(
+            pipeline: pipeline,
+            suggestionEngine: StubSuggestionEngine(decision: .suggestion(Self.followUpSuggestion)),
+            suggestionLogger: logger
+        )
+
+        vm.query = "Jag mejlade Sara och väntar på svar"
+        await vm.send()
+
+        XCTAssertEqual(backend.callCount, 0)
+        XCTAssertEqual(vm.messages.last?.text, "Jag kan lägga upp en uppföljning åt dig. Vill du öppna utkastet?")
+        XCTAssertEqual(vm.messages.last?.suggestion?.kind, .followUp)
+    }
+
     func testFailSuggestionUpdatesStateToFailed() async throws {
         let vm = makeViewModel(
             decision: .suggestion(Self.reminderSuggestion),
@@ -244,6 +272,31 @@ final class ChatSuggestionFlowTests: XCTestCase {
         state: .visible,
         confidence: 0.84,
         auditReasons: ["trigger:user_text", "action_kind:note"]
+    )
+
+    private static let followUpSuggestion = ChatSuggestionCard(
+        kind: .followUp,
+        title: "Uppföljningsförslag",
+        explanation: "Vill du skapa en uppföljning?",
+        draft: .followUp(
+            .init(
+                title: "Följ upp med Sara",
+                draftText: "Hej Sara! Jag ville bara följa upp mitt tidigare meddelande.",
+                contextText: "Väntar på svar från Sara.",
+                waitingSince: Date(timeIntervalSince1970: 1_742_428_800),
+                eligibleAt: Date(timeIntervalSince1970: 1_742_515_200),
+                dueAt: Date(timeIntervalSince1970: 1_742_547_600),
+                clusterID: nil
+            )
+        ),
+        state: .visible,
+        confidence: 0.91,
+        auditReasons: [
+            "trigger:user_text",
+            "action_kind:follow_up",
+            "heuristic:waiting_for_response",
+            "intent:follow_up_request"
+        ]
     )
 }
 

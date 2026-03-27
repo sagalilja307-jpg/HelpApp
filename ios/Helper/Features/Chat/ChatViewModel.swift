@@ -128,17 +128,17 @@ final class ChatViewModel {
 
         let suggestionDecision = suggestionEngine.decide(for: trimmed)
 
-        if let immediateSuggestion = immediateCalendarCreateSuggestion(from: suggestionDecision) {
+        if let immediateSuggestion = immediateAssistantSuggestion(from: suggestionDecision) {
             let assistantMessage = ChatMessage(
                 role: .assistant,
-                text: "Jag kan lägga in det här i kalendern. Vill du öppna utkastet?",
+                text: immediateSuggestion.message,
                 visualizationComponent: nil,
                 filters: [:],
                 entries: [],
                 timeRange: nil,
                 intentPlan: nil,
                 interpretationHint: nil,
-                suggestion: immediateSuggestion,
+                suggestion: immediateSuggestion.card,
                 clarificationDomains: [],
                 submittedQuery: trimmed
             )
@@ -279,13 +279,17 @@ final class ChatViewModel {
         }
     }
 
-    func completeSuggestion(for messageID: UUID) {
+    func completeSuggestion(
+        for messageID: UUID,
+        logging action: DecisionAction? = .executed
+    ) {
         guard let message = message(withID: messageID), let suggestion = message.suggestion else {
             return
         }
         updateSuggestion(for: messageID) { $0.updating(state: .completed) }
+        guard let action else { return }
         suggestionLogger.log(
-            action: .executed,
+            action: action,
             messageID: messageID.uuidString,
             kind: suggestion.kind,
             confidence: suggestion.confidence,
@@ -681,12 +685,29 @@ final class ChatViewModel {
         messages.first(where: { $0.id == id })
     }
 
-    private func immediateCalendarCreateSuggestion(from decision: ChatSuggestionDecision) -> ChatSuggestionCard? {
-        guard case .suggestion(let suggestion) = decision,
-              suggestion.kind == .calendar,
-              suggestion.auditReasons.contains("intent:create_request") else {
+    private func immediateAssistantSuggestion(
+        from decision: ChatSuggestionDecision
+    ) -> (card: ChatSuggestionCard, message: String)? {
+        guard case .suggestion(let suggestion) = decision else {
             return nil
         }
-        return suggestion
+
+        if suggestion.kind == .calendar,
+           suggestion.auditReasons.contains("intent:create_request") {
+            return (
+                card: suggestion,
+                message: "Jag kan lägga in det här i kalendern. Vill du öppna utkastet?"
+            )
+        }
+
+        if suggestion.kind == .followUp,
+           suggestion.auditReasons.contains("intent:follow_up_request") {
+            return (
+                card: suggestion,
+                message: "Jag kan lägga upp en uppföljning åt dig. Vill du öppna utkastet?"
+            )
+        }
+
+        return nil
     }
 }

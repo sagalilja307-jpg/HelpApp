@@ -44,7 +44,10 @@ public struct ChatView: View {
     @State private var reminderSuggestionDraft: ReminderSuggestionPresentation?
     @State private var noteSuggestionDraft: NoteSuggestionPresentation?
     @State private var calendarSuggestionDraft: CalendarSuggestionPresentation?
+    @State private var followUpSuggestionDraft: FollowUpSuggestionPresentation?
+    @State private var sharePresentation: ShareTextPresentation?
 
+    private let memoryService: MemoryService
     private let sourceConnectionStore: SourceConnectionStore
     private let photosIndexService: PhotosIndexService
     private let filesImportService: FilesImportService
@@ -53,11 +56,14 @@ public struct ChatView: View {
     private let iCloudSyncCoordinator: ICloudKeyValueSyncCoordinator
     private let iCloudMemorySyncCoordinator: ICloudMemorySyncCoordinator
     private let suggestionActionCoordinator: ChatSuggestionActionCoordinating
+    private let followUpCoordinator: FollowUpCoordinating
 
     init(
+        memoryService: MemoryService,
         pipeline: QueryPipeline,
         suggestionLogger: ChatSuggestionLogging? = nil,
         suggestionActionCoordinator: ChatSuggestionActionCoordinating,
+        followUpCoordinator: FollowUpCoordinating,
         sourceConnectionStore: SourceConnectionStore,
         photosIndexService: PhotosIndexService,
         filesImportService: FilesImportService,
@@ -70,6 +76,7 @@ public struct ChatView: View {
             pipeline: pipeline,
             suggestionLogger: suggestionLogger
         ))
+        self.memoryService = memoryService
         self.sourceConnectionStore = sourceConnectionStore
         self.photosIndexService = photosIndexService
         self.filesImportService = filesImportService
@@ -78,6 +85,7 @@ public struct ChatView: View {
         self.iCloudSyncCoordinator = iCloudSyncCoordinator
         self.iCloudMemorySyncCoordinator = iCloudMemorySyncCoordinator
         self.suggestionActionCoordinator = suggestionActionCoordinator
+        self.followUpCoordinator = followUpCoordinator
     }
 
     public var body: some View {
@@ -215,7 +223,10 @@ public struct ChatView: View {
         .toolbar {
             ToolbarItemGroup(placement: .topBarLeading) {
                 NavigationLink {
-                    ShortTermMemoryView()
+                    ShortTermMemoryView(
+                        memoryService: memoryService,
+                        followUpCoordinator: followUpCoordinator
+                    )
                 } label: {
                     Image(systemName: "clock.arrow.circlepath")
                 }
@@ -274,6 +285,8 @@ public struct ChatView: View {
         }
         .sheet(isPresented: $showDataSources) {
             DataSourcesSheetView(
+                memoryService: memoryService,
+                followUpCoordinator: followUpCoordinator,
                 sourceConnectionStore: sourceConnectionStore,
                 photosIndexService: photosIndexService,
                 filesImportService: filesImportService,
@@ -350,6 +363,39 @@ public struct ChatView: View {
                     messageID: presentation.messageID
                 )
             }
+        }
+        .sheet(item: $followUpSuggestionDraft) { presentation in
+            FollowUpComposerSheet(
+                draft: presentation.draft,
+                onCopy: { draft in
+                    await copyFollowUpSuggestion(
+                        messageID: presentation.messageID,
+                        draft: draft,
+                        reasons: presentation.auditReasons
+                    )
+                },
+                onShare: { draft in
+                    await shareFollowUpSuggestion(
+                        messageID: presentation.messageID,
+                        draft: draft,
+                        reasons: presentation.auditReasons
+                    )
+                },
+                onMarkSent: { draft in
+                    await markFollowUpSuggestionSent(
+                        messageID: presentation.messageID,
+                        draft: draft,
+                        reasons: presentation.auditReasons
+                    )
+                },
+                onCancel: {
+                    followUpSuggestionDraft = nil
+                    vm.restoreSuggestionVisible(for: presentation.messageID)
+                }
+            )
+        }
+        .sheet(item: $sharePresentation) { presentation in
+            TextShareSheet(text: presentation.text)
         }
         .fileImporter(
             isPresented: $showFileImporter,
@@ -1127,6 +1173,12 @@ public struct ChatView: View {
             await prepareReminderSuggestion(messageID: message.id, draft: draft)
         case .note(let draft):
             prepareNoteSuggestion(messageID: message.id, draft: draft)
+        case .followUp(let draft):
+            prepareFollowUpSuggestion(
+                messageID: message.id,
+                draft: draft,
+                reasons: suggestion.auditReasons
+            )
         }
     }
 
@@ -1195,6 +1247,27 @@ public struct ChatView: View {
         )
     }
 
+    private func prepareFollowUpSuggestion(
+        messageID: UUID,
+        draft: ChatSuggestionDraft.FollowUpDraft,
+        reasons: [String]
+    ) {
+        followUpSuggestionDraft = FollowUpSuggestionPresentation(
+            messageID: messageID,
+            draft: FollowUpComposerDraft(
+                sourceMessageID: messageID.uuidString,
+                clusterID: draft.clusterID,
+                title: draft.title,
+                contextText: draft.contextText,
+                draftText: draft.draftText,
+                waitingSince: draft.waitingSince,
+                eligibleAt: draft.eligibleAt,
+                dueAt: draft.dueAt
+            ),
+            auditReasons: reasons
+        )
+    }
+
     private func handleCalendarSuggestionResult(
         _ result: Result<Void, Error>,
         messageID: UUID
@@ -1253,6 +1326,80 @@ public struct ChatView: View {
                 messageID: messageID,
                 suggestionError: "Anteckningen kunde inte sparas.",
                 alertMessage: "Anteckningen kunde inte sparas: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func copyFollowUpSuggestion(
+        messageID: UUID,
+        draft: FollowUpComposerDraft,
+        reasons: [String]
+    ) async {
+        followUpSuggestionDraft = nil
+
+        do {
+            let saved = try await followUpCoordinator.saveFollowUpDraft(
+                draft,
+                defaultSourceMessageID: messageID.uuidString,
+                logMessageID: messageID.uuidString,
+                reasons: reasons
+            )
+            UIPasteboard.general.string = saved.draftText
+            vm.completeSuggestion(for: messageID, logging: nil)
+        } catch {
+            presentSuggestionFailure(
+                messageID: messageID,
+                suggestionError: "Uppföljningen kunde inte sparas.",
+                alertMessage: "Uppföljningen kunde inte sparas: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func shareFollowUpSuggestion(
+        messageID: UUID,
+        draft: FollowUpComposerDraft,
+        reasons: [String]
+    ) async {
+        followUpSuggestionDraft = nil
+
+        do {
+            let saved = try await followUpCoordinator.saveFollowUpDraft(
+                draft,
+                defaultSourceMessageID: messageID.uuidString,
+                logMessageID: messageID.uuidString,
+                reasons: reasons
+            )
+            sharePresentation = ShareTextPresentation(text: saved.draftText)
+            vm.completeSuggestion(for: messageID, logging: nil)
+        } catch {
+            presentSuggestionFailure(
+                messageID: messageID,
+                suggestionError: "Uppföljningen kunde inte sparas.",
+                alertMessage: "Uppföljningen kunde inte sparas: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func markFollowUpSuggestionSent(
+        messageID: UUID,
+        draft: FollowUpComposerDraft,
+        reasons: [String]
+    ) async {
+        followUpSuggestionDraft = nil
+
+        do {
+            _ = try await followUpCoordinator.markFollowUpCompleted(
+                from: draft,
+                defaultSourceMessageID: messageID.uuidString,
+                logMessageID: messageID.uuidString,
+                reasons: reasons
+            )
+            vm.completeSuggestion(for: messageID, logging: nil)
+        } catch {
+            presentSuggestionFailure(
+                messageID: messageID,
+                suggestionError: "Uppföljningen kunde inte markeras som skickad.",
+                alertMessage: "Uppföljningen kunde inte markeras som skickad: \(error.localizedDescription)"
             )
         }
     }
@@ -1358,6 +1505,20 @@ private struct CalendarSuggestionPresentation: Identifiable {
     let store: EKEventStore
 
     var id: UUID { messageID }
+}
+
+private struct FollowUpSuggestionPresentation: Identifiable {
+    let messageID: UUID
+    let draft: FollowUpComposerDraft
+    let auditReasons: [String]
+
+    var id: UUID { messageID }
+}
+
+private struct ShareTextPresentation: Identifiable {
+    let text: String
+
+    var id: String { text }
 }
 
 private extension ChatSuggestionCard {

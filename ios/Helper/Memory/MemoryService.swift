@@ -12,6 +12,7 @@ public final class MemoryService {
         public let clusters = StorePermission(canWrite: [.ai, .user])
         public let decisionLog = StorePermission(canWrite: [.system], appendOnly: true)
         public let behaviorPatterns = StorePermission(canWrite: [.system])
+        public let followUps = StorePermission(canWrite: [.system, .user])
     }
 
     public let container: ModelContainer
@@ -23,7 +24,7 @@ public final class MemoryService {
         inMemory: Bool = false,
         storeURL: URL? = nil
     ) throws {
-        let schema = Schema(versionedSchema: MemorySchemaV3.self)
+        let schema = Schema(versionedSchema: MemorySchemaV4.self)
         let config: ModelConfiguration
 
         if inMemory {
@@ -369,6 +370,170 @@ public final class MemoryService {
         try context.save()
     }
 
+    // MARK: - Follow Ups
+
+    private func fetchPendingFollowUp(
+        id: String,
+        in context: ModelContext
+    ) throws -> PendingFollowUp? {
+        var descriptor = FetchDescriptor<PendingFollowUp>(
+            predicate: #Predicate { $0.id == id }
+        )
+        descriptor.fetchLimit = 1
+        return try context.fetch(descriptor).first
+    }
+
+    func createPendingFollowUp(
+        actor: Actor,
+        sourceMessageID: String,
+        clusterID: String? = nil,
+        title: String,
+        contextText: String,
+        draftText: String,
+        createdAt: Date = DateService.shared.now(),
+        waitingSince: Date,
+        eligibleAt: Date,
+        dueAt: Date,
+        state: PendingFollowUpState = .scheduled,
+        in context: ModelContext
+    ) throws -> PendingFollowUpSnapshot {
+        try requireWrite(actor, permissions.followUps, store: "follow_ups.store")
+
+        let followUp = PendingFollowUp(
+            id: UUID().uuidString,
+            sourceMessageID: sourceMessageID,
+            clusterID: clusterID,
+            title: title,
+            contextText: contextText,
+            draftText: draftText,
+            createdAt: createdAt,
+            waitingSince: waitingSince,
+            eligibleAt: eligibleAt,
+            dueAt: dueAt,
+            state: state
+        )
+        context.insert(followUp)
+        try context.save()
+        return followUp.snapshot
+    }
+
+    func listPendingFollowUps(in context: ModelContext) throws -> [PendingFollowUpSnapshot] {
+        try context.fetch(FetchDescriptor<PendingFollowUp>())
+            .map(\.snapshot)
+            .sorted { lhs, rhs in
+                if lhs.dueAt == rhs.dueAt {
+                    return lhs.createdAt < rhs.createdAt
+                }
+                return lhs.dueAt < rhs.dueAt
+            }
+    }
+
+    func updatePendingFollowUpDraft(
+        actor: Actor,
+        id: String,
+        title: String,
+        contextText: String,
+        draftText: String,
+        in context: ModelContext
+    ) throws -> PendingFollowUpSnapshot? {
+        try requireWrite(actor, permissions.followUps, store: "follow_ups.store")
+
+        guard let followUp = try fetchPendingFollowUp(id: id, in: context) else {
+            return nil
+        }
+
+        followUp.title = title
+        followUp.contextText = contextText
+        followUp.draftText = draftText
+        try context.save()
+        return followUp.snapshot
+    }
+
+    func markPendingFollowUpNotificationScheduled(
+        actor: Actor,
+        id: String,
+        scheduledAt: Date,
+        in context: ModelContext
+    ) throws -> PendingFollowUpSnapshot? {
+        try requireWrite(actor, permissions.followUps, store: "follow_ups.store")
+
+        guard let followUp = try fetchPendingFollowUp(id: id, in: context) else {
+            return nil
+        }
+
+        followUp.lastNotificationAt = scheduledAt
+        try context.save()
+        return followUp.snapshot
+    }
+
+    func snoozePendingFollowUp(
+        actor: Actor,
+        id: String,
+        dueAt: Date,
+        in context: ModelContext
+    ) throws -> PendingFollowUpSnapshot? {
+        try requireWrite(actor, permissions.followUps, store: "follow_ups.store")
+
+        guard let followUp = try fetchPendingFollowUp(id: id, in: context) else {
+            return nil
+        }
+
+        followUp.dueAt = dueAt
+        followUp.snoozedUntil = dueAt
+        followUp.state = .snoozed
+        try context.save()
+        return followUp.snapshot
+    }
+
+    func completePendingFollowUp(
+        actor: Actor,
+        id: String,
+        completedAt: Date = DateService.shared.now(),
+        title: String? = nil,
+        contextText: String? = nil,
+        draftText: String? = nil,
+        in context: ModelContext
+    ) throws -> PendingFollowUpSnapshot? {
+        try requireWrite(actor, permissions.followUps, store: "follow_ups.store")
+
+        guard let followUp = try fetchPendingFollowUp(id: id, in: context) else {
+            return nil
+        }
+
+        if let title {
+            followUp.title = title
+        }
+        if let contextText {
+            followUp.contextText = contextText
+        }
+        if let draftText {
+            followUp.draftText = draftText
+        }
+
+        followUp.state = .completed
+        followUp.completedAt = completedAt
+        followUp.snoozedUntil = nil
+        try context.save()
+        return followUp.snapshot
+    }
+
+    func cancelPendingFollowUp(
+        actor: Actor,
+        id: String,
+        in context: ModelContext
+    ) throws -> PendingFollowUpSnapshot? {
+        try requireWrite(actor, permissions.followUps, store: "follow_ups.store")
+
+        guard let followUp = try fetchPendingFollowUp(id: id, in: context) else {
+            return nil
+        }
+
+        followUp.state = .cancelled
+        followUp.snoozedUntil = nil
+        try context.save()
+        return followUp.snapshot
+    }
+
     // MARK: - Deletion / Maintenance
 
     public func forgetEvent(
@@ -431,6 +596,9 @@ public final class MemoryService {
 
             let userNotes = try context.fetch(FetchDescriptor<UserNote>())
             for obj in userNotes { context.delete(obj) }
+
+            let pendingFollowUps = try context.fetch(FetchDescriptor<PendingFollowUp>())
+            for obj in pendingFollowUps { context.delete(obj) }
         }
 
         try context.save()

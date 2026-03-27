@@ -5,13 +5,19 @@ struct DataSourcesSheetView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @StateObject private var settingsStore: DataSettingsStore
+    private let memoryService: MemoryService
+    private let followUpCoordinator: FollowUpCoordinating
 
     init(
+        memoryService: MemoryService,
+        followUpCoordinator: FollowUpCoordinating,
         sourceConnectionStore: SourceConnectionStore,
         photosIndexService _: PhotosIndexService,
         filesImportService _: FilesImportService,
         locationSnapshotService _: LocationSnapshotService? = nil
     ) {
+        self.memoryService = memoryService
+        self.followUpCoordinator = followUpCoordinator
         _settingsStore = StateObject(
             wrappedValue: DataSettingsStore(sourceConnectionStore: sourceConnectionStore)
         )
@@ -22,7 +28,10 @@ struct DataSourcesSheetView: View {
             List {
                 Section {
                     NavigationLink {
-                        ShortTermMemoryView()
+                        ShortTermMemoryView(
+                            memoryService: memoryService,
+                            followUpCoordinator: followUpCoordinator
+                        )
                     } label: {
                         MemoryOverviewRow()
                     }

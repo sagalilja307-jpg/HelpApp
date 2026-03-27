@@ -1,13 +1,25 @@
 import SwiftUI
+import UIKit
 
 struct WorkingMemoryDayView: View {
     let date: Date
+    private let followUpCoordinator: FollowUpCoordinating
 
     @EnvironmentObject private var settings: MemorySourceSettings
     @EnvironmentObject private var coordinator: ShortTermMemoryCoordinator
 
     @State private var dayData: WorkingMemoryDayData?
     @State private var isLoading = false
+    @State private var followUpDraft: FollowUpPresentation?
+    @State private var sharePresentation: ShareTextPresentation?
+
+    init(
+        date: Date,
+        followUpCoordinator: FollowUpCoordinating
+    ) {
+        self.date = date
+        self.followUpCoordinator = followUpCoordinator
+    }
 
     var body: some View {
         ScrollView {
@@ -16,6 +28,17 @@ struct WorkingMemoryDayView: View {
                     .ios26Card()
 
                 if let dayData {
+                    if !dayData.followUps.isEmpty {
+                        section(title: "Uppföljningar", systemImage: "bell.badge") {
+                            VStack(spacing: 12) {
+                                ForEach(dayData.followUps) { followUp in
+                                    followUpRow(followUp)
+                                }
+                            }
+                        }
+                        .ios26Card()
+                    }
+
                     if settings.calendarEnabled {
                         section(title: "Kalender", systemImage: "calendar") {
                             if dayData.events.isEmpty {
@@ -111,6 +134,26 @@ struct WorkingMemoryDayView: View {
         .ios26Page()
         .navigationTitle("Arbetsminne")
         .navigationBarTitleDisplayMode(.large)
+        .sheet(item: $followUpDraft) { presentation in
+            FollowUpComposerSheet(
+                draft: presentation.draft,
+                onCopy: { draft in
+                    await copyFollowUpDraft(draft)
+                },
+                onShare: { draft in
+                    await shareFollowUpDraft(draft)
+                },
+                onMarkSent: { draft in
+                    await markFollowUpSent(draft)
+                },
+                onCancel: {
+                    followUpDraft = nil
+                }
+            )
+        }
+        .sheet(item: $sharePresentation) { presentation in
+            TextShareSheet(text: presentation.text)
+        }
         .refreshable {
             await reload()
         }
@@ -171,6 +214,94 @@ struct WorkingMemoryDayView: View {
             content()
         }
     }
+
+    @ViewBuilder
+    private func followUpRow(_ followUp: PendingFollowUpSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(followUp.dueAt.formatted(date: .omitted, time: .shortened))
+                    .font(.footnote.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(width: 62, alignment: .leading)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(followUp.title)
+                        .font(.body.weight(.medium))
+
+                    if !followUp.contextText.isEmpty {
+                        Text(followUp.contextText)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+
+                Spacer(minLength: 10)
+            }
+
+            HStack(spacing: 8) {
+                Button("Skicka nu") {
+                    followUpDraft = FollowUpPresentation(draft: .init(snapshot: followUp))
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+
+                Button("Inte nu") {
+                    Task {
+                        _ = try? await followUpCoordinator.snoozeFollowUp(id: followUp.id)
+                        await reload()
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+        .ios26Pill()
+    }
+
+    private func copyFollowUpDraft(_ draft: FollowUpComposerDraft) async {
+        let messageID = draft.sourceMessageID ?? draft.id ?? UUID().uuidString
+        guard let saved = try? await followUpCoordinator.saveFollowUpDraft(
+            draft,
+            defaultSourceMessageID: messageID,
+            logMessageID: draft.id ?? messageID,
+            reasons: ["trigger:working_memory", "action_kind:follow_up", "due_policy:24h_then_next_09"]
+        ) else {
+            return
+        }
+
+        UIPasteboard.general.string = saved.draftText
+        followUpDraft = nil
+        await reload()
+    }
+
+    private func shareFollowUpDraft(_ draft: FollowUpComposerDraft) async {
+        let messageID = draft.sourceMessageID ?? draft.id ?? UUID().uuidString
+        guard let saved = try? await followUpCoordinator.saveFollowUpDraft(
+            draft,
+            defaultSourceMessageID: messageID,
+            logMessageID: draft.id ?? messageID,
+            reasons: ["trigger:working_memory", "action_kind:follow_up", "due_policy:24h_then_next_09"]
+        ) else {
+            return
+        }
+
+        sharePresentation = ShareTextPresentation(text: saved.draftText)
+        followUpDraft = nil
+        await reload()
+    }
+
+    private func markFollowUpSent(_ draft: FollowUpComposerDraft) async {
+        let messageID = draft.sourceMessageID ?? draft.id ?? UUID().uuidString
+        _ = try? await followUpCoordinator.markFollowUpCompleted(
+            from: draft,
+            defaultSourceMessageID: messageID,
+            logMessageID: draft.id ?? messageID,
+            reasons: ["trigger:working_memory", "action_kind:follow_up", "due_policy:24h_then_next_09"]
+        )
+        followUpDraft = nil
+        await reload()
+    }
 }
 
 private struct DayRow: View {
@@ -201,6 +332,22 @@ private struct DayRow: View {
         }
         .ios26Pill()
     }
+}
+
+private struct FollowUpPresentation: Identifiable {
+    let id: String
+    let draft: FollowUpComposerDraft
+
+    init(draft: FollowUpComposerDraft) {
+        self.id = draft.id ?? draft.sourceMessageID ?? UUID().uuidString
+        self.draft = draft
+    }
+}
+
+private struct ShareTextPresentation: Identifiable {
+    let text: String
+
+    var id: String { text }
 }
 
 /// Duplicated here to keep the file self-contained.

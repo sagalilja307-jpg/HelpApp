@@ -15,6 +15,8 @@ struct HelperAppRuntime {
     let queryPipeline: QueryPipeline
     let chatSuggestionLogger: ChatSuggestionLogger
     let chatSuggestionActionCoordinator: ChatSuggestionActionCoordinator
+    let followUpNotificationCoordinator: FollowUpNotificationCoordinator
+    let followUpCoordinator: FollowUpCoordinator
     let supportSettingsService: SupportSettingsAPIService
     let shareImportService: ShareImportService
     let sourceConnectionStore: SourceConnectionStore
@@ -86,6 +88,12 @@ enum HelperAppBootstrap {
             memorySyncCoordinator: iCloudMemorySyncCoordinator,
             sourceConnectionStore: sourceConnectionStore
         )
+        let followUpNotificationCoordinator = FollowUpNotificationCoordinator()
+        let followUpCoordinator = FollowUpCoordinator(
+            memoryService: memoryService,
+            notificationScheduler: followUpNotificationCoordinator,
+            logger: chatSuggestionLogger
+        )
 
         let supportSettingsService = SupportSettingsAPIService.shared
         let shareImportService = ShareImportService(
@@ -100,6 +108,8 @@ enum HelperAppBootstrap {
             queryPipeline: queryPipeline,
             chatSuggestionLogger: chatSuggestionLogger,
             chatSuggestionActionCoordinator: chatSuggestionActionCoordinator,
+            followUpNotificationCoordinator: followUpNotificationCoordinator,
+            followUpCoordinator: followUpCoordinator,
             supportSettingsService: supportSettingsService,
             shareImportService: shareImportService,
             sourceConnectionStore: sourceConnectionStore,

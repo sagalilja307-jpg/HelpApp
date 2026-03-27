@@ -44,6 +44,29 @@ final class ChatSuggestionEngineTests: XCTestCase {
         XCTAssertEqual(suggestion.kind, .reminder)
     }
 
+    func testWaitingForResponseTextProducesFollowUpSuggestion() {
+        let engine = makeEngine()
+
+        let decision = engine.decide(for: "Jag mejlade Sara igår och väntar på svar, kan du påminna mig att följa upp?")
+
+        guard case .suggestion(let suggestion) = decision else {
+            return XCTFail("Expected suggestion")
+        }
+        guard case .followUp(let draft) = suggestion.draft else {
+            return XCTFail("Expected follow up draft")
+        }
+
+        XCTAssertEqual(suggestion.kind, .followUp)
+        XCTAssertEqual(draft.title, "Följ upp med Sara")
+        XCTAssertEqual(draft.eligibleAt.timeIntervalSince(draft.waitingSince), 24 * 60 * 60, accuracy: 1)
+        XCTAssertEqual(
+            draft.dueAt,
+            Date(timeIntervalSince1970: 1_742_547_600)
+        )
+        XCTAssertTrue(suggestion.auditReasons.contains("heuristic:waiting_for_response"))
+        XCTAssertTrue(suggestion.auditReasons.contains("due_policy:24h_then_next_09"))
+    }
+
     func testReferenceInfoProducesNoteSuggestion() {
         let engine = makeEngine()
 
@@ -62,6 +85,17 @@ final class ChatSuggestionEngineTests: XCTestCase {
 
         guard case .noAction(let reasons) = decision else {
             return XCTFail("Expected noAction")
+        }
+        XCTAssertTrue(reasons.contains("reason:data_query_like"))
+    }
+
+    func testDataQueryDoesNotProduceFollowUpSuggestion() {
+        let engine = makeEngine()
+
+        let decision = engine.decide(for: "När svarade Sara senast på mitt mejl?")
+
+        guard case .noAction(let reasons) = decision else {
+            return XCTFail("Expected no action")
         }
         XCTAssertTrue(reasons.contains("reason:data_query_like"))
     }

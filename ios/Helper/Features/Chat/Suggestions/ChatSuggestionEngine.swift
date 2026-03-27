@@ -11,6 +11,7 @@ struct ChatSuggestionEngine: ChatSuggestionEvaluating {
     private let policy: ChatSuggestionPolicy
     private let nowProvider: @Sendable () -> Date
     private let calendar: Calendar
+    private let followUpSchedulePolicy: FollowUpSchedulePolicy
 
     init(
         policy: ChatSuggestionPolicy = .cautiousChat,
@@ -20,6 +21,7 @@ struct ChatSuggestionEngine: ChatSuggestionEvaluating {
         self.policy = policy
         self.nowProvider = nowProvider
         self.calendar = calendar
+        self.followUpSchedulePolicy = FollowUpSchedulePolicy(calendar: calendar)
     }
 
     func decide(for text: String) -> ChatSuggestionDecision {
@@ -53,6 +55,17 @@ struct ChatSuggestionEngine: ChatSuggestionEvaluating {
                 )
             }
             return .suggestion(createCandidate)
+        }
+
+        if let followUpCandidate = followUpCandidate(from: trimmed) {
+            if followUpCandidate.confidence < policy.minimumConfidence {
+                return .suppressed(
+                    kind: followUpCandidate.kind,
+                    confidence: followUpCandidate.confidence,
+                    reasons: followUpCandidate.auditReasons + ["reason:below_confidence_threshold"]
+                )
+            }
+            return .suggestion(followUpCandidate)
         }
 
         if isDataQueryLike(trimmed) {
@@ -304,6 +317,81 @@ private extension ChatSuggestionEngine {
                 "heuristic:reference_info",
                 "keyword:\(matched.token)",
             ]
+        )
+    }
+
+    func followUpCandidate(from text: String) -> ChatSuggestionCard? {
+        let normalized = normalize(text)
+
+        let explicitSignals = [
+            "följ upp", "folj upp", "följa upp", "folja upp", "follow up",
+            "påminn mig att följa upp", "paminn mig att folja upp",
+            "kan du följa upp", "kan du folja upp"
+        ]
+        let outgoingSignals = [
+            "skrev till", "skrivit till", "mejlade", "mailade", "hörde av mig",
+            "horde av mig", "ringde", "pingade", "skickade till", "svarade"
+        ]
+        let waitingSignals = [
+            "väntar på svar", "vantar pa svar", "om hon inte svarar",
+            "om han inte svarar", "om de inte svarar", "om ingen svarar",
+            "om jag inte får svar", "om jag inte far svar", "om inget svar kommer"
+        ]
+
+        let matchedExplicitSignals = explicitSignals.filter { normalized.contains($0) }
+        let matchedOutgoingSignals = outgoingSignals.filter { normalized.contains($0) }
+        let matchedWaitingSignals = waitingSignals.filter { normalized.contains($0) }
+
+        let hasFollowUpIntent = !matchedExplicitSignals.isEmpty
+            || (!matchedOutgoingSignals.isEmpty && !matchedWaitingSignals.isEmpty)
+        guard hasFollowUpIntent else {
+            return nil
+        }
+
+        let confidence: Double
+        if !matchedExplicitSignals.isEmpty && (!matchedOutgoingSignals.isEmpty || !matchedWaitingSignals.isEmpty) {
+            confidence = 0.94
+        } else if !matchedExplicitSignals.isEmpty {
+            confidence = 0.87
+        } else {
+            confidence = 0.81
+        }
+
+        let recipient = extractFollowUpRecipient(from: text)
+        let waitingSince = nowProvider()
+        let eligibleAt = followUpSchedulePolicy.eligibleAt(waitingSince: waitingSince)
+        let dueAt = followUpSchedulePolicy.dueAt(waitingSince: waitingSince)
+        let title = followUpTitle(for: recipient)
+        let contextText = followUpContextText(for: recipient, originalText: text)
+        let draftText = followUpDraftText(for: recipient)
+
+        return ChatSuggestionCard(
+            kind: .followUp,
+            title: "Det här låter som något att följa upp",
+            explanation: "Vill du lägga upp en uppföljning och bli påmind i morgonbitti om det fortfarande väntar?",
+            draft: .followUp(
+                .init(
+                    title: title,
+                    draftText: draftText,
+                    contextText: contextText,
+                    waitingSince: waitingSince,
+                    eligibleAt: eligibleAt,
+                    dueAt: dueAt,
+                    clusterID: nil
+                )
+            ),
+            state: .visible,
+            confidence: confidence,
+            auditReasons: [
+                "trigger:user_text",
+                "action_kind:follow_up",
+                "heuristic:waiting_for_response",
+                "due_policy:24h_then_next_09",
+                "intent:follow_up_request"
+            ]
+            + matchedExplicitSignals.map { "keyword:\($0)" }
+            + matchedOutgoingSignals.map { "keyword:\($0)" }
+            + matchedWaitingSignals.map { "keyword:\($0)" }
         )
     }
 
@@ -672,5 +760,53 @@ private extension ChatSuggestionEngine {
             return nil
         }
         return Int(text[swiftRange])
+    }
+
+    func extractFollowUpRecipient(from text: String) -> String? {
+        let patterns = [
+            #"(?:följ upp med|folj upp med|mejlade|mailade|ringde|pingade)\s+([A-ZÅÄÖa-zåäö][A-Za-zÅÄÖåäö-]+)"#,
+            #"(?:skrev till|skrivit till|hörde av mig till|horde av mig till|skickade till)\s+([A-ZÅÄÖa-zåäö][A-Za-zÅÄÖåäö-]+)"#
+        ]
+
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+                continue
+            }
+            let range = NSRange(text.startIndex..., in: text)
+            guard
+                let match = regex.firstMatch(in: text, range: range),
+                let recipientRange = Range(match.range(at: 1), in: text)
+            else {
+                continue
+            }
+
+            let value = text[recipientRange].trimmingCharacters(in: .whitespacesAndNewlines)
+            if !value.isEmpty {
+                return suggestionTitle(from: value, fallback: value)
+            }
+        }
+
+        return nil
+    }
+
+    func followUpTitle(for recipient: String?) -> String {
+        guard let recipient, !recipient.isEmpty else {
+            return "Följ upp"
+        }
+        return "Följ upp med \(recipient)"
+    }
+
+    func followUpContextText(for recipient: String?, originalText: String) -> String {
+        guard let recipient, !recipient.isEmpty else {
+            return originalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return "Väntar på svar från \(recipient)."
+    }
+
+    func followUpDraftText(for recipient: String?) -> String {
+        guard let recipient, !recipient.isEmpty else {
+            return "Hej! Jag ville bara följa upp mitt tidigare meddelande."
+        }
+        return "Hej \(recipient)! Jag ville bara följa upp mitt tidigare meddelande. Återkom gärna när du har möjlighet."
     }
 }

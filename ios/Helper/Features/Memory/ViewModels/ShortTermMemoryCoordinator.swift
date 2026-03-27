@@ -11,6 +11,7 @@ struct MemoryOverview {
 enum MemoryTimelineKind {
     case calendar
     case reminder
+    case followUp
 }
 
 struct MemoryTimelineItem: Identifiable, Hashable {
@@ -32,6 +33,7 @@ struct MemoryDaySummary: Identifiable, Hashable {
 
 struct WorkingMemoryDayData {
     let date: Date
+    let followUps: [PendingFollowUpSnapshot]
     let events: [CalendarEventLite]
     let reminders: [ReminderItem]
     let messages: [GmailMessageSummary]
@@ -52,24 +54,37 @@ final class ShortTermMemoryCoordinator: ObservableObject {
     @Published private(set) var isLoading = false
 
     private let calendar = Calendar.current
+    private let memoryService: MemoryService
     private let gmailOAuthService = GmailOAuthService()
     private let healthSnapshotService = HealthMemorySnapshotService.shared
+    private let nowProvider: @Sendable () -> Date
     private var cachedEvents: [CalendarEventLite] = []
     private var cachedReminders: [ReminderItem] = []
     private var cachedMessages: [GmailMessageSummary] = []
     private var cachedHealthSnapshots: [Date: HealthMemoryDaySnapshot] = [:]
+    private var cachedFollowUps: [PendingFollowUpSnapshot] = []
     private var cacheDate: Date?
+
+    init(
+        memoryService: MemoryService,
+        nowProvider: @escaping @Sendable () -> Date = { Date() }
+    ) {
+        self.memoryService = memoryService
+        self.nowProvider = nowProvider
+    }
 
     func refresh(using settings: MemorySourceSettings) async {
         isLoading = true
         defer { isLoading = false }
 
-        guard settings.anyEnabled else {
+        let followUps = loadActiveFollowUps()
+
+        guard settings.anyEnabled || !followUps.isEmpty else {
             overview = MemoryOverview(
                 title: "Korttidsminne",
                 line1: "Inga källor valda.",
                 line2: "Välj källor för att få överblick i realtid.",
-                updatedAt: Date()
+                updatedAt: nowProvider()
             )
             nextSixHours = []
             daySummaries = []
@@ -78,13 +93,14 @@ final class ShortTermMemoryCoordinator: ObservableObject {
             cachedReminders = []
             cachedMessages = []
             cachedHealthSnapshots = [:]
-            cacheDate = Date()
+            cachedFollowUps = []
+            cacheDate = nowProvider()
             return
         }
 
         emptyStateText = nil
 
-        let now = Date()
+        let now = nowProvider()
         let startOfToday = calendar.startOfDay(for: now)
         let endOfWindow = calendar.date(byAdding: .day, value: 7, to: startOfToday) ?? now
 
@@ -110,21 +126,30 @@ final class ShortTermMemoryCoordinator: ObservableObject {
         cachedReminders = reminders
         cachedMessages = messages
         cachedHealthSnapshots = healthSnapshots
+        cachedFollowUps = followUps
         cacheDate = now
 
         overview = buildOverview(
             now: now,
             settings: settings,
+            followUps: followUps,
             events: events,
             reminders: reminders,
             messages: messages,
             todayHealthSnapshot: healthSnapshots[startOfToday]
         )
-        nextSixHours = buildNextSixHours(now: now, settings: settings, events: events, reminders: reminders)
+        nextSixHours = buildNextSixHours(
+            now: now,
+            settings: settings,
+            followUps: followUps,
+            events: events,
+            reminders: reminders
+        )
         daySummaries = buildDaySummaries(
             from: startOfToday,
             now: now,
             settings: settings,
+            followUps: followUps,
             events: events,
             reminders: reminders,
             messages: messages,
@@ -136,6 +161,9 @@ final class ShortTermMemoryCoordinator: ObservableObject {
         if cacheDate == nil {
             await refresh(using: settings)
         }
+
+        let now = nowProvider()
+        let dayFollowUps = followUpsForDay(date, now: now)
 
         let dayEvents = settings.calendarEnabled
             ? cachedEvents.filter { calendar.isDate($0.start, inSameDayAs: date) }
@@ -177,6 +205,7 @@ final class ShortTermMemoryCoordinator: ObservableObject {
 
         return WorkingMemoryDayData(
             date: date,
+            followUps: dayFollowUps,
             events: dayEvents,
             reminders: dayReminders,
             messages: dayMessages,
@@ -256,6 +285,7 @@ final class ShortTermMemoryCoordinator: ObservableObject {
     private func buildOverview(
         now: Date,
         settings: MemorySourceSettings,
+        followUps: [PendingFollowUpSnapshot],
         events: [CalendarEventLite],
         reminders: [ReminderItem],
         messages: [GmailMessageSummary],
@@ -267,8 +297,12 @@ final class ShortTermMemoryCoordinator: ObservableObject {
             return calendar.isDate(dueDate, inSameDayAs: now)
         }
         let unread = messages.filter { $0.isUnread }.count
+        let todayFollowUps = followUps.filter {
+            calendar.isDate($0.dueAt, inSameDayAs: now) || $0.dueAt < now
+        }
 
         let line1Parts: [String] = [
+            !todayFollowUps.isEmpty ? "\(todayFollowUps.count) uppföljningar" : nil,
             settings.calendarEnabled ? "\(todayEvents.count) händelser" : nil,
             settings.remindersEnabled ? "\(todayDueReminders.count) uppgifter idag" : nil,
             settings.mailEnabled ? "\(unread) olästa mail" : nil
@@ -296,6 +330,7 @@ final class ShortTermMemoryCoordinator: ObservableObject {
     private func buildNextSixHours(
         now: Date,
         settings: MemorySourceSettings,
+        followUps: [PendingFollowUpSnapshot],
         events: [CalendarEventLite],
         reminders: [ReminderItem]
     ) -> [MemoryTimelineItem] {
@@ -333,6 +368,16 @@ final class ShortTermMemoryCoordinator: ObservableObject {
             })
         }
 
+        let windowFollowUps = followUps.filter { $0.dueAt >= now && $0.dueAt <= end }
+        items.append(contentsOf: windowFollowUps.prefix(8).map { followUp in
+            MemoryTimelineItem(
+                time: followUp.dueAt,
+                timeText: followUp.dueAt.formatted(date: .omitted, time: .shortened),
+                title: followUp.title,
+                kind: .followUp
+            )
+        })
+
         return Array(items.sorted { $0.time < $1.time }.prefix(12))
     }
 
@@ -340,6 +385,7 @@ final class ShortTermMemoryCoordinator: ObservableObject {
         from startOfToday: Date,
         now: Date,
         settings: MemorySourceSettings,
+        followUps: [PendingFollowUpSnapshot],
         events: [CalendarEventLite],
         reminders: [ReminderItem],
         messages: [GmailMessageSummary],
@@ -353,6 +399,7 @@ final class ShortTermMemoryCoordinator: ObservableObject {
                 date: day,
                 now: now,
                 settings: settings,
+                followUps: followUps,
                 events: events,
                 reminders: reminders,
                 messages: messages,
@@ -365,11 +412,13 @@ final class ShortTermMemoryCoordinator: ObservableObject {
         date: Date,
         now: Date,
         settings: MemorySourceSettings,
+        followUps: [PendingFollowUpSnapshot],
         events: [CalendarEventLite],
         reminders: [ReminderItem],
         messages: [GmailMessageSummary],
         healthSnapshot: HealthMemoryDaySnapshot?
     ) -> MemoryDaySummary {
+        let dayFollowUps = followUpsForDay(date, now: now, source: followUps)
         let dayEvents = settings.calendarEnabled
             ? events.filter { calendar.isDate($0.start, inSameDayAs: date) }
             : []
@@ -385,7 +434,13 @@ final class ShortTermMemoryCoordinator: ObservableObject {
             ? messages.filter { $0.isUnread && calendar.isDate($0.internalDate, inSameDayAs: date) }.count
             : 0
 
-        let nextText = nextTextForDay(date: date, now: now, events: dayEvents, reminders: dayReminders)
+        let nextText = nextTextForDay(
+            date: date,
+            now: now,
+            followUps: dayFollowUps,
+            events: dayEvents,
+            reminders: dayReminders
+        )
 
         let healthChip: String? = {
             guard settings.healthEnabled else { return nil }
@@ -399,6 +454,7 @@ final class ShortTermMemoryCoordinator: ObservableObject {
         }()
 
         let chips = [
+            !dayFollowUps.isEmpty ? "Uppföljningar \(dayFollowUps.count)" : nil,
             settings.calendarEnabled ? "Aktiviteter \(dayEvents.count)" : nil,
             settings.remindersEnabled ? "Uppgifter \(dayReminders.count)" : nil,
             settings.mailEnabled ? "Mail \(dayUnreadCount)" : nil,
@@ -424,16 +480,21 @@ final class ShortTermMemoryCoordinator: ObservableObject {
             nextText: nextText,
             chips: chips.isEmpty ? ["—"] : chips,
             bodyLine: healthLine,
-            updatedText: "Uppdaterad \(Date().formatted(date: .omitted, time: .shortened))"
+            updatedText: "Uppdaterad \(nowProvider().formatted(date: .omitted, time: .shortened))"
         )
     }
 
     private func nextTextForDay(
         date: Date,
         now: Date,
+        followUps: [PendingFollowUpSnapshot],
         events: [CalendarEventLite],
         reminders: [ReminderItem]
     ) -> String {
+        if let nextFollowUp = followUps.first {
+            return "\(nextFollowUp.dueAt.formatted(date: .omitted, time: .shortened)) \(nextFollowUp.title)"
+        }
+
         if calendar.isDate(date, inSameDayAs: now) {
             if let nextEvent = events.first(where: { $0.start >= now }) {
                 return "\(nextEvent.start.formatted(date: .omitted, time: .shortened)) \(nextEvent.title)"
@@ -465,5 +526,39 @@ final class ShortTermMemoryCoordinator: ObservableObject {
         }
 
         return "—"
+    }
+
+    private func loadActiveFollowUps() -> [PendingFollowUpSnapshot] {
+        let context = memoryService.context()
+        return (try? memoryService.listPendingFollowUps(in: context))?
+            .filter(\.isActive)
+            .sorted { lhs, rhs in
+                if lhs.dueAt == rhs.dueAt {
+                    return lhs.createdAt < rhs.createdAt
+                }
+                return lhs.dueAt < rhs.dueAt
+            } ?? []
+    }
+
+    private func followUpsForDay(
+        _ date: Date,
+        now: Date,
+        source: [PendingFollowUpSnapshot]? = nil
+    ) -> [PendingFollowUpSnapshot] {
+        let values = source ?? cachedFollowUps
+        let isToday = calendar.isDate(date, inSameDayAs: now)
+
+        return values.filter { followUp in
+            if isToday {
+                return calendar.isDate(followUp.dueAt, inSameDayAs: date) || followUp.dueAt < now
+            }
+            return calendar.isDate(followUp.dueAt, inSameDayAs: date)
+        }
+        .sorted { lhs, rhs in
+            if lhs.dueAt == rhs.dueAt {
+                return lhs.createdAt < rhs.createdAt
+            }
+            return lhs.dueAt < rhs.dueAt
+        }
     }
 }
