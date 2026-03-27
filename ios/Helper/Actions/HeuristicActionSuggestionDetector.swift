@@ -99,6 +99,7 @@ private extension HeuristicActionSuggestionDetector {
         let creationSignals = [
             "lägg in", "lagg in", "lägga in", "lagga in",
             "lägg till", "lagg till", "lägga till", "lagga till",
+            "skriv in", "skriva in",
             "boka in", "skapa event", "skapa ett event",
             "sätt in", "satt in", "sätta in", "satta in"
         ]
@@ -108,6 +109,8 @@ private extension HeuristicActionSuggestionDetector {
             || normalized.hasPrefix("boka ")
             || normalized.contains("boka möte")
             || normalized.contains("boka mote")
+        let hasWriteInVerb = normalized.contains("skriv in")
+            || normalized.contains("skriva in")
         let hasPlanningStatement = normalized.hasPrefix("jag ska ")
             || normalized.contains(" jag ska ")
             || normalized.hasPrefix("jag behöver ")
@@ -119,11 +122,11 @@ private extension HeuristicActionSuggestionDetector {
             || normalized.hasPrefix("jag maste ")
             || normalized.contains(" jag maste ")
 
-        guard !matchedSignals.isEmpty || hasBookingVerb else {
+        guard !matchedSignals.isEmpty || hasBookingVerb || hasWriteInVerb else {
             return nil
         }
 
-        guard hasCalendarTarget || hasPlanningStatement || hasBookingVerb else {
+        guard hasCalendarTarget || hasPlanningStatement || hasBookingVerb || hasWriteInVerb else {
             return nil
         }
 
@@ -257,6 +260,8 @@ private extension HeuristicActionSuggestionDetector {
 
     func reminderCandidate(from text: String) -> ProposedAction? {
         let normalized = normalize(text)
+        let reminderListName = extractReminderListName(from: text)
+        let sanitizedReminderText = stripReminderListReference(from: text)
 
         let strongSignals = [
             "kom ihåg", "kom ihag", "glöm inte", "glom inte", "påminn mig", "paminn mig",
@@ -283,8 +288,8 @@ private extension HeuristicActionSuggestionDetector {
         }
 
         let dueDate = resolveDateHint(in: text, requireDate: false)
-        let title = reminderDraftTitle(from: text)
-        let location = extractLocationHint(from: text)
+        let title = reminderDraftTitle(from: sanitizedReminderText)
+        let location = extractLocationHint(from: sanitizedReminderText)
         let priority = extractReminderPriority(from: normalized)
         let confidence: Double
         if matchedStrongSignals.isEmpty == false {
@@ -323,6 +328,9 @@ private extension HeuristicActionSuggestionDetector {
         if priority != nil {
             auditReasons.append("heuristic:priority_signal")
         }
+        if reminderListName != nil {
+            auditReasons.append("heuristic:reminder_list")
+        }
 
         return ProposedAction(
             kind: .reminder,
@@ -334,7 +342,8 @@ private extension HeuristicActionSuggestionDetector {
                     dueDate: dueDate?.startDate,
                     notes: text,
                     location: location,
-                    priority: priority
+                    priority: priority,
+                    listName: reminderListName
                 )
             ),
             confirmationState: .awaitingApproval,
@@ -519,7 +528,7 @@ private extension HeuristicActionSuggestionDetector {
         var result = text
         let patterns = [
             #"\b(?:kan du|kan vi|skulle du kunna|vill du|hjälp mig att|hjalp mig att|ska vi)\b"#,
-            #"\b(?:lägg in|lagg in|lägga in|lagga in|lägg till|lagg till|lägga till|lagga till|boka in|boka|skapa(?: ett)? event|sätta in|satta in|sätt in|satt in)\b"#,
+            #"\b(?:lägg in|lagg in|lägga in|lagga in|lägg till|lagg till|lägga till|lagga till|skriv in|skriva in|boka in|boka|skapa(?: ett)? event|sätta in|satta in|sätt in|satt in)\b"#,
             #"\bi kalendern\b"#,
             #"\b(?:jag ska|jag behöver|jag behover|jag måste|jag maste)\b"#,
             #"\b(?:tack|snälla|snalla)\b"#,
@@ -581,7 +590,9 @@ private extension HeuristicActionSuggestionDetector {
             with: "",
             options: [.regularExpression, .caseInsensitive]
         )
+        result = stripReminderListReference(from: result)
         result = stripTemporalTokens(from: result)
+        result = result.trimmingCharacters(in: CharacterSet(charactersIn: " ,.-?!"))
         return result
     }
 
@@ -596,6 +607,9 @@ private extension HeuristicActionSuggestionDetector {
     }
 
     func reminderDraftTitle(from text: String) -> String {
+        if let listEntryTitle = reminderListEntryTitle(from: text) {
+            return listEntryTitle
+        }
         if let structuredTitle = structuredTaskTitle(from: text) {
             return structuredTitle
         }
@@ -644,7 +658,8 @@ private extension HeuristicActionSuggestionDetector {
         [
             "ringa", "ring", "betala", "hämta", "hamta", "köp", "kop", "skicka",
             "maila", "mejla", "svara", "boka", "fixa", "ändra", "andra", "fråga",
-            "fraga", "dubbelkolla", "uppdatera"
+            "fraga", "dubbelkolla", "uppdatera", "lägg till", "lagg till",
+            "lägga till", "lagga till", "lägg in", "lagg in"
         ]
     }
 
@@ -662,6 +677,85 @@ private extension HeuristicActionSuggestionDetector {
             "lägg in i anteckning", "lagg in i anteckning",
             "skapa ny anteckning"
         ]
+    }
+
+    func extractReminderListName(from text: String) -> String? {
+        let patterns = [
+            #"\bi\s+(?:påminnelse\s*listan|paminnelse\s*listan|påminnelselistan|paminnelselistan|listan)\s+([A-Za-zÅÄÖåäö0-9][A-Za-zÅÄÖåäö0-9\s-]{0,40})"#,
+            #"\b(?:påminnelse\s*listan|paminnelse\s*listan|påminnelselistan|paminnelselistan|listan)\s+([A-Za-zÅÄÖåäö0-9][A-Za-zÅÄÖåäö0-9\s-]{0,40})"#
+        ]
+
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+                continue
+            }
+            let nsRange = NSRange(text.startIndex..., in: text)
+            guard let match = regex.firstMatch(in: text, range: nsRange),
+                  let range = Range(match.range(at: 1), in: text) else {
+                continue
+            }
+
+            let value = text[range]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: ".,!?\"'"))
+            if !value.isEmpty {
+                return suggestionTitle(from: value, fallback: value)
+            }
+        }
+
+        return nil
+    }
+
+    func stripReminderListReference(from text: String) -> String {
+        let patterns = [
+            #"\bi\s+(?:påminnelse\s*listan|paminnelse\s*listan|påminnelselistan|paminnelselistan|listan)\s+[A-Za-zÅÄÖåäö0-9][A-Za-zÅÄÖåäö0-9\s-]{0,40}"#,
+            #"\b(?:påminnelse\s*listan|paminnelse\s*listan|påminnelselistan|paminnelselistan|listan)\s+[A-Za-zÅÄÖåäö0-9][A-Za-zÅÄÖåäö0-9\s-]{0,40}"#
+        ]
+
+        var result = text
+        for pattern in patterns {
+            result = result.replacingOccurrences(
+                of: pattern,
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
+        }
+
+        result = result.replacingOccurrences(of: "  ", with: " ")
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func reminderListEntryTitle(from text: String) -> String? {
+        let withoutRequestLead = text.replacingOccurrences(
+            of: #"^\s*(?:kan du|kan ni|skulle du kunna|snälla|snalla)\s+"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+
+        let patterns = [
+            #"(?:lägg till|lagg till|lägga till|lagga till)\s+(.+)$"#,
+            #"(?:lägg in|lagg in|lägga in|lagga in)\s+(.+)$"#
+        ]
+
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+                continue
+            }
+            let nsRange = NSRange(withoutRequestLead.startIndex..., in: withoutRequestLead)
+            guard let match = regex.firstMatch(in: withoutRequestLead, range: nsRange),
+                  let range = Range(match.range(at: 1), in: withoutRequestLead) else {
+                continue
+            }
+
+            let value = withoutRequestLead[range]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: ".,!?\"'"))
+            if !value.isEmpty {
+                return suggestionTitle(from: value, fallback: value)
+            }
+        }
+
+        return nil
     }
 
     func normalizedCalendarTitle(from text: String) -> String {

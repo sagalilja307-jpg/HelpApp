@@ -4,11 +4,14 @@ import SwiftData
 
 enum ReminderSyncManagerError: LocalizedError {
     case reminderListUnavailable
+    case requestedReminderListUnavailable(String)
 
     var errorDescription: String? {
         switch self {
         case .reminderListUnavailable:
             return "Det finns ingen påminnelselista att spara i."
+        case .requestedReminderListUnavailable(let listName):
+            return "Jag hittade ingen skrivbar påminnelselista som heter \"\(listName)\"."
         }
     }
 }
@@ -85,10 +88,7 @@ final class ReminderSyncManager {
         DataSourceDebug.start(op)
         do {
             let reminder = EKReminder(eventStore: eventStore)
-            guard let reminderCalendar = eventStore.defaultCalendarForNewReminders()
-                ?? eventStore.calendars(for: .reminder).first(where: \.allowsContentModifications) else {
-                throw ReminderSyncManagerError.reminderListUnavailable
-            }
+            let reminderCalendar = try resolvedReminderCalendar(for: item.listName)
             reminder.title = item.title
             reminder.calendar = reminderCalendar
             reminder.notes = item.notes
@@ -135,5 +135,73 @@ final class ReminderSyncManager {
         cachedActiveReminders = reminders
         lastCacheAt = DateService.shared.now()
         cacheLock.unlock()
+    }
+
+    private func resolvedReminderCalendar(for requestedListName: String?) throws -> EKCalendar {
+        let writableCalendars = eventStore.calendars(for: .reminder)
+            .filter(\.allowsContentModifications)
+
+        if let requestedListName,
+           let matchedTitle = Self.bestMatchingReminderListName(
+               for: requestedListName,
+               availableListNames: writableCalendars.map(\.title)
+           ),
+           let matchedCalendar = writableCalendars.first(where: { $0.title == matchedTitle }) {
+            return matchedCalendar
+        }
+
+        if let requestedListName, !requestedListName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw ReminderSyncManagerError.requestedReminderListUnavailable(requestedListName)
+        }
+
+        if let defaultCalendar = eventStore.defaultCalendarForNewReminders(),
+           defaultCalendar.allowsContentModifications {
+            return defaultCalendar
+        }
+
+        guard let fallbackCalendar = writableCalendars.first else {
+            throw ReminderSyncManagerError.reminderListUnavailable
+        }
+        return fallbackCalendar
+    }
+
+    static func bestMatchingReminderListName(
+        for requestedListName: String,
+        availableListNames: [String]
+    ) -> String? {
+        let normalizedRequested = normalizedReminderListName(requestedListName)
+        guard !normalizedRequested.isEmpty else {
+            return nil
+        }
+
+        if let exactMatch = availableListNames.first(where: {
+            normalizedReminderListName($0) == normalizedRequested
+        }) {
+            return exactMatch
+        }
+
+        if let containsMatch = availableListNames.first(where: {
+            let normalizedCandidate = normalizedReminderListName($0)
+            return normalizedCandidate.contains(normalizedRequested)
+                || normalizedRequested.contains(normalizedCandidate)
+        }) {
+            return containsMatch
+        }
+
+        return nil
+    }
+
+    private static func normalizedReminderListName(_ value: String) -> String {
+        let folded = value
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+        let sanitized = folded.replacingOccurrences(
+            of: #"[^a-z0-9]+"#,
+            with: " ",
+            options: .regularExpression
+        )
+        return sanitized
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

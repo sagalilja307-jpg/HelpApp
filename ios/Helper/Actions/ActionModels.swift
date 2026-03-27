@@ -86,6 +86,23 @@ enum ActionDraft: Sendable, Equatable {
         let notes: String
         let location: String?
         let priority: ActionReminderPriority?
+        let listName: String?
+
+        init(
+            title: String,
+            dueDate: Date?,
+            notes: String,
+            location: String?,
+            priority: ActionReminderPriority?,
+            listName: String? = nil
+        ) {
+            self.title = title
+            self.dueDate = dueDate
+            self.notes = notes
+            self.location = location
+            self.priority = priority
+            self.listName = listName
+        }
     }
 
     struct NoteDraft: Sendable, Equatable {
@@ -256,7 +273,8 @@ extension ActionDraft.ReminderDraft {
             dueDate: draft.dueDate,
             notes: draft.notes,
             location: draft.location,
-            priority: draft.priority.map(ActionReminderPriority.init)
+            priority: draft.priority.map(ActionReminderPriority.init),
+            listName: draft.listName
         )
     }
 }
@@ -318,7 +336,8 @@ extension ChatSuggestionDraft.ReminderDraft {
             dueDate: draft.dueDate,
             notes: draft.notes,
             location: draft.location,
-            priority: draft.priority.map(ChatSuggestionReminderPriority.init)
+            priority: draft.priority.map(ChatSuggestionReminderPriority.init),
+            listName: draft.listName
         )
     }
 }

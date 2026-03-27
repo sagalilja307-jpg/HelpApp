@@ -10,6 +10,7 @@ struct ReminderItem: Identifiable, Equatable {
     let notes: String?
     let location: String?
     let priority: Int?
+    let listName: String?
 
     init(from ekReminder: EKReminder) {
         self.id = ekReminder.calendarItemIdentifier
@@ -19,6 +20,7 @@ struct ReminderItem: Identifiable, Equatable {
         self.notes = ekReminder.notes
         self.location = ekReminder.location
         self.priority = ekReminder.priority
+        self.listName = ekReminder.calendar.title
     }
 
     init(
@@ -26,7 +28,8 @@ struct ReminderItem: Identifiable, Equatable {
         dueDate: Date?,
         notes: String? = nil,
         location: String? = nil,
-        priority: Int? = nil
+        priority: Int? = nil,
+        listName: String? = nil
     ) {
         self.id = UUID().uuidString
         self.title = title
@@ -35,5 +38,6 @@ struct ReminderItem: Identifiable, Equatable {
         self.notes = notes
         self.location = location
         self.priority = priority
+        self.listName = listName
     }
 }

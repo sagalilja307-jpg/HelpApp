@@ -87,6 +87,40 @@ final class ChatSuggestionFlowTests: XCTestCase {
         XCTAssertEqual(vm.messages.last?.suggestion?.kind, .calendar)
     }
 
+    func testRealEngineWriteInCalendarQuerySkipsQueryPipeline() async {
+        let logger = RecordingSuggestionLogger()
+        let backend = CountingSuggestionBackend(
+            response: BackendQueryResponseDTO(
+                intentPlan: Self.plan,
+                answer: "Jag är inte helt säker ännu. Menar du kalender eller mejl?",
+                hasDataIntent: true
+            )
+        )
+        let pipeline = QueryPipeline(
+            backendQueryService: backend,
+            localCollector: EmptySuggestionCollector(),
+            accessGate: AllowingSuggestionAccess()
+        )
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let vm = ChatViewModel(
+            pipeline: pipeline,
+            suggestionEngine: ChatSuggestionEngine(
+                nowProvider: { Self.fixedNow },
+                calendar: calendar
+            ),
+            suggestionLogger: logger
+        )
+
+        vm.query = "Kan du skriva in tvätta imorgon kl 10-13 i kalendern?"
+        await vm.send()
+
+        XCTAssertEqual(backend.callCount, 0)
+        XCTAssertEqual(vm.messages.last?.text, "Jag kan lägga in det här i kalendern. Vill du öppna utkastet?")
+        XCTAssertEqual(vm.messages.last?.suggestion?.kind, .calendar)
+        XCTAssertEqual(vm.messages.last?.suggestion?.title, "Tvätta")
+    }
+
     func testImmediateFollowUpSuggestionSkipsQueryPipeline() async {
         let logger = RecordingSuggestionLogger()
         let backend = CountingSuggestionBackend(
@@ -251,13 +285,16 @@ final class ChatSuggestionFlowTests: XCTestCase {
                 dueDate: Date(timeIntervalSince1970: 1_742_515_200),
                 notes: "",
                 location: nil,
-                priority: .medium
+                priority: .medium,
+                listName: nil
             )
         ),
         state: .visible,
         confidence: 0.9,
         auditReasons: ["trigger:user_text", "action_kind:reminder"]
     )
+
+    private static let fixedNow = Date(timeIntervalSince1970: 1_742_428_800)
 
     private static let noteSuggestion = ChatSuggestionCard(
         kind: .note,

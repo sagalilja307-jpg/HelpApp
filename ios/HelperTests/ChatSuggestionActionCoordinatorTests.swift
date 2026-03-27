@@ -34,13 +34,15 @@ final class ChatSuggestionActionCoordinatorTests: XCTestCase {
                 dueDate: Date(timeIntervalSince1970: 1_742_515_200),
                 notes: "  Viktigt  ",
                 location: "  Slussen  ",
-                priority: .high
+                priority: .high,
+                listName: "  Handla  "
             )
         )
 
         XCTAssertEqual(reminderService.createdItems.count, 1)
         XCTAssertEqual(reminderService.createdItems.first?.title, "Ring tandlakaren")
         XCTAssertEqual(reminderService.createdItems.first?.notes, "Viktigt")
+        XCTAssertEqual(reminderService.createdItems.first?.listName, "Handla")
         XCTAssertEqual(reminderService.createdItems.first?.location, "Slussen")
         XCTAssertEqual(reminderService.createdItems.first?.priority, 1)
         XCTAssertTrue(sourceStore.isEnabled(.reminders))
@@ -112,7 +114,8 @@ final class ChatSuggestionActionCoordinatorTests: XCTestCase {
                     dueDate: nil,
                     notes: "",
                     location: nil,
-                    priority: nil
+                    priority: nil,
+                    listName: nil
                 )
             )
             XCTFail("Expected empty title to fail")

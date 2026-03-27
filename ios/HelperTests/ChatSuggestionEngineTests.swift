@@ -35,6 +35,24 @@ final class ChatSuggestionEngineTests: XCTestCase {
         XCTAssertFalse(draft.isAllDay)
     }
 
+    func testWriteInCalendarQueryProducesCalendarSuggestion() throws {
+        let engine = makeEngine()
+
+        let decision = engine.decide(for: "Kan du skriva in tvätta imorgon kl 10-13?")
+
+        guard case .suggestion(let suggestion) = decision else {
+            return XCTFail("Expected suggestion")
+        }
+        guard case .calendar(let draft) = suggestion.draft else {
+            return XCTFail("Expected calendar draft")
+        }
+
+        XCTAssertEqual(suggestion.kind, .calendar)
+        XCTAssertEqual(suggestion.title, "Tvätta")
+        XCTAssertTrue(suggestion.auditReasons.contains("intent:create_request"))
+        XCTAssertEqual(draft.title, "Tvätta")
+    }
+
     func testReminderTextProducesReminderSuggestion() {
         let engine = makeEngine()
 
@@ -80,6 +98,24 @@ final class ChatSuggestionEngineTests: XCTestCase {
 
         XCTAssertEqual(suggestion.kind, .reminder)
         XCTAssertEqual(suggestion.title, "Svara jobb")
+    }
+
+    func testReminderListRequestUsesShortTitleAndListName() {
+        let engine = makeEngine()
+
+        let decision = engine.decide(for: "Kan du lägga till tigersåg i påminnelse listan handla?")
+
+        guard case .suggestion(let suggestion) = decision else {
+            return XCTFail("Expected suggestion")
+        }
+        guard case .reminder(let draft) = suggestion.draft else {
+            return XCTFail("Expected reminder draft")
+        }
+
+        XCTAssertEqual(suggestion.kind, .reminder)
+        XCTAssertEqual(suggestion.title, "Tigersåg")
+        XCTAssertEqual(draft.title, "Tigersåg")
+        XCTAssertEqual(draft.listName, "Handla")
     }
 
     func testAvailabilitySmsProducesCalendarSuggestion() {

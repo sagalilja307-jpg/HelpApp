@@ -86,6 +86,23 @@ enum ChatSuggestionDraft: Sendable, Equatable {
         let notes: String
         let location: String?
         let priority: ChatSuggestionReminderPriority?
+        let listName: String?
+
+        init(
+            title: String,
+            dueDate: Date?,
+            notes: String,
+            location: String?,
+            priority: ChatSuggestionReminderPriority?,
+            listName: String? = nil
+        ) {
+            self.title = title
+            self.dueDate = dueDate
+            self.notes = notes
+            self.location = location
+            self.priority = priority
+            self.listName = listName
+        }
     }
 
     struct NoteDraft: Sendable, Equatable {

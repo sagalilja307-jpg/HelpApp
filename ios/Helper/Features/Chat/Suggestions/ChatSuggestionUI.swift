@@ -99,6 +99,7 @@ struct ChatReminderDraftSheet: View {
     @State private var dueDateEnabled: Bool
     @State private var dueDate: Date
     @State private var notes: String
+    @State private var listName: String
     @State private var location: String
     @State private var priority: ChatSuggestionReminderPriority?
     @State private var isSaving = false
@@ -115,6 +116,7 @@ struct ChatReminderDraftSheet: View {
         _dueDateEnabled = State(initialValue: draft.dueDate != nil)
         _dueDate = State(initialValue: draft.dueDate ?? DateService.shared.now())
         _notes = State(initialValue: draft.notes)
+        _listName = State(initialValue: draft.listName ?? "")
         _location = State(initialValue: draft.location ?? "")
         _priority = State(initialValue: draft.priority)
     }
@@ -134,6 +136,7 @@ struct ChatReminderDraftSheet: View {
                 }
 
                 Section("Detaljer") {
+                    TextField("Lista", text: $listName)
                     TextField("Plats", text: $location)
                     Picker("Prioritet", selection: $priority) {
                         Text("Ingen").tag(ChatSuggestionReminderPriority?.none)
@@ -161,7 +164,8 @@ struct ChatReminderDraftSheet: View {
                             dueDate: dueDateEnabled ? dueDate : nil,
                             notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
                             location: location.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
-                            priority: priority
+                            priority: priority,
+                            listName: listName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
                         )
                         isSaving = true
                         Task { @MainActor in

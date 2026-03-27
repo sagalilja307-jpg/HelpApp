@@ -66,6 +66,42 @@ final class ActionSuggestionDetectorTests: XCTestCase {
         XCTAssertNotNil(draft.dueDate)
     }
 
+    func testWriteInCalendarQueryProducesCalendarAction() {
+        let detector = makeDetector()
+
+        let decision = detector.decide(for: "Kan du skriva in tvätta imorgon kl 10-13?")
+
+        guard case .proposed(let action) = decision else {
+            return XCTFail("Expected proposed action")
+        }
+        guard case .calendar(let draft) = action.draft else {
+            return XCTFail("Expected calendar draft")
+        }
+
+        XCTAssertEqual(action.kind, .calendar)
+        XCTAssertEqual(action.title, "Tvätta")
+        XCTAssertEqual(draft.title, "Tvätta")
+        XCTAssertTrue(action.auditReasons.contains("intent:create_request"))
+    }
+
+    func testReminderListRequestUsesShortTitleAndListName() {
+        let detector = makeDetector()
+
+        let decision = detector.decide(for: "Kan du lägga till tigersåg i påminnelse listan handla?")
+
+        guard case .proposed(let action) = decision else {
+            return XCTFail("Expected proposed action")
+        }
+        guard case .reminder(let draft) = action.draft else {
+            return XCTFail("Expected reminder draft")
+        }
+
+        XCTAssertEqual(action.kind, .reminder)
+        XCTAssertEqual(action.title, "Tigersåg")
+        XCTAssertEqual(draft.title, "Tigersåg")
+        XCTAssertEqual(draft.listName, "Handla")
+    }
+
     func testStructuredNoteProducesSpecificTitleAndBody() {
         let detector = makeDetector()
 

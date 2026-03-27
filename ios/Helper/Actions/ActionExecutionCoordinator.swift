@@ -123,7 +123,8 @@ struct ReminderActionExecutor {
             dueDate: draft.dueDate,
             notes: trimmedOrNil(draft.notes),
             location: trimmedOrNil(draft.location),
-            priority: draft.priority?.eventKitValue
+            priority: draft.priority?.eventKitValue,
+            listName: trimmedOrNil(draft.listName)
         )
 
         try reminderService.createReminder(from: reminder)
