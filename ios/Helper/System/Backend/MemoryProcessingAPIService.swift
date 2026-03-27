@@ -41,8 +41,17 @@ struct ProcessMemoryRequestDTO: Codable, Sendable {
     let language: String
 }
 
+struct ProcessMemorySignalDTO: Codable, Sendable, Equatable {
+    let label: String
+    let confidence: Double
+}
+
 struct ProcessMemoryResponseDTO: Codable, Sendable, Equatable {
     let cleanText: String
+    let cognitiveSignals: [ProcessMemorySignalDTO]
+    let domainSignals: [ProcessMemorySignalDTO]
+    let actionSignals: [ProcessMemorySignalDTO]
+    let timeSignals: [ProcessMemorySignalDTO]
     let cognitiveType: String
     let domain: String
     let actionState: String
@@ -52,6 +61,10 @@ struct ProcessMemoryResponseDTO: Codable, Sendable, Equatable {
 
     init(
         cleanText: String,
+        cognitiveSignals: [ProcessMemorySignalDTO] = [],
+        domainSignals: [ProcessMemorySignalDTO] = [],
+        actionSignals: [ProcessMemorySignalDTO] = [],
+        timeSignals: [ProcessMemorySignalDTO] = [],
         cognitiveType: String,
         domain: String = "other",
         actionState: String = "info",
@@ -60,6 +73,10 @@ struct ProcessMemoryResponseDTO: Codable, Sendable, Equatable {
         embedding: [Float]
     ) {
         self.cleanText = cleanText
+        self.cognitiveSignals = cognitiveSignals
+        self.domainSignals = domainSignals
+        self.actionSignals = actionSignals
+        self.timeSignals = timeSignals
         self.cognitiveType = cognitiveType
         self.domain = domain
         self.actionState = actionState
@@ -87,6 +104,10 @@ struct ProcessMemoryResponseDTO: Codable, Sendable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case cleanText
+        case cognitiveSignals
+        case domainSignals
+        case actionSignals
+        case timeSignals
         case cognitiveType
         case suggestedType
         case domain
@@ -99,17 +120,63 @@ struct ProcessMemoryResponseDTO: Codable, Sendable, Equatable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let cleanText = try container.decode(String.self, forKey: .cleanText)
+        let cognitiveSignals = try container.decodeIfPresent([ProcessMemorySignalDTO].self, forKey: .cognitiveSignals) ?? []
+        let domainSignals = try container.decodeIfPresent([ProcessMemorySignalDTO].self, forKey: .domainSignals) ?? []
+        let actionSignals = try container.decodeIfPresent([ProcessMemorySignalDTO].self, forKey: .actionSignals) ?? []
+        let timeSignals = try container.decodeIfPresent([ProcessMemorySignalDTO].self, forKey: .timeSignals) ?? []
         let decodedCognitiveType = try container.decodeIfPresent(String.self, forKey: .cognitiveType)
         let legacySuggestedType = try container.decodeIfPresent(String.self, forKey: .suggestedType)
-        let cognitiveType = decodedCognitiveType ?? legacySuggestedType ?? "other"
-        let domain = try container.decodeIfPresent(String.self, forKey: .domain) ?? "other"
-        let actionState = try container.decodeIfPresent(String.self, forKey: .actionState) ?? "info"
-        let timeRelation = try container.decodeIfPresent(String.self, forKey: .timeRelation) ?? "none"
+        let cognitiveType = decodedCognitiveType
+            ?? legacySuggestedType
+            ?? Self.primaryLabel(
+                from: cognitiveSignals,
+                priority: Self.cognitiveSignalPriority,
+                defaultLabel: "other"
+            )
+        let domain = try container.decodeIfPresent(String.self, forKey: .domain)
+            ?? Self.primaryLabel(
+                from: domainSignals,
+                priority: Self.domainSignalPriority,
+                defaultLabel: "other"
+            )
+        let actionState = try container.decodeIfPresent(String.self, forKey: .actionState)
+            ?? Self.primaryLabel(
+                from: actionSignals,
+                priority: Self.actionSignalPriority,
+                defaultLabel: "info",
+                compatibilityMap: Self.legacyActionSignalMap
+            )
+        let timeRelation = try container.decodeIfPresent(String.self, forKey: .timeRelation)
+            ?? Self.primaryLabel(
+                from: timeSignals,
+                priority: Self.timeSignalPriority,
+                defaultLabel: "none"
+            )
         let tags = try container.decode([String].self, forKey: .tags)
         let embedding = try container.decode([Float].self, forKey: .embedding)
 
         self.init(
             cleanText: cleanText,
+            cognitiveSignals: Self.fallbackSignals(
+                decoded: cognitiveSignals,
+                fallbackLabel: cognitiveType,
+                defaultLabel: "other"
+            ),
+            domainSignals: Self.fallbackSignals(
+                decoded: domainSignals,
+                fallbackLabel: domain,
+                defaultLabel: "other"
+            ),
+            actionSignals: Self.fallbackSignals(
+                decoded: actionSignals,
+                fallbackLabel: actionState,
+                defaultLabel: "info"
+            ),
+            timeSignals: Self.fallbackSignals(
+                decoded: timeSignals,
+                fallbackLabel: timeRelation,
+                defaultLabel: "none"
+            ),
             cognitiveType: cognitiveType,
             domain: domain,
             actionState: actionState,
@@ -122,12 +189,109 @@ struct ProcessMemoryResponseDTO: Codable, Sendable, Equatable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(cleanText, forKey: .cleanText)
+        try container.encode(cognitiveSignals, forKey: .cognitiveSignals)
+        try container.encode(domainSignals, forKey: .domainSignals)
+        try container.encode(actionSignals, forKey: .actionSignals)
+        try container.encode(timeSignals, forKey: .timeSignals)
         try container.encode(cognitiveType, forKey: .cognitiveType)
         try container.encode(domain, forKey: .domain)
         try container.encode(actionState, forKey: .actionState)
         try container.encode(timeRelation, forKey: .timeRelation)
         try container.encode(tags, forKey: .tags)
         try container.encode(embedding, forKey: .embedding)
+    }
+
+    private static let cognitiveSignalPriority = [
+        "decision",
+        "idea",
+        "reflection",
+        "risk",
+        "question",
+        "insight",
+    ]
+
+    private static let domainSignalPriority = [
+        "work",
+        "relationship",
+        "health",
+        "finance",
+        "logistics",
+        "place",
+        "learning",
+        "project",
+        "self",
+    ]
+
+    private static let actionSignalPriority = [
+        "question",
+        "done",
+        "todo",
+        "decide",
+        "plan",
+        "observe",
+        "schedule",
+    ]
+
+    private static let timeSignalPriority = [
+        "explicitDate",
+        "recurring",
+        "relativeTime",
+        "future",
+        "past",
+        "present",
+        "timeless",
+    ]
+
+    private static let legacyActionSignalMap = [
+        "schedule": "todo",
+    ]
+
+    private static func primaryLabel(
+        from signals: [ProcessMemorySignalDTO],
+        priority: [String],
+        defaultLabel: String,
+        compatibilityMap: [String: String] = [:]
+    ) -> String {
+        guard !signals.isEmpty else { return defaultLabel }
+
+        var bestByLabel: [String: Double] = [:]
+        for signal in signals {
+            let label = compatibilityMap[signal.label] ?? signal.label
+            guard !label.isEmpty else { continue }
+            bestByLabel[label] = max(bestByLabel[label] ?? 0, signal.confidence)
+        }
+
+        guard !bestByLabel.isEmpty else { return defaultLabel }
+
+        let priorityIndex = Dictionary(uniqueKeysWithValues: priority.enumerated().map { ($1.lowercased(), $0) })
+        let best = bestByLabel.max { lhs, rhs in
+            if lhs.value != rhs.value {
+                return lhs.value < rhs.value
+            }
+
+            let lhsPriority = priorityIndex[lhs.key.lowercased()] ?? Int.max
+            let rhsPriority = priorityIndex[rhs.key.lowercased()] ?? Int.max
+            if lhsPriority != rhsPriority {
+                return lhsPriority > rhsPriority
+            }
+
+            return lhs.key.localizedCaseInsensitiveCompare(rhs.key) == .orderedDescending
+        }
+
+        return best?.key ?? defaultLabel
+    }
+
+    private static func fallbackSignals(
+        decoded: [ProcessMemorySignalDTO],
+        fallbackLabel: String,
+        defaultLabel: String
+    ) -> [ProcessMemorySignalDTO] {
+        guard decoded.isEmpty else { return decoded }
+
+        let trimmed = fallbackLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        guard trimmed.caseInsensitiveCompare(defaultLabel) != .orderedSame else { return [] }
+        return [ProcessMemorySignalDTO(label: trimmed, confidence: 1.0)]
     }
 }
 

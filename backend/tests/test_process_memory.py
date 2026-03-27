@@ -70,6 +70,16 @@ class ProcessMemoryRouteTests(APIRouteTestCase):
         self.assertEqual(payload.get("domain"), "project")
         self.assertEqual(payload.get("actionState"), "todo")
         self.assertEqual(payload.get("timeRelation"), "relativeTime")
+        self.assertEqual(payload.get("cognitiveSignals"), [{"label": "idea", "confidence": 0.9}])
+        self.assertEqual(payload.get("domainSignals")[0], {"label": "project", "confidence": 0.88})
+        self.assertEqual(payload.get("actionSignals")[0], {"label": "todo", "confidence": 0.9})
+        self.assertEqual(
+            payload.get("timeSignals"),
+            [
+                {"label": "relativeTime", "confidence": 0.94},
+                {"label": "future", "confidence": 0.8},
+            ],
+        )
         self.assertTrue(payload.get("tags"))
         self.assertEqual(payload.get("embedding"), [0.01, 0.02, -0.03])
 
@@ -86,6 +96,39 @@ class ProcessMemoryRouteTests(APIRouteTestCase):
         payload = response.json()
         self.assertEqual(payload.get("timeRelation"), "explicitDate")
         self.assertEqual(payload.get("domain"), "relationship")
+        self.assertEqual(payload.get("timeSignals"), [{"label": "explicitDate", "confidence": 0.97}])
+
+    def test_process_memory_returns_multiple_signals_with_confidence(self):
+        fake = _FakeEmbeddingService(vectors=[[0.3, 0.1, -0.4]])
+
+        with patch("helpershelp.api.routes.process_memory.get_embedding_service", return_value=fake):
+            response = self.client.post(
+                "/process-memory",
+                json={"text": "Jag insåg att jag måste boka tandläkare nästa vecka", "language": "sv"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("cognitiveType"), "reflection")
+        self.assertEqual(payload.get("domain"), "health")
+        self.assertEqual(payload.get("actionState"), "todo")
+        self.assertEqual(payload.get("timeRelation"), "relativeTime")
+        self.assertEqual(payload.get("cognitiveSignals"), [{"label": "reflection", "confidence": 0.9}])
+        self.assertEqual(payload.get("domainSignals"), [{"label": "health", "confidence": 0.88}])
+        self.assertEqual(
+            payload.get("actionSignals"),
+            [
+                {"label": "todo", "confidence": 0.9},
+                {"label": "schedule", "confidence": 0.71},
+            ],
+        )
+        self.assertEqual(
+            payload.get("timeSignals"),
+            [
+                {"label": "relativeTime", "confidence": 0.94},
+                {"label": "future", "confidence": 0.8},
+            ],
+        )
 
     def test_process_memory_rejects_empty_text(self):
         response = self.client.post(

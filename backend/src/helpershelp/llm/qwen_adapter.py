@@ -287,6 +287,7 @@ Regler:
 {{
   "domain": null | "{'" | "'.join(sorted(_VALID_DOMAINS))}",
   "operation": null | "{'" | "'.join(sorted(_VALID_OPERATIONS))}",
+  "confidence": 0.0-1.0,
   "filters": {{
     "status": null | "unread" | "cancelled" | "completed" | "pending",
     "participants": string[],
@@ -303,7 +304,7 @@ Regler:
   }}
 }}
 - Hitta inte på nya domäner eller operationer.
-- Om osäker, använd null för domain/operation och tomma filter.
+- Om osäker, använd null för domain/operation, confidence 0.0 och tomma filter.
 
 Tillåtna domäner: {domains}
 Tillåtna operationer: {operations}

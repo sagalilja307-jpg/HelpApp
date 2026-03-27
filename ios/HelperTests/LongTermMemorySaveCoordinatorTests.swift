@@ -394,6 +394,56 @@ final class LongTermMemorySaveCoordinatorTests: XCTestCase {
         XCTAssertEqual(decoded.domain, "other")
         XCTAssertEqual(decoded.actionState, "info")
         XCTAssertEqual(decoded.timeRelation, "none")
+        XCTAssertEqual(decoded.cognitiveSignals, [ProcessMemorySignalDTO(label: "Insight", confidence: 1.0)])
+        XCTAssertTrue(decoded.domainSignals.isEmpty)
+        XCTAssertTrue(decoded.actionSignals.isEmpty)
+        XCTAssertTrue(decoded.timeSignals.isEmpty)
+    }
+
+    func testProcessMemoryResponseDTODecodesSignalBasedPayloadAndDerivesLegacyAxes() throws {
+        let json = """
+        {
+          "cleanText": "Jag insåg att jag måste boka tandläkare nästa vecka",
+          "cognitiveSignals": [{ "label": "reflection", "confidence": 0.9 }],
+          "domainSignals": [{ "label": "health", "confidence": 0.88 }],
+          "actionSignals": [
+            { "label": "todo", "confidence": 0.92 },
+            { "label": "schedule", "confidence": 0.71 }
+          ],
+          "timeSignals": [
+            { "label": "relativeTime", "confidence": 0.95 },
+            { "label": "future", "confidence": 0.8 }
+          ],
+          "tags": ["tandläkare", "boka"],
+          "embedding": [0.1, 0.2]
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(
+            ProcessMemoryResponseDTO.self,
+            from: Data(json.utf8)
+        )
+
+        XCTAssertEqual(decoded.cognitiveType, "reflection")
+        XCTAssertEqual(decoded.domain, "health")
+        XCTAssertEqual(decoded.actionState, "todo")
+        XCTAssertEqual(decoded.timeRelation, "relativeTime")
+        XCTAssertEqual(decoded.cognitiveSignals, [ProcessMemorySignalDTO(label: "reflection", confidence: 0.9)])
+        XCTAssertEqual(decoded.domainSignals, [ProcessMemorySignalDTO(label: "health", confidence: 0.88)])
+        XCTAssertEqual(
+            decoded.actionSignals,
+            [
+                ProcessMemorySignalDTO(label: "todo", confidence: 0.92),
+                ProcessMemorySignalDTO(label: "schedule", confidence: 0.71),
+            ]
+        )
+        XCTAssertEqual(
+            decoded.timeSignals,
+            [
+                ProcessMemorySignalDTO(label: "relativeTime", confidence: 0.95),
+                ProcessMemorySignalDTO(label: "future", confidence: 0.8),
+            ]
+        )
     }
 
     func testLongTermMemorySyncRecordDecodesLegacySuggestedTypePayload() throws {

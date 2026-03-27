@@ -120,6 +120,8 @@ ALLOWED_SOURCE_ACCOUNT_VALUES: set[str] = {
     "icloud",
 }
 
+LLM_DOMAIN_CONFIDENCE_THRESHOLD = 0.75
+
 ALLOWED_HEALTH_METRICS: set[str] = HEALTH_ACTIVITY_METRICS.union(HEALTH_WELLBEING_METRICS)
 ALLOWED_HEALTH_SUBDOMAINS: set[str] = {"activity", "wellbeing"}
 ALLOWED_HEALTH_WORKOUT_TYPES: set[str] = {"running", "cycling", "strength"}
@@ -413,6 +415,14 @@ def _accept_classifier_domain(query: str, domain: Domain) -> bool:
     if domain == "health":
         return _looks_like_health_query(query)
     return True
+
+
+def _coerce_classifier_confidence(value: object) -> float:
+    try:
+        confidence = float(value)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    return max(0.0, min(1.0, confidence))
 
 
 def _resolve_health_metric(query: str) -> str:
@@ -2093,16 +2103,6 @@ def _merge_filters(
     return merged
 
 
-def _llm_domain_has_explicit_signal(
-    *,
-    keyword_domain: Optional[Domain],
-    llm_domain: Optional[Domain],
-) -> bool:
-    if llm_domain is None:
-        return False
-    return keyword_domain == llm_domain
-
-
 def _resolve_special_understanding(
     *,
     query: str,
@@ -2178,14 +2178,10 @@ class DataIntentRouter:
             raw_llm_intent = {}
 
         llm_domain = _coerce_domain(raw_llm_intent.get("domain"))
+        llm_confidence = _coerce_classifier_confidence(raw_llm_intent.get("confidence"))
         if llm_domain is not None and not _accept_classifier_domain(q, llm_domain):
             llm_domain = None
-        if llm_domain in {"calendar", "mail", "reminders", "contacts", "files", "photos", "notes", "memory", "location", "health"}:
-            llm_domain = None
-        elif not _llm_domain_has_explicit_signal(
-            keyword_domain=keyword_domain,
-            llm_domain=llm_domain,
-        ):
+        elif keyword_domain is not None or llm_confidence < LLM_DOMAIN_CONFIDENCE_THRESHOLD:
             llm_domain = None
 
         clarification_filters: Dict[str, object] = {}
