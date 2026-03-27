@@ -12,6 +12,7 @@ final class ChatSuggestionEngineTests: XCTestCase {
             return XCTFail("Expected suggestion")
         }
         XCTAssertEqual(suggestion.kind, .calendar)
+        XCTAssertEqual(suggestion.title, "Möte med Sara")
     }
 
     func testExplicitCalendarCreateQueryProducesCalendarSuggestionWithTimeRange() throws {
@@ -27,6 +28,7 @@ final class ChatSuggestionEngineTests: XCTestCase {
         }
 
         XCTAssertEqual(suggestion.kind, .calendar)
+        XCTAssertEqual(suggestion.title, "Tvätta")
         XCTAssertTrue(suggestion.auditReasons.contains("intent:create_request"))
         XCTAssertEqual(draft.title, "Tvätta")
         XCTAssertEqual(draft.endDate.timeIntervalSince(draft.startDate), 3 * 60 * 60, accuracy: 1)
@@ -42,6 +44,73 @@ final class ChatSuggestionEngineTests: XCTestCase {
             return XCTFail("Expected suggestion")
         }
         XCTAssertEqual(suggestion.kind, .reminder)
+        XCTAssertEqual(suggestion.title, "Betala hyran")
+    }
+
+    func testSmsErrandProducesReminderSuggestion() {
+        let engine = makeEngine()
+
+        let decision = engine.decide(for: "Kan du hämta paketet på lördag?")
+
+        guard case .suggestion(let suggestion) = decision else {
+            return XCTFail("Expected suggestion")
+        }
+        guard case .reminder(let draft) = suggestion.draft else {
+            return XCTFail("Expected reminder draft")
+        }
+
+        XCTAssertEqual(suggestion.kind, .reminder)
+        XCTAssertEqual(suggestion.title, "Hämta paketet")
+        XCTAssertEqual(draft.title, "Hämta paketet")
+        XCTAssertNotNil(draft.dueDate)
+    }
+
+    func testChecklistUsesFirstActionableLineForReminderTitle() {
+        let engine = makeEngine()
+
+        let decision = engine.decide(for: """
+        Klar åtgärder kvar:
+        □ Svara jobb
+        □ Fråga om datum 4/6
+        """)
+
+        guard case .suggestion(let suggestion) = decision else {
+            return XCTFail("Expected suggestion")
+        }
+
+        XCTAssertEqual(suggestion.kind, .reminder)
+        XCTAssertEqual(suggestion.title, "Svara jobb")
+    }
+
+    func testAvailabilitySmsProducesCalendarSuggestion() {
+        let engine = makeEngine()
+
+        let decision = engine.decide(for: "Kan du på lördag kl 11-13:30?")
+
+        guard case .suggestion(let suggestion) = decision else {
+            return XCTFail("Expected suggestion")
+        }
+        guard case .calendar(let draft) = suggestion.draft else {
+            return XCTFail("Expected calendar draft")
+        }
+
+        XCTAssertEqual(suggestion.kind, .calendar)
+        XCTAssertEqual(suggestion.title, "Plan på lördag")
+        XCTAssertEqual(draft.title, "Plan på lördag")
+        XCTAssertEqual(draft.endDate.timeIntervalSince(draft.startDate), 2.5 * 60 * 60, accuracy: 1)
+    }
+
+    func testInviteSmsProducesFriendlyCalendarTitle() {
+        let engine = makeEngine()
+
+        let decision = engine.decide(for: "Ska vi träffas på lördag kl 15?")
+
+        guard case .suggestion(let suggestion) = decision else {
+            return XCTFail("Expected suggestion")
+        }
+
+        XCTAssertEqual(suggestion.kind, .calendar)
+        XCTAssertEqual(suggestion.title, "Träff")
     }
 
     func testWaitingForResponseTextProducesFollowUpSuggestion() {
@@ -57,6 +126,7 @@ final class ChatSuggestionEngineTests: XCTestCase {
         }
 
         XCTAssertEqual(suggestion.kind, .followUp)
+        XCTAssertEqual(suggestion.title, "Följ upp med Sara")
         XCTAssertEqual(draft.title, "Följ upp med Sara")
         XCTAssertEqual(draft.eligibleAt.timeIntervalSince(draft.waitingSince), 24 * 60 * 60, accuracy: 1)
         XCTAssertEqual(
@@ -70,12 +140,36 @@ final class ChatSuggestionEngineTests: XCTestCase {
     func testReferenceInfoProducesNoteSuggestion() {
         let engine = makeEngine()
 
-        let decision = engine.decide(for: "Portkod: 4582 till gården")
+        let decision = engine.decide(for: "Wifi hemma: Telia-5G")
 
         guard case .suggestion(let suggestion) = decision else {
             return XCTFail("Expected suggestion")
         }
         XCTAssertEqual(suggestion.kind, .note)
+        XCTAssertEqual(suggestion.title, "Wifi hemma")
+        guard case .note(let draft) = suggestion.draft else {
+            return XCTFail("Expected note draft")
+        }
+        XCTAssertEqual(draft.title, "Wifi hemma")
+        XCTAssertEqual(draft.body, "Telia-5G")
+    }
+
+    func testExplicitNoteCommandProducesNoteSuggestion() {
+        let engine = makeEngine()
+
+        let decision = engine.decide(for: "Skapa ny anteckning: Packlista för resan")
+
+        guard case .suggestion(let suggestion) = decision else {
+            return XCTFail("Expected suggestion")
+        }
+        guard case .note(let draft) = suggestion.draft else {
+            return XCTFail("Expected note draft")
+        }
+
+        XCTAssertEqual(suggestion.kind, .note)
+        XCTAssertEqual(suggestion.title, "Packlista för resan")
+        XCTAssertEqual(draft.title, "Packlista för resan")
+        XCTAssertEqual(draft.body, "Packlista för resan")
     }
 
     func testDataQueryLikeTextProducesNoAction() {

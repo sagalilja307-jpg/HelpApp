@@ -91,7 +91,7 @@ struct ChatSuggestionCardView: View {
 
 struct ChatReminderDraftSheet: View {
     let draft: ChatSuggestionDraft.ReminderDraft
-    let onConfirm: (ChatSuggestionDraft.ReminderDraft) async -> Void
+    let onConfirm: @MainActor (ChatSuggestionDraft.ReminderDraft) async -> Bool
     let onCancel: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -105,7 +105,7 @@ struct ChatReminderDraftSheet: View {
 
     init(
         draft: ChatSuggestionDraft.ReminderDraft,
-        onConfirm: @escaping (ChatSuggestionDraft.ReminderDraft) async -> Void,
+        onConfirm: @escaping @MainActor (ChatSuggestionDraft.ReminderDraft) async -> Bool,
         onCancel: @escaping () -> Void
     ) {
         self.draft = draft
@@ -164,10 +164,12 @@ struct ChatReminderDraftSheet: View {
                             priority: priority
                         )
                         isSaving = true
-                        Task {
-                            await onConfirm(payload)
+                        Task { @MainActor in
+                            let didSave = await onConfirm(payload)
                             isSaving = false
-                            dismiss()
+                            if didSave {
+                                dismiss()
+                            }
                         }
                     }
                     .disabled(isSaving || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -180,7 +182,7 @@ struct ChatReminderDraftSheet: View {
 struct ChatNoteDraftSheet: View {
     let draft: ChatSuggestionDraft.NoteDraft
     let saveLabel: String
-    let onConfirm: (ChatSuggestionDraft.NoteDraft) async -> Void
+    let onConfirm: @MainActor (ChatSuggestionDraft.NoteDraft) async -> Bool
     let onCancel: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -191,7 +193,7 @@ struct ChatNoteDraftSheet: View {
     init(
         draft: ChatSuggestionDraft.NoteDraft,
         saveLabel: String = "Spara",
-        onConfirm: @escaping (ChatSuggestionDraft.NoteDraft) async -> Void,
+        onConfirm: @escaping @MainActor (ChatSuggestionDraft.NoteDraft) async -> Bool,
         onCancel: @escaping () -> Void
     ) {
         self.draft = draft
@@ -230,10 +232,12 @@ struct ChatNoteDraftSheet: View {
                             body: noteBody.trimmingCharacters(in: .whitespacesAndNewlines)
                         )
                         isSaving = true
-                        Task {
-                            await onConfirm(payload)
+                        Task { @MainActor in
+                            let didSave = await onConfirm(payload)
                             isSaving = false
-                            dismiss()
+                            if didSave {
+                                dismiss()
+                            }
                         }
                     }
                     .disabled(

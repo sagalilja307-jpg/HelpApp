@@ -3,9 +3,9 @@ import UIKit
 
 struct FollowUpComposerSheet: View {
     let draft: FollowUpComposerDraft
-    let onCopy: (FollowUpComposerDraft) async -> Void
-    let onShare: (FollowUpComposerDraft) async -> Void
-    let onMarkSent: (FollowUpComposerDraft) async -> Void
+    let onCopy: @MainActor (FollowUpComposerDraft) async -> Bool
+    let onShare: @MainActor (FollowUpComposerDraft) async -> Bool
+    let onMarkSent: @MainActor (FollowUpComposerDraft) async -> Bool
     let onCancel: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -16,9 +16,9 @@ struct FollowUpComposerSheet: View {
 
     init(
         draft: FollowUpComposerDraft,
-        onCopy: @escaping (FollowUpComposerDraft) async -> Void,
-        onShare: @escaping (FollowUpComposerDraft) async -> Void,
-        onMarkSent: @escaping (FollowUpComposerDraft) async -> Void,
+        onCopy: @escaping @MainActor (FollowUpComposerDraft) async -> Bool,
+        onShare: @escaping @MainActor (FollowUpComposerDraft) async -> Bool,
+        onMarkSent: @escaping @MainActor (FollowUpComposerDraft) async -> Bool,
         onCancel: @escaping () -> Void
     ) {
         self.draft = draft
@@ -59,21 +59,27 @@ struct FollowUpComposerSheet: View {
 
                 Section {
                     Button {
-                        Task { await perform(action: onShare) }
+                        Task { @MainActor in
+                            await perform(action: onShare)
+                        }
                     } label: {
                         Label("Dela", systemImage: "square.and.arrow.up")
                     }
                     .disabled(isWorking)
 
                     Button {
-                        Task { await perform(action: onCopy) }
+                        Task { @MainActor in
+                            await perform(action: onCopy)
+                        }
                     } label: {
                         Label("Kopiera", systemImage: "doc.on.doc")
                     }
                     .disabled(isWorking)
 
                     Button {
-                        Task { await perform(action: onMarkSent) }
+                        Task { @MainActor in
+                            await perform(action: onMarkSent)
+                        }
                     } label: {
                         Label("Markera som skickat", systemImage: "checkmark.circle")
                     }
@@ -95,11 +101,12 @@ struct FollowUpComposerSheet: View {
 }
 
 private extension FollowUpComposerSheet {
+    @MainActor
     func perform(
-        action: @escaping (FollowUpComposerDraft) async -> Void
+        action: @escaping @MainActor (FollowUpComposerDraft) async -> Bool
     ) async {
         isWorking = true
-        await action(
+        let didSave = await action(
             FollowUpComposerDraft(
                 id: draft.id,
                 sourceMessageID: draft.sourceMessageID,
@@ -113,7 +120,9 @@ private extension FollowUpComposerSheet {
             )
         )
         isWorking = false
-        dismiss()
+        if didSave {
+            dismiss()
+        }
     }
 }
 

@@ -2,6 +2,17 @@ import EventKit
 import Foundation
 import SwiftData
 
+enum ReminderSyncManagerError: LocalizedError {
+    case reminderListUnavailable
+
+    var errorDescription: String? {
+        switch self {
+        case .reminderListUnavailable:
+            return "Det finns ingen påminnelselista att spara i."
+        }
+    }
+}
+
 final class ReminderSyncManager {
 
     static let shared = ReminderSyncManager()
@@ -74,8 +85,12 @@ final class ReminderSyncManager {
         DataSourceDebug.start(op)
         do {
             let reminder = EKReminder(eventStore: eventStore)
+            guard let reminderCalendar = eventStore.defaultCalendarForNewReminders()
+                ?? eventStore.calendars(for: .reminder).first(where: \.allowsContentModifications) else {
+                throw ReminderSyncManagerError.reminderListUnavailable
+            }
             reminder.title = item.title
-            reminder.calendar = eventStore.defaultCalendarForNewReminders()
+            reminder.calendar = reminderCalendar
             reminder.notes = item.notes
             reminder.location = item.location
             if let priority = item.priority {

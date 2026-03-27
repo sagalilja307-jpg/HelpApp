@@ -259,7 +259,7 @@ struct WorkingMemoryDayView: View {
         .ios26Pill()
     }
 
-    private func copyFollowUpDraft(_ draft: FollowUpComposerDraft) async {
+    private func copyFollowUpDraft(_ draft: FollowUpComposerDraft) async -> Bool {
         let messageID = draft.sourceMessageID ?? draft.id ?? UUID().uuidString
         guard let saved = try? await followUpCoordinator.saveFollowUpDraft(
             draft,
@@ -267,15 +267,16 @@ struct WorkingMemoryDayView: View {
             logMessageID: draft.id ?? messageID,
             reasons: ["trigger:working_memory", "action_kind:follow_up", "due_policy:24h_then_next_09"]
         ) else {
-            return
+            return false
         }
 
         UIPasteboard.general.string = saved.draftText
         followUpDraft = nil
         await reload()
+        return true
     }
 
-    private func shareFollowUpDraft(_ draft: FollowUpComposerDraft) async {
+    private func shareFollowUpDraft(_ draft: FollowUpComposerDraft) async -> Bool {
         let messageID = draft.sourceMessageID ?? draft.id ?? UUID().uuidString
         guard let saved = try? await followUpCoordinator.saveFollowUpDraft(
             draft,
@@ -283,24 +284,28 @@ struct WorkingMemoryDayView: View {
             logMessageID: draft.id ?? messageID,
             reasons: ["trigger:working_memory", "action_kind:follow_up", "due_policy:24h_then_next_09"]
         ) else {
-            return
+            return false
         }
 
         sharePresentation = ShareTextPresentation(text: saved.draftText)
         followUpDraft = nil
         await reload()
+        return true
     }
 
-    private func markFollowUpSent(_ draft: FollowUpComposerDraft) async {
+    private func markFollowUpSent(_ draft: FollowUpComposerDraft) async -> Bool {
         let messageID = draft.sourceMessageID ?? draft.id ?? UUID().uuidString
-        _ = try? await followUpCoordinator.markFollowUpCompleted(
+        guard let _ = try? await followUpCoordinator.markFollowUpCompleted(
             from: draft,
             defaultSourceMessageID: messageID,
             logMessageID: draft.id ?? messageID,
             reasons: ["trigger:working_memory", "action_kind:follow_up", "due_policy:24h_then_next_09"]
-        )
+        ) else {
+            return false
+        }
         followUpDraft = nil
         await reload()
+        return true
     }
 }
 

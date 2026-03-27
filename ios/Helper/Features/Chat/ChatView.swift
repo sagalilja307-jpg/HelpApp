@@ -1296,39 +1296,41 @@ public struct ChatView: View {
     private func createReminderSuggestion(
         messageID: UUID,
         draft: ChatSuggestionDraft.ReminderDraft
-    ) async {
-        reminderSuggestionDraft = nil
-
+    ) async -> Bool {
         do {
             try await suggestionActionCoordinator.createReminder(from: draft)
+            reminderSuggestionDraft = nil
             vm.completeSuggestion(for: messageID)
+            return true
         } catch {
             presentSuggestionFailure(
                 messageID: messageID,
                 suggestionError: "Påminnelsen kunde inte skapas.",
                 alertMessage: "Påminnelsen kunde inte skapas: \(error.localizedDescription)"
             )
+            return false
         }
     }
 
     private func createNoteSuggestion(
         messageID: UUID,
         draft: ChatSuggestionDraft.NoteDraft
-    ) async {
-        noteSuggestionDraft = nil
-
+    ) async -> Bool {
         do {
             try await suggestionActionCoordinator.createNote(
                 from: draft,
                 in: modelContext
             )
+            noteSuggestionDraft = nil
             vm.completeSuggestion(for: messageID)
+            return true
         } catch {
             presentSuggestionFailure(
                 messageID: messageID,
                 suggestionError: "Anteckningen kunde inte sparas.",
                 alertMessage: "Anteckningen kunde inte sparas: \(error.localizedDescription)"
             )
+            return false
         }
     }
 
@@ -1336,9 +1338,7 @@ public struct ChatView: View {
         messageID: UUID,
         draft: FollowUpComposerDraft,
         reasons: [String]
-    ) async {
-        followUpSuggestionDraft = nil
-
+    ) async -> Bool {
         do {
             let saved = try await followUpCoordinator.saveFollowUpDraft(
                 draft,
@@ -1346,14 +1346,17 @@ public struct ChatView: View {
                 logMessageID: messageID.uuidString,
                 reasons: reasons
             )
+            followUpSuggestionDraft = nil
             UIPasteboard.general.string = saved.draftText
             vm.completeSuggestion(for: messageID, logging: nil)
+            return true
         } catch {
             presentSuggestionFailure(
                 messageID: messageID,
                 suggestionError: "Uppföljningen kunde inte sparas.",
                 alertMessage: "Uppföljningen kunde inte sparas: \(error.localizedDescription)"
             )
+            return false
         }
     }
 
@@ -1361,9 +1364,7 @@ public struct ChatView: View {
         messageID: UUID,
         draft: FollowUpComposerDraft,
         reasons: [String]
-    ) async {
-        followUpSuggestionDraft = nil
-
+    ) async -> Bool {
         do {
             let saved = try await followUpCoordinator.saveFollowUpDraft(
                 draft,
@@ -1371,14 +1372,17 @@ public struct ChatView: View {
                 logMessageID: messageID.uuidString,
                 reasons: reasons
             )
+            followUpSuggestionDraft = nil
             sharePresentation = ShareTextPresentation(text: saved.draftText)
             vm.completeSuggestion(for: messageID, logging: nil)
+            return true
         } catch {
             presentSuggestionFailure(
                 messageID: messageID,
                 suggestionError: "Uppföljningen kunde inte sparas.",
                 alertMessage: "Uppföljningen kunde inte sparas: \(error.localizedDescription)"
             )
+            return false
         }
     }
 
@@ -1386,9 +1390,7 @@ public struct ChatView: View {
         messageID: UUID,
         draft: FollowUpComposerDraft,
         reasons: [String]
-    ) async {
-        followUpSuggestionDraft = nil
-
+    ) async -> Bool {
         do {
             _ = try await followUpCoordinator.markFollowUpCompleted(
                 from: draft,
@@ -1396,13 +1398,16 @@ public struct ChatView: View {
                 logMessageID: messageID.uuidString,
                 reasons: reasons
             )
+            followUpSuggestionDraft = nil
             vm.completeSuggestion(for: messageID, logging: nil)
+            return true
         } catch {
             presentSuggestionFailure(
                 messageID: messageID,
                 suggestionError: "Uppföljningen kunde inte markeras som skickad.",
                 alertMessage: "Uppföljningen kunde inte markeras som skickad: \(error.localizedDescription)"
             )
+            return false
         }
     }
 

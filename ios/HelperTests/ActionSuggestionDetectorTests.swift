@@ -12,6 +12,7 @@ final class ActionSuggestionDetectorTests: XCTestCase {
             return XCTFail("Expected proposed action")
         }
         XCTAssertEqual(action.kind, .calendar)
+        XCTAssertEqual(action.title, "Möte med Sara")
     }
 
     func testDataQueryLikeTextProducesNoAction() {
@@ -40,10 +41,65 @@ final class ActionSuggestionDetectorTests: XCTestCase {
         }
 
         XCTAssertEqual(action.kind, .followUp)
+        XCTAssertEqual(action.title, "Följ upp med Sara")
         XCTAssertEqual(draft.title, "Följ upp med Sara")
         XCTAssertEqual(draft.eligibleAt.timeIntervalSince(draft.waitingSince), 24 * 60 * 60, accuracy: 1)
         XCTAssertEqual(draft.dueAt, Date(timeIntervalSince1970: 1_742_547_600))
         XCTAssertTrue(action.auditReasons.contains("heuristic:waiting_for_response"))
+    }
+
+    func testSmsErrandProducesReminderAction() {
+        let detector = makeDetector()
+
+        let decision = detector.decide(for: "Kan du hämta paketet på lördag?")
+
+        guard case .proposed(let action) = decision else {
+            return XCTFail("Expected proposed action")
+        }
+        guard case .reminder(let draft) = action.draft else {
+            return XCTFail("Expected reminder draft")
+        }
+
+        XCTAssertEqual(action.kind, .reminder)
+        XCTAssertEqual(action.title, "Hämta paketet")
+        XCTAssertEqual(draft.title, "Hämta paketet")
+        XCTAssertNotNil(draft.dueDate)
+    }
+
+    func testStructuredNoteProducesSpecificTitleAndBody() {
+        let detector = makeDetector()
+
+        let decision = detector.decide(for: "Portkod till gården: 4582")
+
+        guard case .proposed(let action) = decision else {
+            return XCTFail("Expected proposed action")
+        }
+        guard case .note(let draft) = action.draft else {
+            return XCTFail("Expected note draft")
+        }
+
+        XCTAssertEqual(action.kind, .note)
+        XCTAssertEqual(action.title, "Portkod till gården")
+        XCTAssertEqual(draft.title, "Portkod till gården")
+        XCTAssertEqual(draft.body, "4582")
+    }
+
+    func testExplicitNoteCommandProducesNoteAction() {
+        let detector = makeDetector()
+
+        let decision = detector.decide(for: "Skapa ny anteckning: Packlista för resan")
+
+        guard case .proposed(let action) = decision else {
+            return XCTFail("Expected proposed action")
+        }
+        guard case .note(let draft) = action.draft else {
+            return XCTFail("Expected note draft")
+        }
+
+        XCTAssertEqual(action.kind, .note)
+        XCTAssertEqual(action.title, "Packlista för resan")
+        XCTAssertEqual(draft.title, "Packlista för resan")
+        XCTAssertEqual(draft.body, "Packlista för resan")
     }
 
     private func makeDetector() -> HeuristicActionSuggestionDetector {

@@ -83,15 +83,19 @@ struct CalendarActionExecutor {
     func prepareEvent(
         from draft: ActionDraft.CalendarDraft,
         using store: EKEventStore
-    ) -> EKEvent {
+    ) throws -> EKEvent {
         let payload = payloadBuilder.build(from: draft)
+        guard let writableCalendar = store.defaultCalendarForNewEvents
+            ?? store.calendars(for: .event).first(where: \.allowsContentModifications) else {
+            throw ActionExecutionError.calendarUnavailable
+        }
         let event = EKEvent(eventStore: store)
         event.title = payload.title
         event.notes = payload.notes
         event.startDate = payload.startDate
         event.endDate = payload.endDate
         event.isAllDay = payload.isAllDay
-        event.calendar = store.defaultCalendarForNewEvents
+        event.calendar = writableCalendar
         return event
     }
 }
@@ -175,12 +179,15 @@ struct NoteActionExecutor {
 }
 
 enum ActionExecutionError: LocalizedError, Equatable {
+    case calendarUnavailable
     case emptyReminderTitle
     case emptyNoteContent
     case followUpUnavailable
 
     var errorDescription: String? {
         switch self {
+        case .calendarUnavailable:
+            return "Det finns ingen skrivbar kalender att spara i."
         case .emptyReminderTitle:
             return "Paminnelsen behover en titel."
         case .emptyNoteContent:
@@ -252,7 +259,7 @@ final class ActionExecutionCoordinator: ActionExecutionCoordinating {
         from draft: ActionDraft.CalendarDraft,
         using store: EKEventStore
     ) throws -> EKEvent {
-        calendarExecutor.prepareEvent(from: draft, using: store)
+        try calendarExecutor.prepareEvent(from: draft, using: store)
     }
 
     func enableCalendarSource() {

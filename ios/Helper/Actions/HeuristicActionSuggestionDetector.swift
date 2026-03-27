@@ -73,6 +73,7 @@ struct HeuristicActionSuggestionDetector: ActionSuggestionDetecting {
         }
 
         let candidate = calendarCandidate(from: trimmed)
+            ?? calendarAvailabilityCandidate(from: trimmed)
             ?? reminderCandidate(from: trimmed)
             ?? noteCandidate(from: trimmed)
 
@@ -138,7 +139,7 @@ private extension HeuristicActionSuggestionDetector {
 
         return ProposedAction(
             kind: .calendar,
-            title: "Det här ser ut som något att lägga i kalendern",
+            title: title,
             explanation: "Vill du öppna ett kalenderutkast med det här förifyllt?",
             draft: .calendar(
                 .init(
@@ -162,8 +163,9 @@ private extension HeuristicActionSuggestionDetector {
     func calendarCandidate(from text: String) -> ProposedAction? {
         let normalized = normalize(text)
         let eventKeywords = [
-            "möte", "möten", "träff", "träffas", "ses", "middag", "lunch", "frukost",
-            "fika", "intervju", "avstämning", "samtal", "middag med", "lunch med"
+            "möte", "möten", "träff", "träffas", "träffa", "ses", "mötas", "motas",
+            "middag", "lunch", "frukost", "fika", "intervju", "avstämning", "samtal",
+            "middag med", "lunch med"
         ]
         let matchedKeywords = eventKeywords.filter { normalized.contains(normalize($0)) }
         guard !matchedKeywords.isEmpty else {
@@ -174,15 +176,15 @@ private extension HeuristicActionSuggestionDetector {
             return nil
         }
 
-        let cleanedTitle = stripTemporalTokens(from: text)
+        let cleanedTitle = calendarDraftTitle(from: text)
         let title = cleanedTitle.isEmpty ? "Ny händelse" : cleanedTitle
-        let notes = title.caseInsensitiveCompare(text) == .orderedSame ? "" : text
+        let notes = title.caseInsensitiveCompare(text.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame ? "" : text
         let hasExplicitTime = resolvedDate.reasons.contains("date:explicit_time")
         let confidence = hasExplicitTime ? 0.94 : 0.86
 
         return ProposedAction(
             kind: .calendar,
-            title: "Det här ser ut som en plan med tid",
+            title: title,
             explanation: "Vill du öppna ett kalenderutkast med det här förifyllt?",
             draft: .calendar(
                 .init(
@@ -203,6 +205,56 @@ private extension HeuristicActionSuggestionDetector {
         )
     }
 
+    func calendarAvailabilityCandidate(from text: String) -> ProposedAction? {
+        let normalized = normalize(text)
+        let availabilitySignals = [
+            "kan du på", "kan du pa", "kan vi på", "kan vi pa",
+            "passar det på", "passar det pa", "funkar det på", "funkar det pa"
+        ]
+        let matchedSignals = availabilitySignals.filter { normalized.contains($0) }
+        guard !matchedSignals.isEmpty else {
+            return nil
+        }
+
+        let taskVerbs = reminderTaskVerbs()
+        guard taskVerbs.allSatisfy({ normalized.contains($0) == false }) else {
+            return nil
+        }
+
+        guard let resolvedDate = resolveDateHint(in: text, requireDate: true) else {
+            return nil
+        }
+
+        let title = availabilityCalendarTitle(
+            from: text,
+            normalizedText: normalized
+        )
+        let hasExplicitTime = resolvedDate.reasons.contains("date:explicit_time")
+        let confidence = hasExplicitTime ? 0.83 : 0.78
+
+        return ProposedAction(
+            kind: .calendar,
+            title: title,
+            explanation: "Vill du öppna ett kalenderutkast för den här planen?",
+            draft: .calendar(
+                .init(
+                    title: title,
+                    notes: text,
+                    startDate: resolvedDate.startDate,
+                    endDate: resolvedDate.endDate,
+                    isAllDay: resolvedDate.isAllDay
+                )
+            ),
+            confirmationState: .awaitingApproval,
+            confidence: confidence,
+            auditReasons: [
+                "trigger:user_text",
+                "action_kind:calendar",
+                "heuristic:calendar_availability"
+            ] + matchedSignals.map { "keyword:\($0)" } + resolvedDate.reasons
+        )
+    }
+
     func reminderCandidate(from text: String) -> ProposedAction? {
         let normalized = normalize(text)
 
@@ -210,10 +262,8 @@ private extension HeuristicActionSuggestionDetector {
             "kom ihåg", "kom ihag", "glöm inte", "glom inte", "påminn mig", "paminn mig",
             "påminn", "paminn", "att göra", "att gora", "todo", "to do"
         ]
-        let taskVerbs = [
-            "ringa", "ring", "betala", "hämta", "hamta", "köp", "kop", "skicka",
-            "maila", "mejla", "svara", "boka", "fixa"
-        ]
+        let taskVerbs = reminderTaskVerbs()
+        let requestSignals = reminderRequestSignals()
 
         let matchedStrongSignals = strongSignals.filter { normalized.contains($0) }
         let matchedTaskVerbs = taskVerbs.filter { normalized.contains($0) }
@@ -224,19 +274,28 @@ private extension HeuristicActionSuggestionDetector {
             || normalized.contains("behöver")
             || normalized.contains("ska ")
         )
+        let matchedRequestSignals = requestSignals.filter { normalized.contains($0) }
+        let hasRequestSignal = matchedTaskVerbs.isEmpty == false && matchedRequestSignals.isEmpty == false
+        let hasChecklistSignal = matchedTaskVerbs.isEmpty == false && isChecklistLike(text)
 
-        guard !matchedStrongSignals.isEmpty || hasMediumSignal else {
+        guard !matchedStrongSignals.isEmpty || hasMediumSignal || hasRequestSignal || hasChecklistSignal else {
             return nil
         }
 
         let dueDate = resolveDateHint(in: text, requireDate: false)
-        let title = suggestionTitle(
-            from: stripReminderLeadAndTemporalTokens(from: text),
-            fallback: "Ny påminnelse"
-        )
+        let title = reminderDraftTitle(from: text)
         let location = extractLocationHint(from: text)
         let priority = extractReminderPriority(from: normalized)
-        let confidence = matchedStrongSignals.isEmpty ? 0.79 : 0.9
+        let confidence: Double
+        if matchedStrongSignals.isEmpty == false {
+            confidence = 0.9
+        } else if hasChecklistSignal {
+            confidence = 0.85
+        } else if hasRequestSignal {
+            confidence = 0.84
+        } else {
+            confidence = 0.79
+        }
 
         var auditReasons = [
             "trigger:user_text",
@@ -246,7 +305,16 @@ private extension HeuristicActionSuggestionDetector {
             auditReasons.append("heuristic:reminder_signal")
             auditReasons.append(contentsOf: matchedStrongSignals.map { "keyword:\($0)" })
         } else {
-            auditReasons.append("heuristic:task_signal")
+            if hasChecklistSignal {
+                auditReasons.append("heuristic:checklist_task")
+            }
+            if hasRequestSignal {
+                auditReasons.append("heuristic:task_request")
+                auditReasons.append(contentsOf: matchedRequestSignals.map { "keyword:\($0)" })
+            }
+            if !hasChecklistSignal && !hasRequestSignal {
+                auditReasons.append("heuristic:task_signal")
+            }
             auditReasons.append(contentsOf: matchedTaskVerbs.map { "keyword:\($0)" })
         }
         if let dueDate {
@@ -258,7 +326,7 @@ private extension HeuristicActionSuggestionDetector {
 
         return ProposedAction(
             kind: .reminder,
-            title: "Det här låter som något att komma ihåg",
+            title: title,
             explanation: "Vill du öppna en förifylld påminnelse?",
             draft: .reminder(
                 .init(
@@ -281,6 +349,8 @@ private extension HeuristicActionSuggestionDetector {
         }
 
         let normalized = normalize(text)
+        let noteSignals = explicitNoteSignals()
+        let matchedNoteSignals = noteSignals.filter { normalized.contains($0) }
         let noteLabels: [(token: String, title: String)] = [
             ("portkod", "Portkod"),
             ("lösenord", "Lösenord"),
@@ -290,37 +360,61 @@ private extension HeuristicActionSuggestionDetector {
             ("adress", "Adress"),
             ("bokning", "Bokning"),
             ("biljett", "Biljett"),
+            ("kvitto", "Kvitto"),
+            ("schema", "Schema"),
+            ("bekräftelse", "Bekräftelse"),
+            ("bekraftelse", "Bekräftelse"),
+            ("reservation", "Reservation"),
             ("referens", "Referens"),
             ("instruktion", "Instruktion"),
             ("kod", "Kod"),
             ("nummer", "Nummer"),
         ]
 
-        guard let matched = noteLabels.first(where: { normalized.contains(normalize($0.token)) }) else {
+        let matched = noteLabels.first(where: { normalized.contains(normalize($0.token)) })
+        guard matched != nil || matchedNoteSignals.isEmpty == false else {
             return nil
         }
 
         let hasStructuredValue = text.contains(":") || text.rangeOfCharacter(from: .decimalDigits) != nil
-        let confidence = hasStructuredValue ? 0.88 : 0.78
+        let confidence: Double
+        if matchedNoteSignals.isEmpty == false {
+            confidence = hasStructuredValue ? 0.92 : 0.84
+        } else {
+            confidence = hasStructuredValue ? 0.88 : 0.78
+        }
+        let cleanedNoteText = stripNoteLead(from: text)
+        let draftContent = resolvedNoteDraft(
+            from: cleanedNoteText,
+            fallbackTitle: matched?.title ?? "Ny anteckning"
+        )
+
+        var auditReasons = [
+            "trigger:user_text",
+            "action_kind:note",
+        ]
+        if let matched {
+            auditReasons.append("heuristic:reference_info")
+            auditReasons.append("keyword:\(matched.token)")
+        }
+        if matchedNoteSignals.isEmpty == false {
+            auditReasons.append("heuristic:note_command")
+            auditReasons.append(contentsOf: matchedNoteSignals.map { "keyword:\($0)" })
+        }
 
         return ProposedAction(
             kind: .note,
-            title: "Det här ser ut som info att spara",
+            title: draftContent.title,
             explanation: "Vill du öppna en anteckning med det här förifyllt?",
             draft: .note(
                 .init(
-                    title: matched.title,
-                    body: text
+                    title: draftContent.title,
+                    body: draftContent.body
                 )
             ),
             confirmationState: .awaitingApproval,
             confidence: confidence,
-            auditReasons: [
-                "trigger:user_text",
-                "action_kind:note",
-                "heuristic:reference_info",
-                "keyword:\(matched.token)",
-            ]
+            auditReasons: auditReasons
         )
     }
 
@@ -371,7 +465,7 @@ private extension HeuristicActionSuggestionDetector {
 
         return ProposedAction(
             kind: .followUp,
-            title: "Det här låter som något att följa upp",
+            title: title,
             explanation: "Vill du lägga upp en uppföljning och bli påmind i morgonbitti om det fortfarande väntar?",
             draft: .followUp(
                 .init(
@@ -421,9 +515,34 @@ private extension HeuristicActionSuggestionDetector {
         return cleaned.prefix(1).uppercased() + cleaned.dropFirst()
     }
 
+    func calendarDraftTitle(from text: String) -> String {
+        var result = text
+        let patterns = [
+            #"\b(?:kan du|kan vi|skulle du kunna|vill du|hjälp mig att|hjalp mig att|ska vi)\b"#,
+            #"\b(?:lägg in|lagg in|lägga in|lagga in|lägg till|lagg till|lägga till|lagga till|boka in|boka|skapa(?: ett)? event|sätta in|satta in|sätt in|satt in)\b"#,
+            #"\bi kalendern\b"#,
+            #"\b(?:jag ska|jag behöver|jag behover|jag måste|jag maste)\b"#,
+            #"\b(?:tack|snälla|snalla)\b"#,
+            #"\?$"#
+        ]
+
+        for pattern in patterns {
+            result = result.replacingOccurrences(
+                of: pattern,
+                with: " ",
+                options: [.regularExpression, .caseInsensitive]
+            )
+        }
+
+        result = stripTemporalTokens(from: result)
+        result = result.replacingOccurrences(of: "  ", with: " ")
+        result = result.trimmingCharacters(in: CharacterSet(charactersIn: " ,.-"))
+        return normalizedCalendarTitle(from: result)
+    }
+
     func stripTemporalTokens(from text: String) -> String {
         let patterns = [
-            #"\b(i kvall|ikvall|idag|imorgon|i morgon|nasta vecka|pa mandag|pa tisdag|pa onsdag|pa torsdag|pa fredag|pa lordag|pa sondag)\b"#,
+            #"\b(i kväll|i kvall|ikväll|ikvall|idag|imorgon|i morgon|nästa vecka|nasta vecka|på måndag|pa måndag|på mandag|pa mandag|på tisdag|pa tisdag|på onsdag|pa onsdag|på torsdag|pa torsdag|på fredag|pa fredag|på lördag|pa lördag|på lordag|pa lordag|på söndag|pa söndag|på sondag|pa sondag)\b"#,
             #"\bkl\.?\s*\d{1,2}(?::\d{2})?\s*(?:-|–|—|till)\s*\d{1,2}(?::\d{2})?\b"#,
             #"\bkl\.?\s*\d{1,2}(:\d{2})?\b"#,
             #"\b\d{1,2}[/-]\d{1,2}([/-]\d{2,4})?\b"#,
@@ -438,57 +557,12 @@ private extension HeuristicActionSuggestionDetector {
             )
         }
         result = result.replacingOccurrences(of: "  ", with: " ")
-        result = result.trimmingCharacters(in: CharacterSet(charactersIn: " ,.-"))
+        result = result.trimmingCharacters(in: CharacterSet(charactersIn: " ,.-?!"))
         return suggestionTitle(from: result, fallback: "")
     }
 
     func calendarCreationTitle(from text: String) -> String {
-        var result = text
-        let patterns = [
-            #"\b(?:kan du|skulle du kunna|vill du|hjalp mig att)\b"#,
-            #"\b(?:lägga in|lagga in|lägg in|lagg in|lägga till|lagga till|lägg till|lagg till|boka in|skapa(?: ett)? event|sätta in|satta in|sätt in|satt in)\b"#,
-            #"\bi kalendern\b"#,
-            #"\b(?:tack|snälla|snalla)\b"#,
-            #"\?$"#
-        ]
-        for pattern in patterns {
-            result = result.replacingOccurrences(
-                of: pattern,
-                with: " ",
-                options: [.regularExpression, .caseInsensitive]
-            )
-        }
-
-        result = result.replacingOccurrences(
-            of: #"^\s*jag ska\s+"#,
-            with: "",
-            options: [.regularExpression, .caseInsensitive]
-        )
-        result = result.replacingOccurrences(
-            of: #"^\s*jag behöver\s+"#,
-            with: "",
-            options: [.regularExpression, .caseInsensitive]
-        )
-        result = result.replacingOccurrences(
-            of: #"^\s*jag behover\s+"#,
-            with: "",
-            options: [.regularExpression, .caseInsensitive]
-        )
-        result = result.replacingOccurrences(
-            of: #"^\s*jag måste\s+"#,
-            with: "",
-            options: [.regularExpression, .caseInsensitive]
-        )
-        result = result.replacingOccurrences(
-            of: #"^\s*jag maste\s+"#,
-            with: "",
-            options: [.regularExpression, .caseInsensitive]
-        )
-
-        result = stripTemporalTokens(from: result)
-        result = result.replacingOccurrences(of: "  ", with: " ")
-        result = result.trimmingCharacters(in: CharacterSet(charactersIn: " ,.-"))
-        return suggestionTitle(from: result, fallback: "")
+        calendarDraftTitle(from: text)
     }
 
     func stripReminderLeadAndTemporalTokens(from text: String) -> String {
@@ -502,8 +576,151 @@ private extension HeuristicActionSuggestionDetector {
             with: "",
             options: [.regularExpression, .caseInsensitive]
         )
+        result = result.replacingOccurrences(
+            of: #"^\s*(kan du|skulle du kunna|snälla|snalla)\s+"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
         result = stripTemporalTokens(from: result)
         return result
+    }
+
+    func stripNoteLead(from text: String) -> String {
+        var result = text.replacingOccurrences(
+            of: #"^\s*(anteckna|skriv upp|skriv ner|spara som anteckning|lägg i anteckning|lagg i anteckning|lägg in i anteckning|lagg in i anteckning|skapa ny anteckning)\s*:?\s*"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        result = result.trimmingCharacters(in: .whitespacesAndNewlines)
+        return result.isEmpty ? text : result
+    }
+
+    func reminderDraftTitle(from text: String) -> String {
+        if let structuredTitle = structuredTaskTitle(from: text) {
+            return structuredTitle
+        }
+        return suggestionTitle(
+            from: stripReminderLeadAndTemporalTokens(from: text),
+            fallback: "Ny påminnelse"
+        )
+    }
+
+    func structuredTaskTitle(from text: String) -> String? {
+        let rawSegments = text
+            .components(separatedBy: CharacterSet.newlines)
+            .flatMap { segment in
+                segment.components(separatedBy: "/")
+            }
+
+        for rawSegment in rawSegments {
+            let cleaned = sanitizeStructuredTaskSegment(rawSegment)
+            guard !cleaned.isEmpty else { continue }
+            guard cleaned.hasSuffix(":") == false else { continue }
+
+            let normalizedSegment = normalize(cleaned)
+            if reminderTaskVerbs().contains(where: { normalizedSegment.contains($0) }) {
+                return suggestionTitle(from: stripReminderLeadAndTemporalTokens(from: cleaned), fallback: cleaned)
+            }
+        }
+
+        return nil
+    }
+
+    func sanitizeStructuredTaskSegment(_ text: String) -> String {
+        let withoutListMarker = text.replacingOccurrences(
+            of: #"^\s*(?:[-*•]|□|☐|▪︎|\[[ xX]?\])\s*"#,
+            with: "",
+            options: [.regularExpression]
+        )
+        return withoutListMarker.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func isChecklistLike(_ text: String) -> Bool {
+        let markers = ["\n-", "\n•", "\n*", "□", "☐", "[ ]", "[x]", "[X]"]
+        return markers.contains { text.contains($0) }
+    }
+
+    func reminderTaskVerbs() -> [String] {
+        [
+            "ringa", "ring", "betala", "hämta", "hamta", "köp", "kop", "skicka",
+            "maila", "mejla", "svara", "boka", "fixa", "ändra", "andra", "fråga",
+            "fraga", "dubbelkolla", "uppdatera"
+        ]
+    }
+
+    func reminderRequestSignals() -> [String] {
+        [
+            "kan du", "kan ni", "skulle du kunna", "snalla", "snälla",
+            "behover du", "behöver du"
+        ]
+    }
+
+    func explicitNoteSignals() -> [String] {
+        [
+            "anteckna", "skriv upp", "skriv ner", "spara som anteckning",
+            "lägg i anteckning", "lagg i anteckning",
+            "lägg in i anteckning", "lagg in i anteckning",
+            "skapa ny anteckning"
+        ]
+    }
+
+    func normalizedCalendarTitle(from text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+
+        let normalizedText = normalize(trimmed)
+        switch normalizedText {
+        case "traffas", "ses", "motas", "traffa":
+            return "Träff"
+        default:
+            break
+        }
+
+        if normalizedText.hasPrefix("traffas med "),
+           let range = trimmed.range(of: #"^\s*träffas\s+"#, options: [.regularExpression, .caseInsensitive]) {
+            return "Träff " + String(trimmed[range.upperBound...])
+        }
+        if normalizedText.hasPrefix("ses med "),
+           let range = trimmed.range(of: #"^\s*ses\s+"#, options: [.regularExpression, .caseInsensitive]) {
+            return "Träff " + String(trimmed[range.upperBound...])
+        }
+
+        return suggestionTitle(from: trimmed, fallback: "")
+    }
+
+    func availabilityCalendarTitle(
+        from text: String,
+        normalizedText: String
+    ) -> String {
+        let cleaned = calendarDraftTitle(from: text)
+        if !cleaned.isEmpty {
+            return cleaned
+        }
+
+        if let weekday = weekdayDisplayName(in: normalizedText) {
+            return "Plan på \(weekday.lowercased())"
+        }
+
+        return "Ny plan"
+    }
+
+    func weekdayDisplayName(in normalizedText: String) -> String? {
+        let weekdayTokens: [(token: String, displayName: String)] = [
+            ("måndag", "Måndag"),
+            ("mandag", "Måndag"),
+            ("tisdag", "Tisdag"),
+            ("onsdag", "Onsdag"),
+            ("torsdag", "Torsdag"),
+            ("fredag", "Fredag"),
+            ("lördag", "Lördag"),
+            ("lordag", "Lördag"),
+            ("söndag", "Söndag"),
+            ("sondag", "Söndag"),
+        ]
+
+        return weekdayTokens.first { entry in
+            normalizedText.contains("på \(entry.token)") || normalizedText.contains("pa \(entry.token)")
+        }?.displayName
     }
 
     func extractReminderPriority(from normalizedText: String) -> ActionReminderPriority? {
@@ -786,7 +1003,9 @@ private extension HeuristicActionSuggestionDetector {
     func extractFollowUpRecipient(from text: String) -> String? {
         let patterns = [
             #"(?:följ upp med|folj upp med|mejlade|mailade|ringde|pingade)\s+([A-ZÅÄÖa-zåäö][A-Za-zÅÄÖåäö-]+)"#,
-            #"(?:skrev till|skrivit till|hörde av mig till|horde av mig till|skickade till)\s+([A-ZÅÄÖa-zåäö][A-Za-zÅÄÖåäö-]+)"#
+            #"(?:skrev till|skrivit till|hörde av mig till|horde av mig till|skickade till)\s+([A-ZÅÄÖa-zåäö][A-Za-zÅÄÖåäö-]+)"#,
+            #"(?:väntar på svar från|vantar pa svar fran)\s+([A-ZÅÄÖa-zåäö][A-Za-zÅÄÖåäö-]+)"#,
+            #"(?:om)\s+([A-ZÅÄÖa-zåäö][A-Za-zÅÄÖåäö-]+)\s+inte svarar"#
         ]
 
         for pattern in patterns {
@@ -808,6 +1027,82 @@ private extension HeuristicActionSuggestionDetector {
         }
 
         return nil
+    }
+
+    func resolvedNoteDraft(
+        from text: String,
+        fallbackTitle: String
+    ) -> (title: String, body: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return (fallbackTitle, "")
+        }
+
+        if let structured = structuredNoteDraft(from: trimmed) {
+            return structured
+        }
+
+        if fallbackTitle == "Ny anteckning" {
+            let generatedTitle = defaultNoteTitle(from: trimmed)
+            return (generatedTitle, trimmed)
+        }
+
+        return (fallbackTitle, trimmed)
+    }
+
+    func defaultNoteTitle(from text: String) -> String {
+        let firstLine = text
+            .components(separatedBy: CharacterSet.newlines)
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? text
+        let shortened = String(firstLine.prefix(40)).trimmingCharacters(in: .whitespacesAndNewlines)
+        return suggestionTitle(from: shortened, fallback: "Ny anteckning")
+    }
+
+    func structuredNoteDraft(from text: String) -> (title: String, body: String)? {
+        let delimiters = [":", "\n", " - ", " – ", " — "]
+        var earliestRange: Range<String.Index>?
+
+        for delimiter in delimiters {
+            guard let range = text.range(of: delimiter) else { continue }
+            if let currentEarliestRange = earliestRange {
+                if range.lowerBound < currentEarliestRange.lowerBound {
+                    earliestRange = range
+                }
+            } else {
+                earliestRange = range
+            }
+        }
+
+        guard let earliestRange else {
+            return nil
+        }
+
+        let rawTitle = String(text[..<earliestRange.lowerBound])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isReasonableStructuredNoteTitle(rawTitle) else {
+            return nil
+        }
+
+        let rawBody = String(text[earliestRange.upperBound...])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = rawBody.isEmpty ? text : rawBody
+
+        return (
+            title: suggestionTitle(from: rawTitle, fallback: rawTitle),
+            body: body
+        )
+    }
+
+    func isReasonableStructuredNoteTitle(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 2, trimmed.count <= 60 else {
+            return false
+        }
+        guard trimmed.contains("?") == false else {
+            return false
+        }
+        return trimmed.rangeOfCharacter(from: .letters) != nil
     }
 
     func followUpTitle(for recipient: String?) -> String {
